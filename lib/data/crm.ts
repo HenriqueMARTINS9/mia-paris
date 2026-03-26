@@ -22,16 +22,14 @@ export async function getCrmSummary() {
 
   try {
     const supabase = await createSupabaseServerClient();
-    const [openTasksResult, criticalDeadlinesResult, requestsResult] =
+    const [openTasksResult, criticalDeadlinesResult, inboundEmailsResult] =
       await Promise.all([
         supabase.from("v_tasks_open").select("*", { count: "exact", head: true }),
         supabase
           .from("v_deadlines_critical")
           .select("*", { count: "exact", head: true })
           .eq("priority", "critical"),
-        supabase
-          .from("v_requests_overview")
-          .select("*", { count: "exact", head: true }),
+        supabase.from("emails").select("*", { count: "exact", head: true }),
       ]);
 
     const [pendingValidationsResult, activeProductionsResult] =
@@ -40,17 +38,14 @@ export async function getCrmSummary() {
           .from("v_requests_overview")
           .select("*", { count: "exact", head: true })
           .eq("request_type", "trim_validation"),
-        supabase
-          .from("v_requests_overview")
-          .select("*", { count: "exact", head: true })
-          .eq("request_type", "production_followup"),
+        supabase.from("productions").select("*", { count: "exact", head: true }),
       ]);
 
     return {
       openTasks: openTasksResult.count ?? fallbackSummary.openTasks,
       criticalDeadlines:
         criticalDeadlinesResult.count ?? fallbackSummary.criticalDeadlines,
-      inboundEmails: requestsResult.count ?? fallbackSummary.inboundEmails,
+      inboundEmails: inboundEmailsResult.count ?? fallbackSummary.inboundEmails,
       pendingValidations:
         pendingValidationsResult.count ?? fallbackSummary.pendingValidations,
       activeProductions:

@@ -1,22 +1,18 @@
 import type { Metadata } from "next";
 
-import { PlaceholderPage } from "@/components/crm/placeholder-page";
+import { ProductionsPage } from "@/features/productions/components/productions-page";
+import { getProductionsPageData } from "@/features/productions/queries";
 
 export const metadata: Metadata = {
   title: "Productions",
 };
 
-export default function ProductionsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function ProductionsRoutePage() {
+  const data = await getProductionsPageData();
+
   return (
-    <PlaceholderPage
-      eyebrow="Étape 6 · Productions"
-      title="Productions"
-      description="La vue Productions suivra les lancements atelier, inspections, embarquements et points qualité avec une lecture adaptée au métier textile B2B."
-      focus={[
-        "Colonnes atelier, stade, inspection, ETA et documents techniques.",
-        "Filtrage par client, saison, usine et niveau de risque.",
-        "Connexion naturelle depuis une demande validée vers la production active.",
-      ]}
-    />
+    <ProductionsPage productions={data.productions} error={data.error} />
   );
 }

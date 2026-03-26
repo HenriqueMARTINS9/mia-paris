@@ -1,22 +1,23 @@
 import type { Metadata } from "next";
 
-import { PlaceholderPage } from "@/components/crm/placeholder-page";
+import { EmailsPage } from "@/features/emails/components/emails-page";
+import { getEmailsPageData } from "@/features/emails/queries";
 
 export const metadata: Metadata = {
   title: "Inbox emails",
 };
 
-export default function EmailsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function EmailsRoutePage() {
+  const data = await getEmailsPageData();
+
   return (
-    <PlaceholderPage
-      eyebrow="Étape 8 · Inbox emails"
-      title="Inbox emails"
-      description="L'inbox métier sera conçue comme une file d'entrée intelligente pour absorber le volume email et le transformer rapidement en objets CRM exploitables."
-      focus={[
-        "Liste d'emails entrants avec extraction contexte client, deadline et produit.",
-        "Actions rapides de qualification vers demande, tâche, validation ou document.",
-        "Liens directs avec la validation IA avant création définitive dans le CRM.",
-      ]}
+    <EmailsPage
+      emails={data.emails}
+      requestOptions={data.requestOptions}
+      requestOptionsError={data.requestOptionsError}
+      error={data.error}
     />
   );
 }

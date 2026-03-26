@@ -1,6 +1,12 @@
 import type {
+  ClientRecord,
   DeadlineCritical,
   DeadlineRecord,
+  EmailRecord,
+  EmailThreadRecord,
+  ModelRecord,
+  OrderRecord,
+  ProductionRecord,
   RequestOverview,
   RequestRecord,
   TaskOpen,
@@ -27,6 +33,42 @@ export interface Database {
         Row: DeadlineRecord;
         Insert: Partial<DeadlineRecord>;
         Update: Partial<DeadlineRecord>;
+        Relationships: [];
+      };
+      productions: {
+        Row: ProductionRecord;
+        Insert: Partial<ProductionRecord>;
+        Update: Partial<ProductionRecord>;
+        Relationships: [];
+      };
+      orders: {
+        Row: OrderRecord;
+        Insert: Partial<OrderRecord>;
+        Update: Partial<OrderRecord>;
+        Relationships: [];
+      };
+      models: {
+        Row: ModelRecord;
+        Insert: Partial<ModelRecord>;
+        Update: Partial<ModelRecord>;
+        Relationships: [];
+      };
+      clients: {
+        Row: ClientRecord;
+        Insert: Partial<ClientRecord>;
+        Update: Partial<ClientRecord>;
+        Relationships: [];
+      };
+      emails: {
+        Row: EmailRecord;
+        Insert: Partial<EmailRecord>;
+        Update: Partial<EmailRecord>;
+        Relationships: [];
+      };
+      email_threads: {
+        Row: EmailThreadRecord;
+        Insert: Partial<EmailThreadRecord>;
+        Update: Partial<EmailThreadRecord>;
         Relationships: [];
       };
       users: {
