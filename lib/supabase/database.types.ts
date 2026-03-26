@@ -1,11 +1,13 @@
 import type {
   ClientRecord,
+  ContactRecord,
   DeadlineCritical,
   DeadlineRecord,
   EmailRecord,
   EmailThreadRecord,
   ModelRecord,
   OrderRecord,
+  ProductDepartmentRecord,
   ProductionRecord,
   RequestOverview,
   RequestRecord,
@@ -57,6 +59,18 @@ export interface Database {
         Row: ClientRecord;
         Insert: Partial<ClientRecord>;
         Update: Partial<ClientRecord>;
+        Relationships: [];
+      };
+      contacts: {
+        Row: ContactRecord;
+        Insert: Partial<ContactRecord>;
+        Update: Partial<ContactRecord>;
+        Relationships: [];
+      };
+      product_departments: {
+        Row: ProductDepartmentRecord;
+        Insert: Partial<ProductDepartmentRecord>;
+        Update: Partial<ProductDepartmentRecord>;
         Relationships: [];
       };
       emails: {

@@ -15,6 +15,8 @@ export default async function EmailsRoutePage() {
   return (
     <EmailsPage
       emails={data.emails}
+      qualificationOptions={data.qualificationOptions}
+      qualificationOptionsError={data.qualificationOptionsError}
       requestOptions={data.requestOptions}
       requestOptionsError={data.requestOptionsError}
       error={data.error}

@@ -30,6 +30,8 @@ import type { EmailListItem, EmailsPageData } from "@/features/emails/types";
 
 export function EmailsPage({
   emails,
+  qualificationOptions,
+  qualificationOptionsError = null,
   requestOptions,
   requestOptionsError = null,
   error = null,
@@ -235,6 +237,8 @@ export function EmailsPage({
             <EmailPreviewPanel
               email={selectedEmail}
               mode="sheet"
+              qualificationOptions={qualificationOptions}
+              qualificationOptionsError={qualificationOptionsError}
               requestOptions={requestOptions}
               requestOptionsError={requestOptionsError}
             />

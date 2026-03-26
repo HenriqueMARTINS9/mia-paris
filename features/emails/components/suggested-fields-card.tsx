@@ -17,11 +17,24 @@ export function SuggestedFieldsCard({
       </CardHeader>
       <CardContent className="grid gap-3 sm:grid-cols-2">
         <FieldItem label="Client détecté" value={fields.clientName} />
-        <FieldItem label="Département" value={fields.department} />
+        <FieldItem label="Contact détecté" value={fields.contactName} />
+        <FieldItem
+          label="Département produit"
+          value={fields.productDepartmentName}
+        />
+        <FieldItem label="Modèle détecté" value={fields.modelName} />
         <FieldItem label="Type détecté" value={fields.requestType} />
         <FieldItem label="Priorité" value={fields.priority} />
-        <FieldItem label="Deadline" value={fields.deadline} />
-        <FieldItem label="Action attendue" value={fields.actionExpected} />
+        <FieldItem label="Deadline" value={fields.dueAt} />
+        <FieldItem label="Action attendue" value={fields.requestedAction} />
+        <FieldItem
+          label="Confiance IA"
+          value={
+            fields.aiConfidence !== null
+              ? `${Math.round(fields.aiConfidence * 100)}%`
+              : null
+          }
+        />
         <FieldItem
           label="Résumé"
           value={fields.summary}

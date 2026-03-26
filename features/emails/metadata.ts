@@ -5,6 +5,27 @@ import type {
 import type { RequestPriority } from "@/features/requests/types";
 import { titleCaseFromSnake } from "@/lib/record-helpers";
 
+export const emailRequestTypeOptions = [
+  "price_request",
+  "deadline_request",
+  "tds_request",
+  "swatch_request",
+  "trim_validation",
+  "production_followup",
+] as const;
+
+export const emailRequestTypeMeta: Record<
+  (typeof emailRequestTypeOptions)[number],
+  { label: string }
+> = {
+  price_request: { label: "Demande de prix" },
+  deadline_request: { label: "Demande de délai" },
+  tds_request: { label: "Demande fiche technique" },
+  swatch_request: { label: "Demande d’échantillon" },
+  trim_validation: { label: "Validation trim" },
+  production_followup: { label: "Suivi production" },
+};
+
 export const emailStatusMeta: Record<
   EmailProcessingStatus,
   { label: string; description: string }
@@ -60,6 +81,16 @@ export function normalizeConfidence(value: number | null | undefined) {
 }
 
 export function formatDetectedTypeLabel(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.toLowerCase().trim() as (typeof emailRequestTypeOptions)[number];
+
+  if (normalized in emailRequestTypeMeta) {
+    return emailRequestTypeMeta[normalized].label;
+  }
+
   return titleCaseFromSnake(value);
 }
 

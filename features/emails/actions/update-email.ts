@@ -2,13 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 
-import { mapUiPriorityToDatabasePriority } from "@/features/requests/metadata";
-import type { RequestPriority } from "@/features/requests/types";
+import { createDeadlineAction } from "@/features/deadlines/actions/create-deadline";
 import { mapUiEmailStatusToDatabaseValues } from "@/features/emails/metadata";
 import type {
   EmailMutationResult,
   EmailProcessingStatus,
+  EmailQualificationFields,
 } from "@/features/emails/types";
+import { mapUiPriorityToDatabasePriority } from "@/features/requests/metadata";
+import { createRequestTaskAction } from "@/features/tasks/actions/create-request-task";
 import {
   isMissingSupabaseColumnError,
   supabaseRestInsert,
@@ -26,14 +28,43 @@ interface AttachEmailToRequestInput {
 }
 
 interface CreateRequestFromEmailInput {
-  deadline: string | null;
-  detectedType: string | null;
   emailId: string;
   previewText: string;
-  priority: RequestPriority;
+  qualification: EmailQualificationFields;
   subject: string;
-  summary: string | null;
 }
+
+interface AutoTaskRule {
+  taskTitle: string;
+  taskType: string;
+}
+
+const requestAutomationRules: Partial<Record<string, AutoTaskRule>> = {
+  price_request: {
+    taskTitle: "Vérifier la demande de prix",
+    taskType: "price_check",
+  },
+  deadline_request: {
+    taskTitle: "Vérifier le délai demandé",
+    taskType: "deadline_check",
+  },
+  tds_request: {
+    taskTitle: "Préparer l’envoi de la fiche technique",
+    taskType: "tds_send",
+  },
+  swatch_request: {
+    taskTitle: "Préparer les swatches demandés",
+    taskType: "swatch_prepare",
+  },
+  trim_validation: {
+    taskTitle: "Suivre la validation trim",
+    taskType: "validation_followup",
+  },
+  production_followup: {
+    taskTitle: "Passer en revue le suivi production",
+    taskType: "internal_review",
+  },
+};
 
 export async function markEmailProcessedAction(
   input: Omit<UpdateEmailStatusInput, "status">,
@@ -70,12 +101,19 @@ export async function attachEmailToRequestAction(
     { crm_request_id: input.requestId },
   ];
 
-  return patchEmailWithPayloads({
+  const result = await patchEmailWithPayloads({
     emailId: input.emailId,
     field: "request_link",
     payloads,
     successMessage: "Email rattaché à la demande existante.",
   });
+
+  if (result.ok) {
+    revalidatePath(`/requests/${input.requestId}`);
+    revalidatePath("/demandes");
+  }
+
+  return result;
 }
 
 export async function createRequestFromEmailAction(
@@ -89,27 +127,64 @@ export async function createRequestFromEmailAction(
     };
   }
 
+  if (!input.qualification.requestType) {
+    return {
+      ok: false,
+      field: "request_creation",
+      message: "Sélectionne un type de demande avant de créer le dossier.",
+    };
+  }
+
   const requestInsertResult = await insertRequestFromEmail(input);
 
   if (!requestInsertResult.ok || !requestInsertResult.requestId) {
     return requestInsertResult;
   }
 
-  const attachResult = await attachEmailToRequestAction({
+  const requestId = requestInsertResult.requestId;
+  const syncEmailResult = await syncEmailAfterRequestCreation({
     emailId: input.emailId,
-    requestId: requestInsertResult.requestId,
+    qualification: input.qualification,
+    requestId,
+  });
+  const automationSummary = await runEmailAutomationRules({
+    requestId,
+    subject: input.subject,
+    qualification: input.qualification,
   });
 
+  revalidatePath("/emails");
   revalidatePath("/demandes");
-  revalidatePath(`/requests/${requestInsertResult.requestId}`);
+  revalidatePath(`/requests/${requestId}`);
+  revalidatePath("/taches");
+  revalidatePath("/deadlines");
+  revalidatePath("/", "layout");
+
+  const messages = ["Demande créée depuis l’email."];
+
+  if (syncEmailResult.ok) {
+    messages.push("Email source synchronisé.");
+  } else {
+    messages.push("Le lien email <-> demande reste partiel.");
+  }
+
+  if (automationSummary.taskCreated) {
+    messages.push("Tâche automatique créée.");
+  }
+
+  if (automationSummary.deadlineCreated) {
+    messages.push("Deadline automatique créée.");
+  }
+
+  if (automationSummary.warnings.length > 0) {
+    messages.push(automationSummary.warnings.join(" "));
+  }
 
   return {
     ok: true,
     field: "request_creation",
-    message: attachResult.ok
-      ? "Demande créée depuis l’email et rattachée avec succès."
-      : "Demande créée depuis l’email. Le rattachement automatique de l’email n’a pas pu être finalisé.",
-    requestId: requestInsertResult.requestId,
+    message: messages.join(" "),
+    requestId,
   };
 }
 
@@ -134,6 +209,53 @@ async function updateEmailStatus(
       input.status === "processed"
         ? "Email marqué comme traité."
         : "Email marqué à revoir.",
+  });
+}
+
+async function syncEmailAfterRequestCreation(input: {
+  emailId: string;
+  qualification: EmailQualificationFields;
+  requestId: string;
+}) {
+  const classificationPayload = {
+    requestId: input.requestId,
+    validatedAt: new Date().toISOString(),
+    qualification: input.qualification,
+  };
+
+  const payloads: Array<Record<string, unknown>> = [];
+
+  for (const statusColumn of ["processing_status", "status", "triage_status"]) {
+    for (const processedValue of mapUiEmailStatusToDatabaseValues("processed")) {
+      for (const requestColumn of [
+        "request_id",
+        "linked_request_id",
+        "crm_request_id",
+      ]) {
+        for (const classificationColumn of [
+          "ai_classification",
+          "classification_json",
+        ]) {
+          payloads.push({
+            [statusColumn]: processedValue,
+            [requestColumn]: input.requestId,
+            [classificationColumn]: classificationPayload,
+          });
+        }
+
+        payloads.push({
+          [statusColumn]: processedValue,
+          [requestColumn]: input.requestId,
+        });
+      }
+    }
+  }
+
+  return patchEmailWithPayloads({
+    emailId: input.emailId,
+    field: "request_link",
+    payloads,
+    successMessage: "Email source synchronisé avec la demande créée.",
   });
 }
 
@@ -183,7 +305,9 @@ async function patchEmailWithPayloads(options: {
       continue;
     }
 
-    latestError = getEmailMutationErrorMessage(result.error ?? "Mutation impossible.");
+    latestError = getEmailMutationErrorMessage(
+      result.error ?? "Mutation impossible.",
+    );
 
     if (!isMissingSupabaseColumnError(result.rawError)) {
       break;
@@ -202,39 +326,39 @@ async function patchEmailWithPayloads(options: {
 async function insertRequestFromEmail(
   input: CreateRequestFromEmailInput,
 ): Promise<EmailMutationResult> {
-  const dueAt = toIsoDate(input.deadline);
-  const normalizedType = normalizeRequestType(input.detectedType);
+  const qualification = input.qualification;
   const payloadCandidates: Array<Record<string, unknown>> = [
     {
       title: input.subject.trim(),
-      request_type: normalizedType,
+      client_id: qualification.clientId,
+      contact_id: qualification.contactId,
+      product_department_id: qualification.productDepartmentId,
+      model_id: qualification.modelId,
+      request_type: qualification.requestType,
+      priority: mapUiPriorityToDatabasePriority(qualification.priority),
       status: "new",
-      priority: mapUiPriorityToDatabasePriority(input.priority),
+      due_at: toIsoDate(qualification.dueAt),
+      summary: qualification.summary ?? input.previewText,
+      requested_action: qualification.requestedAction,
+      ai_confidence: qualification.aiConfidence,
       source_email_id: input.emailId,
-      summary: input.summary ?? input.previewText,
-      due_at: dueAt,
       updated_at: new Date().toISOString(),
     },
     {
       title: input.subject.trim(),
-      request_type: normalizedType,
+      request_type: qualification.requestType,
+      priority: mapUiPriorityToDatabasePriority(qualification.priority),
       status: "new",
-      priority: mapUiPriorityToDatabasePriority(input.priority),
-      summary: input.summary ?? input.previewText,
-      due_at: dueAt,
+      due_at: toIsoDate(qualification.dueAt),
+      summary: qualification.summary ?? input.previewText,
+      source_email_id: input.emailId,
       updated_at: new Date().toISOString(),
     },
     {
       title: input.subject.trim(),
-      request_type: normalizedType,
+      request_type: qualification.requestType,
+      priority: mapUiPriorityToDatabasePriority(qualification.priority),
       status: "new",
-      priority: mapUiPriorityToDatabasePriority(input.priority),
-      updated_at: new Date().toISOString(),
-    },
-    {
-      title: input.subject.trim(),
-      status: "new",
-      priority: mapUiPriorityToDatabasePriority(input.priority),
       updated_at: new Date().toISOString(),
     },
   ];
@@ -283,6 +407,67 @@ async function insertRequestFromEmail(
   };
 }
 
+async function runEmailAutomationRules(input: {
+  qualification: EmailQualificationFields;
+  requestId: string;
+  subject: string;
+}) {
+  const warnings: string[] = [];
+  let taskCreated = false;
+  let deadlineCreated = false;
+  const requestType = input.qualification.requestType ?? "";
+  const automationRule = requestAutomationRules[requestType];
+
+  if (automationRule) {
+    const taskResult = await createRequestTaskAction({
+      assignedUserId: null,
+      dueAt: input.qualification.dueAt,
+      priority: input.qualification.priority,
+      requestId: input.requestId,
+      taskType: automationRule.taskType,
+      title: automationRule.taskTitle,
+    });
+
+    taskCreated = taskResult.ok;
+
+    if (!taskResult.ok) {
+      warnings.push(taskResult.message);
+    }
+  }
+
+  if (input.qualification.dueAt) {
+    const deadlineResult = await createDeadlineAction({
+      deadlineAt: input.qualification.dueAt,
+      label: buildDeadlineLabel(
+        input.qualification.requestedAction,
+        input.subject,
+      ),
+      priority: input.qualification.priority,
+      requestId: input.requestId,
+    });
+
+    deadlineCreated = deadlineResult.ok;
+
+    if (!deadlineResult.ok) {
+      warnings.push(deadlineResult.message);
+    }
+  }
+
+  return {
+    deadlineCreated,
+    taskCreated,
+    warnings,
+  };
+}
+
+function buildDeadlineLabel(requestedAction: string | null, subject: string) {
+  if (requestedAction && requestedAction.trim().length > 0) {
+    return requestedAction.trim();
+  }
+
+  return `Suivi email: ${subject.trim().slice(0, 72)}`;
+}
+
 function getEmailMutationErrorMessage(message: string) {
   const normalized = message.toLowerCase();
 
@@ -297,20 +482,12 @@ function getEmailMutationErrorMessage(message: string) {
   return `Mutation impossible sur emails: ${message}`;
 }
 
-function normalizeRequestType(value: string | null) {
-  if (!value) {
-    return "email_request";
-  }
-
-  return value.toLowerCase().trim().replace(/\s+/g, "_");
-}
-
 function toIsoDate(value: string | null) {
   if (!value) {
     return null;
   }
 
-  const parsed = new Date(value);
+  const parsed = new Date(`${value}T09:00:00`);
 
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }

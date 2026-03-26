@@ -3,31 +3,50 @@ import "server-only";
 import { unstable_noStore as noStore } from "next/cache";
 
 import { getRequestLinkOptions } from "@/features/requests/queries";
-import { getEmailRelatedIds, mapEmailRecordToListItem } from "@/features/emails/mappers";
-import type { EmailsPageData } from "@/features/emails/types";
+import {
+  getEmailRelatedIds,
+  hydrateEmailQualificationFields,
+  mapEmailRecordToListItem,
+} from "@/features/emails/mappers";
+import type {
+  EmailQualificationOption,
+  EmailsPageData,
+} from "@/features/emails/types";
 import {
   isMissingSupabaseResourceError,
   supabaseRestSelectList,
 } from "@/lib/supabase/rest";
 import { createSupabaseServerClient, hasSupabaseEnv } from "@/lib/supabase/server";
-import { uniqueStrings } from "@/lib/record-helpers";
+import { readString, uniqueStrings } from "@/lib/record-helpers";
 import type {
   ClientRecord,
+  ContactRecord,
   EmailRecord,
   EmailThreadRecord,
+  ModelRecord,
+  ProductDepartmentRecord,
   RequestOverview,
 } from "@/types/crm";
 
 export async function getEmailsPageData(): Promise<EmailsPageData> {
   noStore();
 
+  const emptyQualificationOptions = {
+    clients: [] as EmailQualificationOption[],
+    contacts: [] as EmailQualificationOption[],
+    models: [] as EmailQualificationOption[],
+    productDepartments: [] as EmailQualificationOption[],
+  };
+
   if (!hasSupabaseEnv) {
     return {
       emails: [],
-      requestOptions: [],
-      requestOptionsError: null,
       error:
         "Configuration Supabase absente. Vérifie NEXT_PUBLIC_SUPABASE_URL et la clé publishable.",
+      qualificationOptions: emptyQualificationOptions,
+      qualificationOptionsError: null,
+      requestOptions: [],
+      requestOptionsError: null,
     };
   }
 
@@ -41,26 +60,32 @@ export async function getEmailsPageData(): Promise<EmailsPageData> {
     if (authError || !user) {
       return {
         emails: [],
-        requestOptions: [],
-        requestOptionsError: null,
         error:
           "Session Supabase introuvable. Reconnecte-toi pour accéder aux emails métier.",
+        qualificationOptions: emptyQualificationOptions,
+        qualificationOptionsError: null,
+        requestOptions: [],
+        requestOptionsError: null,
       };
     }
 
-    const [emailsResult, requestOptionsResult] = await Promise.all([
-      supabaseRestSelectList<EmailRecord>("emails", {
-        select: "*",
-      }),
-      getRequestLinkOptions(),
-    ]);
+    const [emailsResult, requestOptionsResult, qualificationOptionsResult] =
+      await Promise.all([
+        supabaseRestSelectList<EmailRecord>("emails", {
+          select: "*",
+        }),
+        getRequestLinkOptions(),
+        getEmailQualificationOptions(),
+      ]);
 
     if (emailsResult.error) {
       return {
         emails: [],
+        error: `Impossible de charger les emails: ${emailsResult.error}`,
+        qualificationOptions: qualificationOptionsResult.options,
+        qualificationOptionsError: qualificationOptionsResult.error,
         requestOptions: requestOptionsResult.options,
         requestOptionsError: requestOptionsResult.error,
-        error: `Impossible de charger les emails: ${emailsResult.error}`,
       };
     }
 
@@ -89,25 +114,104 @@ export async function getEmailsPageData(): Promise<EmailsPageData> {
           ),
         }),
       )
+      .map((email) =>
+        hydrateEmailQualificationFields(email, qualificationOptionsResult.options),
+      )
       .sort(sortEmails);
 
     return {
       emails,
+      error: null,
+      qualificationOptions: qualificationOptionsResult.options,
+      qualificationOptionsError: qualificationOptionsResult.error,
       requestOptions: requestOptionsResult.options,
       requestOptionsError: requestOptionsResult.error,
-      error: null,
     };
   } catch (error) {
     return {
       emails: [],
-      requestOptions: [],
-      requestOptionsError: null,
       error:
         error instanceof Error
           ? `Impossible de charger les emails: ${error.message}`
           : "Impossible de charger les emails.",
+      qualificationOptions: emptyQualificationOptions,
+      qualificationOptionsError: null,
+      requestOptions: [],
+      requestOptionsError: null,
     };
   }
+}
+
+async function getEmailQualificationOptions(): Promise<{
+  error: string | null;
+  options: EmailsPageData["qualificationOptions"];
+}> {
+  const [clientsResult, contactsResult, productDepartmentsResult, modelsResult] =
+    await Promise.all([
+      supabaseRestSelectList<ClientRecord>("clients", {
+        select: "*",
+      }),
+      supabaseRestSelectList<ContactRecord>("contacts", {
+        select: "*",
+      }),
+      supabaseRestSelectList<ProductDepartmentRecord>("product_departments", {
+        select: "*",
+      }),
+      supabaseRestSelectList<ModelRecord>("models", {
+        select: "*",
+      }),
+    ]);
+
+  const errors = [
+    collectOptionalResourceError("clients", clientsResult.error, clientsResult.rawError),
+    collectOptionalResourceError("contacts", contactsResult.error, contactsResult.rawError),
+    collectOptionalResourceError(
+      "product_departments",
+      productDepartmentsResult.error,
+      productDepartmentsResult.rawError,
+    ),
+    collectOptionalResourceError("models", modelsResult.error, modelsResult.rawError),
+  ].filter((value): value is string => Boolean(value));
+
+  return {
+    error:
+      errors.length > 0
+        ? `Certaines options de qualification sont indisponibles: ${errors.join(", ")}.`
+        : null,
+    options: {
+      clients: (clientsResult.data ?? []).map((client) => ({
+        id: client.id,
+        label:
+          readString(client, ["name", "client_name", "account_name"]) ??
+          client.id,
+        secondary: readString(client, ["code", "client_code"]),
+      })),
+      contacts: (contactsResult.data ?? []).map((contact) => ({
+        id: contact.id,
+        label:
+          readString(contact, ["full_name", "name", "contact_name"]) ?? contact.id,
+        secondary: readString(contact, ["email"]),
+        clientId: readString(contact, ["client_id", "clientId"]),
+      })),
+      productDepartments: (productDepartmentsResult.data ?? []).map(
+        (department) => ({
+          id: department.id,
+          label:
+            readString(department, ["name", "label", "department_name"]) ??
+            department.id,
+          secondary: readString(department, ["code"]),
+        }),
+      ),
+      models: (modelsResult.data ?? []).map((model) => ({
+        id: model.id,
+        label:
+          readString(model, ["name", "label", "reference", "style_name"]) ??
+          model.id,
+        secondary: readString(model, ["reference", "code"]),
+        clientId: readString(model, ["client_id", "clientId"]),
+      })),
+    },
+  };
 }
 
 async function getClientsByIds(clientIds: string[]) {
@@ -167,11 +271,35 @@ async function getThreadsByIds(threadIds: string[]) {
   return result.data ?? [];
 }
 
+function collectOptionalResourceError(
+  resource: string,
+  error: string | null,
+  rawError: unknown,
+) {
+  if (!error) {
+    return null;
+  }
+
+  if (
+    typeof rawError === "object" &&
+    rawError !== null &&
+    "code" in rawError &&
+    isMissingSupabaseResourceError(rawError as never)
+  ) {
+    return null;
+  }
+
+  return resource;
+}
+
 function buildInFilter(ids: string[]) {
   return `in.(${ids.join(",")})`;
 }
 
-function sortEmails(a: { isUnread: boolean; receivedAt: string; status: string }, b: { isUnread: boolean; receivedAt: string; status: string }) {
+function sortEmails(
+  a: { isUnread: boolean; receivedAt: string; status: string },
+  b: { isUnread: boolean; receivedAt: string; status: string },
+) {
   const statusScore = (status: string) => {
     if (status === "new") {
       return 3;

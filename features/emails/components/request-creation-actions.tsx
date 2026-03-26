@@ -1,19 +1,25 @@
 "use client";
 
-import { FolderPlus, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { ArrowUpRight, FolderPlus, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import type { EmailListItem } from "@/features/emails/types";
 
 interface RequestCreationActionsProps {
-  email: EmailListItem;
+  canCreate: boolean;
+  currentPriority: string;
+  currentRequestType: string | null;
+  linkedRequestId: string | null;
   isPending: boolean;
   onCreateRequest: () => void;
 }
 
 export function RequestCreationActions({
-  email,
+  canCreate,
+  currentPriority,
+  currentRequestType,
+  linkedRequestId,
   isPending,
   onCreateRequest,
 }: Readonly<RequestCreationActionsProps>) {
@@ -23,26 +29,36 @@ export function RequestCreationActions({
         <div>
           <p className="text-sm font-semibold">Créer une demande depuis cet email</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Le dossier sera prérempli avec le sujet, le type détecté, la priorité et le résumé IA si disponibles.
+            Le dossier sera prérempli avec le sujet, le type validé, la priorité, le résumé et les champs métier corrigés.
           </p>
           <p className="mt-2 text-xs uppercase tracking-[0.16em] text-muted-foreground">
-            {email.classification.suggestedFields.requestType ?? "Type à confirmer"} ·{" "}
-            {email.classification.suggestedFields.priority}
+            {currentRequestType ?? "Type à confirmer"} · {currentPriority}
           </p>
         </div>
-        <Button onClick={onCreateRequest} disabled={isPending}>
-          {isPending ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Création
-            </>
-          ) : (
-            <>
-              <FolderPlus className="h-4 w-4" />
-              Créer la demande
-            </>
-          )}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {linkedRequestId ? (
+            <Button asChild variant="outline">
+              <Link href={`/requests/${linkedRequestId}`}>
+                Ouvrir la demande
+                <ArrowUpRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          ) : null}
+
+          <Button onClick={onCreateRequest} disabled={isPending || !canCreate}>
+            {isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Création
+              </>
+            ) : (
+              <>
+                <FolderPlus className="h-4 w-4" />
+                Créer la demande
+              </>
+            )}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

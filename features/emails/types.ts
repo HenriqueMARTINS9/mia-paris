@@ -6,12 +6,19 @@ import type {
 export type EmailProcessingStatus = "new" | "review" | "processed";
 
 export interface EmailQualificationFields {
-  actionExpected: string | null;
+  aiConfidence: number | null;
+  clientId: string | null;
   clientName: string | null;
-  deadline: string | null;
-  department: string | null;
+  contactId: string | null;
+  contactName: string | null;
+  dueAt: string | null;
+  modelId: string | null;
+  modelName: string | null;
   priority: RequestPriority;
+  productDepartmentId: string | null;
+  productDepartmentName: string | null;
   requestType: string | null;
+  requestedAction: string | null;
   summary: string | null;
 }
 
@@ -45,9 +52,25 @@ export interface EmailListItem {
   isUnread: boolean;
 }
 
+export interface EmailQualificationOption {
+  id: string;
+  label: string;
+  secondary: string | null;
+  clientId?: string | null;
+}
+
+export interface EmailQualificationOptions {
+  clients: EmailQualificationOption[];
+  contacts: EmailQualificationOption[];
+  models: EmailQualificationOption[];
+  productDepartments: EmailQualificationOption[];
+}
+
 export interface EmailsPageData {
   emails: EmailListItem[];
   error: string | null;
+  qualificationOptions: EmailQualificationOptions;
+  qualificationOptionsError: string | null;
   requestOptions: RequestLinkOption[];
   requestOptionsError: string | null;
 }

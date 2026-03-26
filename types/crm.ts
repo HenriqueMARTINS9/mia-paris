@@ -28,11 +28,18 @@ export interface RequestOverview {
 export interface RequestRecord {
   id: string;
   title?: string | null;
+  client_id?: string | null;
+  contact_id?: string | null;
+  product_department_id?: string | null;
+  model_id?: string | null;
   request_type: string | null;
   status: string | null;
   priority: string | null;
   assigned_user_id: string | null;
   source_email_id?: string | null;
+  due_at?: string | null;
+  requested_action?: string | null;
+  ai_confidence?: number | null;
   summary?: string | null;
   internal_notes?: string | null;
   notes?: string | null;
@@ -143,13 +150,33 @@ export interface ClientRecord {
   [key: string]: JsonValue | undefined;
 }
 
+export interface ContactRecord {
+  id: string;
+  client_id?: string | null;
+  full_name?: string | null;
+  name?: string | null;
+  email?: string | null;
+  [key: string]: JsonValue | undefined;
+}
+
+export interface ProductDepartmentRecord {
+  id: string;
+  name?: string | null;
+  label?: string | null;
+  code?: string | null;
+  [key: string]: JsonValue | undefined;
+}
+
 export interface EmailRecord {
   id: string;
   thread_id?: string | null;
   request_id?: string | null;
   client_id?: string | null;
+  contact_id?: string | null;
   subject?: string | null;
   status?: string | null;
+  processing_status?: string | null;
+  ai_classification?: JsonValue;
   received_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;

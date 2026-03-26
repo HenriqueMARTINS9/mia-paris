@@ -11,13 +11,18 @@ import {
 import { ClassificationSummaryCard } from "@/features/emails/components/classification-summary-card";
 import { EmailActionsBar } from "@/features/emails/components/email-actions-bar";
 import { EmailQualificationPanel } from "@/features/emails/components/email-qualification-panel";
-import type { EmailListItem } from "@/features/emails/types";
+import type {
+  EmailListItem,
+  EmailQualificationOptions,
+} from "@/features/emails/types";
 import type { RequestLinkOption } from "@/features/requests/types";
 import { cn, formatDateTime } from "@/lib/utils";
 
 interface EmailPreviewPanelProps {
   email: EmailListItem | null;
   mode?: "desktop" | "sheet";
+  qualificationOptions: EmailQualificationOptions;
+  qualificationOptionsError?: string | null;
   requestOptions: RequestLinkOption[];
   requestOptionsError?: string | null;
 }
@@ -25,6 +30,8 @@ interface EmailPreviewPanelProps {
 export function EmailPreviewPanel({
   email,
   mode = "desktop",
+  qualificationOptions,
+  qualificationOptionsError = null,
   requestOptions,
   requestOptionsError = null,
 }: Readonly<EmailPreviewPanelProps>) {
@@ -94,7 +101,12 @@ export function EmailPreviewPanel({
         </div>
 
         <ClassificationSummaryCard email={email} />
-        <EmailQualificationPanel email={email} />
+        <EmailQualificationPanel
+          key={`${email.id}:${email.linkedRequestId ?? "none"}`}
+          email={email}
+          qualificationOptions={qualificationOptions}
+          qualificationOptionsError={qualificationOptionsError}
+        />
       </CardContent>
     </Card>
   );
