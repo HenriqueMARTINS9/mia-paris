@@ -14,7 +14,10 @@ export default async function EmailsRoutePage() {
 
   return (
     <EmailsPage
+      documentOptions={data.documentOptions}
+      documentOptionsError={data.documentOptionsError}
       emails={data.emails}
+      gmailInbox={data.gmailInbox}
       qualificationOptions={data.qualificationOptions}
       qualificationOptionsError={data.qualificationOptionsError}
       requestOptions={data.requestOptions}

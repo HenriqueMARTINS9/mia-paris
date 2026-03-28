@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { insertActivityLogViaRest } from "@/lib/activity-logs";
 import {
   mapUiProductionRiskToDatabaseValues,
   mapUiProductionStatusToDatabaseValues,
@@ -36,6 +37,11 @@ interface UpdateProductionScheduleInput {
 
 interface UpdateProductionBlockingReasonInput {
   blockingReason: string | null;
+  productionId: string;
+}
+
+interface UpdateProductionNotesInput {
+  notes: string | null;
   productionId: string;
 }
 
@@ -118,6 +124,19 @@ export async function updateProductionBlockingReasonAction(
   });
 }
 
+export async function updateProductionNotesAction(
+  input: UpdateProductionNotesInput,
+): Promise<ProductionMutationResult> {
+  return patchFirstMatchingPayload({
+    field: "notes",
+    payloads: buildSingleFieldPayloads(["notes", "internal_notes"], [
+      input.notes?.trim() || null,
+    ]),
+    productionId: input.productionId,
+    successMessage: "Notes production mises à jour.",
+  });
+}
+
 function buildSingleFieldPayloads(columns: string[], values: Array<string | null>) {
   const payloads: Array<Record<string, unknown>> = [];
 
@@ -163,6 +182,15 @@ async function patchFirstMatchingPayload(options: {
 
     if (!result.error && result.data && result.data.length > 0) {
       const requestId = getRequestIdFromMutation(result.data[0]);
+
+      await insertActivityLogViaRest({
+        action: `production_${options.field}_updated`,
+        description: options.successMessage,
+        entityId: options.productionId,
+        entityType: "production",
+        payload,
+        requestId,
+      });
 
       revalidatePath("/productions");
       if (requestId) {

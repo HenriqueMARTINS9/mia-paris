@@ -1,4 +1,4 @@
-import { MailCheck, MessageSquareText, Sparkles } from "lucide-react";
+import { MailCheck, MessageSquareText, Paperclip, Sparkles } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -8,9 +8,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import type { DocumentFormOptions } from "@/features/documents/types";
 import { ClassificationSummaryCard } from "@/features/emails/components/classification-summary-card";
 import { EmailActionsBar } from "@/features/emails/components/email-actions-bar";
+import { EmailAttachmentsCard } from "@/features/emails/components/email-attachments-card";
 import { EmailQualificationPanel } from "@/features/emails/components/email-qualification-panel";
+import { ProcessingStatusBadge } from "@/features/emails/components/processing-status-badge";
 import type {
   EmailListItem,
   EmailQualificationOptions,
@@ -19,6 +22,8 @@ import type { RequestLinkOption } from "@/features/requests/types";
 import { cn, formatDateTime } from "@/lib/utils";
 
 interface EmailPreviewPanelProps {
+  documentOptions: DocumentFormOptions;
+  documentOptionsError?: string | null;
   email: EmailListItem | null;
   mode?: "desktop" | "sheet";
   qualificationOptions: EmailQualificationOptions;
@@ -28,6 +33,8 @@ interface EmailPreviewPanelProps {
 }
 
 export function EmailPreviewPanel({
+  documentOptions,
+  documentOptionsError = null,
   email,
   mode = "desktop",
   qualificationOptions,
@@ -57,9 +64,15 @@ export function EmailPreviewPanel({
     <Card className={cn(mode === "desktop" && "sticky top-24")}>
       <CardHeader className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge>{email.status}</Badge>
+          <ProcessingStatusBadge status={email.status} />
           {email.detectedType ? (
             <Badge variant="outline">{email.detectedType}</Badge>
+          ) : null}
+          {email.attachments.length > 0 ? (
+            <Badge variant="outline">
+              <Paperclip className="mr-1 h-3.5 w-3.5" />
+              {email.attachments.length}
+            </Badge>
           ) : null}
           {email.confidence !== null ? (
             <Badge variant="outline">{Math.round(email.confidence * 100)}%</Badge>
@@ -89,6 +102,14 @@ export function EmailPreviewPanel({
             {email.bodyText ?? email.previewText}
           </p>
         </div>
+
+        <EmailAttachmentsCard
+          attachments={email.attachments}
+          defaultModelId={email.classification.suggestedFields.modelId}
+          defaultRequestId={email.linkedRequestId}
+          documentOptions={documentOptions}
+          documentOptionsError={documentOptionsError}
+        />
 
         <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
           <div className="flex items-center gap-2">

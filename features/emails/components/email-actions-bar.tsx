@@ -1,17 +1,21 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckCheck, Link2, Loader2, TriangleAlert } from "lucide-react";
+import { CheckCheck, Clock3, Loader2, TriangleAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
 import {
   attachEmailToRequestAction,
+  ignoreEmailForNowAction,
   markEmailForReviewAction,
   markEmailProcessedAction,
 } from "@/features/emails/actions/update-email";
+import { ExistingRequestMatcher } from "@/features/emails/components/existing-request-matcher";
+import { LinkToExistingRequestAction } from "@/features/emails/components/link-to-existing-request-action";
+import { OpenCreatedRequestLink } from "@/features/emails/components/open-created-request-link";
+import { ProcessingStatusBadge } from "@/features/emails/components/processing-status-badge";
 import type { EmailListItem } from "@/features/emails/types";
 import type { RequestLinkOption } from "@/features/requests/types";
 
@@ -30,8 +34,12 @@ export function EmailActionsBar({
   const [linkedRequestValue, setLinkedRequestValue] = useState(
     email.linkedRequestId ?? "",
   );
+  const [currentLinkedRequestId, setCurrentLinkedRequestId] = useState<string | null>(
+    email.linkedRequestId,
+  );
   const [isProcessedPending, startProcessedTransition] = useTransition();
   const [isReviewPending, startReviewTransition] = useTransition();
+  const [isIgnorePending, startIgnoreTransition] = useTransition();
   const [isAttachPending, startAttachTransition] = useTransition();
 
   function handleMarkProcessed() {
@@ -66,11 +74,10 @@ export function EmailActionsBar({
     });
   }
 
-  function handleAttachRequest() {
-    startAttachTransition(async () => {
-      const result = await attachEmailToRequestAction({
+  function handleIgnore() {
+    startIgnoreTransition(async () => {
+      const result = await ignoreEmailForNowAction({
         emailId: email.id,
-        requestId: linkedRequestValue,
       });
 
       if (result.ok) {
@@ -83,96 +90,129 @@ export function EmailActionsBar({
     });
   }
 
+  function handleAttachRequest() {
+    startAttachTransition(async () => {
+      const result = await attachEmailToRequestAction({
+        emailId: email.id,
+        requestId: linkedRequestValue,
+      });
+
+      if (result.ok) {
+        setCurrentLinkedRequestId(result.requestId ?? linkedRequestValue);
+        toast.success(result.message);
+        router.refresh();
+        return;
+      }
+
+      toast.error(result.message);
+    });
+  }
+
   return (
     <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
       <div className="grid gap-4">
-        <div className="grid gap-3 rounded-2xl border border-white/70 bg-white/65 p-3 lg:grid-cols-[1fr_auto_auto] lg:items-center">
-          <div>
-            <p className="text-sm font-semibold">Statut de traitement</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Basculer rapidement cet email en traité ou à revoir selon la qualification métier.
-            </p>
+        <div className="grid gap-3 rounded-2xl border border-white/70 bg-white/65 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Statut de traitement</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                L’email peut rester en attente, passer à revoir, être marqué traité ou être absorbé dans une demande CRM.
+              </p>
+            </div>
+            <ProcessingStatusBadge status={email.status} />
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleMarkReview}
-            disabled={isReviewPending}
-          >
-            {isReviewPending ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                En cours
-              </>
-            ) : (
-              <>
-                <TriangleAlert className="h-4 w-4" />
-                Marquer à revoir
-              </>
-            )}
-          </Button>
-          <Button size="sm" onClick={handleMarkProcessed} disabled={isProcessedPending}>
-            {isProcessedPending ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                En cours
-              </>
-            ) : (
-              <>
-                <CheckCheck className="h-4 w-4" />
-                Marquer traité
-              </>
-            )}
-          </Button>
-        </div>
 
-        <div className="grid gap-3 rounded-2xl border border-white/70 bg-white/65 p-3 lg:grid-cols-[140px_minmax(0,1fr)_auto] lg:items-center">
-          <div>
-            <p className="text-sm font-semibold">Rattachement</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              {requestOptionsError ?? "Lier cet email à une demande existante du CRM."}
-            </p>
-          </div>
-          <Select
-            value={linkedRequestValue}
-            onChange={(event) => setLinkedRequestValue(event.target.value)}
-            disabled={isAttachPending || requestOptions.length === 0}
-          >
-            <option value="">
-              {requestOptions.length > 0
-                ? "Sélectionner une demande"
-                : "Aucune demande disponible"}
-            </option>
-            {requestOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
-          <div className="flex justify-end">
+          <div className="flex flex-wrap gap-2">
             <Button
+              variant="secondary"
               size="sm"
-              variant="outline"
-              onClick={handleAttachRequest}
-              disabled={
-                isAttachPending ||
-                requestOptions.length === 0 ||
-                !linkedRequestValue ||
-                linkedRequestValue === (email.linkedRequestId ?? "")
-              }
+              onClick={handleMarkReview}
+              disabled={isReviewPending}
             >
-              {isAttachPending ? (
+              {isReviewPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Liaison
+                  En cours
                 </>
               ) : (
                 <>
-                  <Link2 className="h-4 w-4" />
-                  Rattacher
+                  <TriangleAlert className="h-4 w-4" />
+                  Marquer à revoir
                 </>
               )}
             </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleIgnore}
+              disabled={isIgnorePending}
+            >
+              {isIgnorePending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  En cours
+                </>
+              ) : (
+                <>
+                  <Clock3 className="h-4 w-4" />
+                  Ignorer pour l’instant
+                </>
+              )}
+            </Button>
+
+            <Button
+              size="sm"
+              onClick={handleMarkProcessed}
+              disabled={isProcessedPending}
+            >
+              {isProcessedPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  En cours
+                </>
+              ) : (
+                <>
+                  <CheckCheck className="h-4 w-4" />
+                  Marquer traité
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid gap-3 rounded-2xl border border-white/70 bg-white/65 p-4">
+          <div>
+            <p className="text-sm font-semibold">Rattacher à une demande existante</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {requestOptionsError ??
+                "Recherche rapide d’une demande déjà ouverte pour éviter un doublon."}
+            </p>
+          </div>
+
+          <ExistingRequestMatcher
+            requestOptions={requestOptions}
+            selectedValue={linkedRequestValue}
+            onSelectValue={setLinkedRequestValue}
+            disabled={isAttachPending}
+            error={requestOptionsError}
+          />
+
+          <div className="flex justify-end">
+            <div className="flex flex-wrap gap-2">
+              {currentLinkedRequestId ? (
+                <OpenCreatedRequestLink requestId={currentLinkedRequestId} />
+              ) : null}
+              <LinkToExistingRequestAction
+                onClick={handleAttachRequest}
+                isPending={isAttachPending}
+                disabled={
+                  requestOptions.length === 0 ||
+                  !linkedRequestValue ||
+                  linkedRequestValue === (currentLinkedRequestId ?? "")
+                }
+              />
+            </div>
           </div>
         </div>
       </div>

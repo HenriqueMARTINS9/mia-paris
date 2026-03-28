@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowDownToLine,
-  PlusSquare,
 } from "lucide-react";
 
 import { EmptyState } from "@/components/crm/empty-state";
@@ -24,19 +23,30 @@ import {
   ProductionStatusBadge,
   RiskBadge,
 } from "@/features/productions/components/production-badges";
+import { CreateProductionDialog } from "@/features/productions/components/create-production-dialog";
 import { ProductionDetailPanel } from "@/features/productions/components/production-detail-panel";
 import { ProductionFilters } from "@/features/productions/components/production-filters";
 import { ProductionKpis } from "@/features/productions/components/production-kpis";
 import { ProductionsTable } from "@/features/productions/components/productions-table";
-import type { ProductionListItem } from "@/features/productions/types";
+import type {
+  ProductionDetailItem,
+  ProductionFormOptions,
+  ProductionListItem,
+} from "@/features/productions/types";
 
 interface ProductionsPageProps {
+  detailsById: Record<string, ProductionDetailItem>;
   error?: string | null;
+  formOptions: ProductionFormOptions;
+  formOptionsError?: string | null;
   productions: ProductionListItem[];
 }
 
 export function ProductionsPage({
+  detailsById,
   error = null,
+  formOptions,
+  formOptionsError = null,
   productions,
 }: Readonly<ProductionsPageProps>) {
   const [search, setSearch] = useState("");
@@ -79,10 +89,14 @@ export function ProductionsPage({
     [productions, search, selectedRisk, selectedStatus],
   );
 
-  const selectedProduction =
+  const selectedProductionSummary =
     filteredProductions.find((production) => production.id === selectedProductionId) ??
     filteredProductions[0] ??
     null;
+  const selectedProduction =
+    (selectedProductionSummary
+      ? detailsById[selectedProductionSummary.id] ?? null
+      : null) ?? null;
 
   const header = (
     <PageHeader
@@ -96,10 +110,10 @@ export function ProductionsPage({
             <ArrowDownToLine className="h-4 w-4" />
             Exporter
           </Button>
-          <Button variant="secondary">
-            <PlusSquare className="h-4 w-4" />
-            Nouveau suivi
-          </Button>
+          <CreateProductionDialog
+            options={formOptions}
+            optionsError={formOptionsError}
+          />
         </>
       }
     />
@@ -206,7 +220,15 @@ export function ProductionsPage({
           </CardContent>
         </Card>
 
-        {selectedProduction?.isBlocked ? (
+        {formOptionsError ? (
+          <Card>
+            <CardContent className="p-5 text-sm text-muted-foreground">
+              {formOptionsError}
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {selectedProductionSummary?.isBlocked ? (
           <div className="rounded-[1.5rem] border border-destructive/20 bg-destructive/10 px-5 py-4">
             <div className="flex items-start gap-3">
               <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/70 text-destructive">
@@ -214,10 +236,10 @@ export function ProductionsPage({
               </div>
               <div>
                 <p className="font-semibold text-destructive">
-                  Blocage en cours sur {selectedProduction.orderNumber}
+                  Blocage en cours sur {selectedProductionSummary.orderNumber}
                 </p>
                 <p className="mt-1 text-sm leading-6 text-destructive/90">
-                  {selectedProduction.blockingReason ??
+                  {selectedProductionSummary.blockingReason ??
                     "Un blocage est signalé sans détail complémentaire."}
                 </p>
               </div>
@@ -234,7 +256,7 @@ export function ProductionsPage({
           <SheetHeader>
             <SheetTitle>Détail production</SheetTitle>
             <SheetDescription>
-              Arbitrage rapide du statut, du risque, du planning et du blocage.
+              Arbitrage rapide du statut, du risque, du planning, des pièces jointes métier et des demandes liées.
             </SheetDescription>
           </SheetHeader>
           <div className="mt-6 overflow-y-auto pb-6">

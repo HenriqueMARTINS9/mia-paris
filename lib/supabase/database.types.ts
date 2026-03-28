@@ -1,10 +1,14 @@
 import type {
+  ActivityLogRecord,
   ClientRecord,
   ContactRecord,
   DeadlineCritical,
   DeadlineRecord,
+  DocumentRecord,
+  EmailAttachmentRecord,
   EmailRecord,
   EmailThreadRecord,
+  InboxRecord,
   ModelRecord,
   OrderRecord,
   ProductDepartmentRecord,
@@ -14,6 +18,7 @@ import type {
   TaskOpen,
   TaskRecord,
   UserRecord,
+  ValidationRecord,
 } from "@/types/crm";
 
 export interface Database {
@@ -35,6 +40,12 @@ export interface Database {
         Row: DeadlineRecord;
         Insert: Partial<DeadlineRecord>;
         Update: Partial<DeadlineRecord>;
+        Relationships: [];
+      };
+      documents: {
+        Row: DocumentRecord;
+        Insert: Partial<DocumentRecord>;
+        Update: Partial<DocumentRecord>;
         Relationships: [];
       };
       productions: {
@@ -61,6 +72,12 @@ export interface Database {
         Update: Partial<ClientRecord>;
         Relationships: [];
       };
+      inboxes: {
+        Row: InboxRecord;
+        Insert: Partial<InboxRecord>;
+        Update: Partial<InboxRecord>;
+        Relationships: [];
+      };
       contacts: {
         Row: ContactRecord;
         Insert: Partial<ContactRecord>;
@@ -79,10 +96,28 @@ export interface Database {
         Update: Partial<EmailRecord>;
         Relationships: [];
       };
+      activity_logs: {
+        Row: ActivityLogRecord;
+        Insert: Partial<ActivityLogRecord>;
+        Update: Partial<ActivityLogRecord>;
+        Relationships: [];
+      };
       email_threads: {
         Row: EmailThreadRecord;
         Insert: Partial<EmailThreadRecord>;
         Update: Partial<EmailThreadRecord>;
+        Relationships: [];
+      };
+      email_attachments: {
+        Row: EmailAttachmentRecord;
+        Insert: Partial<EmailAttachmentRecord>;
+        Update: Partial<EmailAttachmentRecord>;
+        Relationships: [];
+      };
+      validations: {
+        Row: ValidationRecord;
+        Insert: Partial<ValidationRecord>;
+        Update: Partial<ValidationRecord>;
         Relationships: [];
       };
       users: {

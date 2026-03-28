@@ -2,7 +2,12 @@ import "server-only";
 
 import { unstable_noStore as noStore } from "next/cache";
 
-import { getRequestLinkOptions } from "@/features/requests/queries";
+import { getDocumentFormOptions } from "@/features/documents/queries";
+import {
+  getRequestAssigneeOptions,
+  getRequestLinkOptions,
+} from "@/features/requests/queries";
+import { getCurrentUserGmailInboxStatus } from "@/features/emails/lib/gmail-sync";
 import {
   getEmailRelatedIds,
   hydrateEmailQualificationFields,
@@ -20,6 +25,7 @@ import { createSupabaseServerClient, hasSupabaseEnv } from "@/lib/supabase/serve
 import { readString, uniqueStrings } from "@/lib/record-helpers";
 import type {
   ClientRecord,
+  EmailAttachmentRecord,
   ContactRecord,
   EmailRecord,
   EmailThreadRecord,
@@ -32,17 +38,33 @@ export async function getEmailsPageData(): Promise<EmailsPageData> {
   noStore();
 
   const emptyQualificationOptions = {
+    assignees: [],
     clients: [] as EmailQualificationOption[],
     contacts: [] as EmailQualificationOption[],
     models: [] as EmailQualificationOption[],
     productDepartments: [] as EmailQualificationOption[],
   };
+  const emptyDocumentOptions = {
+    models: [],
+    orders: [],
+    productions: [],
+    requests: [],
+  };
 
   if (!hasSupabaseEnv) {
     return {
+      documentOptions: emptyDocumentOptions,
+      documentOptionsError: null,
       emails: [],
       error:
         "Configuration Supabase absente. Vérifie NEXT_PUBLIC_SUPABASE_URL et la clé publishable.",
+      gmailInbox: {
+        connected: false,
+        emailAddress: null,
+        error: null,
+        inboxId: null,
+        lastSyncedAt: null,
+      },
       qualificationOptions: emptyQualificationOptions,
       qualificationOptionsError: null,
       requestOptions: [],
@@ -59,9 +81,18 @@ export async function getEmailsPageData(): Promise<EmailsPageData> {
 
     if (authError || !user) {
       return {
+        documentOptions: emptyDocumentOptions,
+        documentOptionsError: null,
         emails: [],
         error:
           "Session Supabase introuvable. Reconnecte-toi pour accéder aux emails métier.",
+        gmailInbox: {
+          connected: false,
+          emailAddress: null,
+          error: null,
+          inboxId: null,
+          lastSyncedAt: null,
+        },
         qualificationOptions: emptyQualificationOptions,
         qualificationOptionsError: null,
         requestOptions: [],
@@ -69,21 +100,40 @@ export async function getEmailsPageData(): Promise<EmailsPageData> {
       };
     }
 
-    const [emailsResult, requestOptionsResult, qualificationOptionsResult] =
+    const [
+      emailsResult,
+      requestOptionsResult,
+      qualificationOptionsResult,
+      assigneesResult,
+      gmailInbox,
+      documentOptionsResult,
+    ] =
       await Promise.all([
         supabaseRestSelectList<EmailRecord>("emails", {
           select: "*",
         }),
         getRequestLinkOptions(),
         getEmailQualificationOptions(),
+        getRequestAssigneeOptions(),
+        getCurrentUserGmailInboxStatus(),
+        getDocumentFormOptions(),
       ]);
 
     if (emailsResult.error) {
       return {
+        documentOptions: documentOptionsResult.options,
+        documentOptionsError: documentOptionsResult.error,
         emails: [],
         error: `Impossible de charger les emails: ${emailsResult.error}`,
-        qualificationOptions: qualificationOptionsResult.options,
-        qualificationOptionsError: qualificationOptionsResult.error,
+        gmailInbox,
+        qualificationOptions: {
+          ...qualificationOptionsResult.options,
+          assignees: assigneesResult.assignees,
+        },
+        qualificationOptionsError: buildQualificationOptionsError(
+          qualificationOptionsResult.error,
+          assigneesResult.error,
+        ),
         requestOptions: requestOptionsResult.options,
         requestOptionsError: requestOptionsResult.error,
       };
@@ -92,26 +142,47 @@ export async function getEmailsPageData(): Promise<EmailsPageData> {
     const emailRows = emailsResult.data ?? [];
     const relatedIds = emailRows.map(getEmailRelatedIds);
     const clientIds = uniqueStrings(relatedIds.map((item) => item.clientId));
+    const emailIds = uniqueStrings(emailRows.map((email) => email.id));
     const requestIds = uniqueStrings(relatedIds.map((item) => item.requestId));
     const threadIds = uniqueStrings(relatedIds.map((item) => item.threadId));
 
-    const [clients, requests, threads] = await Promise.all([
+    const [attachments, clients, requests, threads] = await Promise.all([
+      getAttachmentsByEmailIds(emailIds),
       getClientsByIds(clientIds),
       getRequestsByIds(requestIds),
       getThreadsByIds(threadIds),
     ]);
 
+    const attachmentRecordsByEmailId = new Map<string, EmailAttachmentRecord[]>();
+
+    for (const attachment of attachments) {
+      const emailId = readString(attachment, ["email_id", "emailId"]);
+
+      if (!emailId) {
+        continue;
+      }
+
+      const currentRows = attachmentRecordsByEmailId.get(emailId) ?? [];
+      currentRows.push(attachment);
+      attachmentRecordsByEmailId.set(emailId, currentRows);
+    }
+
+    const clientRecordsById = new Map(clients.map((client) => [client.id, client] as const));
+    const requestRowsById = new Map(
+      requests.map((request) => [request.id, request] as const),
+    );
+    const threadRecordsById = new Map(
+      threads.map((thread) => [thread.id, thread] as const),
+    );
+
     const emails = emailRows
       .map((emailRecord) =>
         mapEmailRecordToListItem({
-          clientRecordsById: new Map(clients.map((client) => [client.id, client])),
+          attachmentRecordsByEmailId,
+          clientRecordsById,
           emailRecord,
-          requestRowsById: new Map(
-            requests.map((request) => [request.id, request] as const),
-          ),
-          threadRecordsById: new Map(
-            threads.map((thread) => [thread.id, thread] as const),
-          ),
+          requestRowsById,
+          threadRecordsById,
         }),
       )
       .map((email) =>
@@ -120,20 +191,38 @@ export async function getEmailsPageData(): Promise<EmailsPageData> {
       .sort(sortEmails);
 
     return {
+      documentOptions: documentOptionsResult.options,
+      documentOptionsError: documentOptionsResult.error,
       emails,
       error: null,
-      qualificationOptions: qualificationOptionsResult.options,
-      qualificationOptionsError: qualificationOptionsResult.error,
+      gmailInbox,
+      qualificationOptions: {
+        ...qualificationOptionsResult.options,
+        assignees: assigneesResult.assignees,
+      },
+      qualificationOptionsError: buildQualificationOptionsError(
+        qualificationOptionsResult.error,
+        assigneesResult.error,
+      ),
       requestOptions: requestOptionsResult.options,
       requestOptionsError: requestOptionsResult.error,
     };
   } catch (error) {
     return {
+      documentOptions: emptyDocumentOptions,
+      documentOptionsError: null,
       emails: [],
       error:
         error instanceof Error
           ? `Impossible de charger les emails: ${error.message}`
           : "Impossible de charger les emails.",
+      gmailInbox: {
+        connected: false,
+        emailAddress: null,
+        error: null,
+        inboxId: null,
+        lastSyncedAt: null,
+      },
       qualificationOptions: emptyQualificationOptions,
       qualificationOptionsError: null,
       requestOptions: [],
@@ -144,7 +233,7 @@ export async function getEmailsPageData(): Promise<EmailsPageData> {
 
 async function getEmailQualificationOptions(): Promise<{
   error: string | null;
-  options: EmailsPageData["qualificationOptions"];
+  options: Omit<EmailsPageData["qualificationOptions"], "assignees">;
 }> {
   const [clientsResult, contactsResult, productDepartmentsResult, modelsResult] =
     await Promise.all([
@@ -231,6 +320,26 @@ async function getClientsByIds(clientIds: string[]) {
   return result.data ?? [];
 }
 
+async function getAttachmentsByEmailIds(emailIds: string[]) {
+  if (emailIds.length === 0) {
+    return [] as EmailAttachmentRecord[];
+  }
+
+  const result = await supabaseRestSelectList<EmailAttachmentRecord>(
+    "email_attachments",
+    {
+      email_id: buildInFilter(emailIds),
+      select: "*",
+    },
+  );
+
+  if (result.error && !isMissingSupabaseResourceError(result.rawError)) {
+    return [] as EmailAttachmentRecord[];
+  }
+
+  return result.data ?? [];
+}
+
 async function getRequestsByIds(requestIds: string[]) {
   if (requestIds.length === 0) {
     return [] as RequestOverview[];
@@ -294,6 +403,13 @@ function collectOptionalResourceError(
 
 function buildInFilter(ids: string[]) {
   return `in.(${ids.join(",")})`;
+}
+
+function buildQualificationOptionsError(
+  qualificationOptionsError: string | null,
+  assigneesError: string | null,
+) {
+  return [qualificationOptionsError, assigneesError].filter(Boolean).join(" · ") || null;
 }
 
 function sortEmails(

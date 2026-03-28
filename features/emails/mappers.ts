@@ -12,20 +12,28 @@ import {
   mapSuggestedPriority,
   normalizeConfidence,
 } from "@/features/emails/metadata";
+import {
+  buildEmailQualificationDraft,
+  mergeEmailQualificationDraft,
+  normalizeDateInput,
+} from "@/features/emails/lib/qualification";
 import type {
-  EmailClassificationSummary,
+  EmailClassificationResult,
+  EmailAttachmentListItem,
   EmailListItem,
-  EmailQualificationFields,
+  EmailQualificationDraft,
   EmailQualificationOption,
 } from "@/features/emails/types";
 import type {
   ClientRecord,
+  EmailAttachmentRecord,
   EmailRecord,
   EmailThreadRecord,
   RequestOverview,
 } from "@/types/crm";
 
 interface MapEmailRecordArgs {
+  attachmentRecordsByEmailId: Map<string, EmailAttachmentRecord[]>;
   clientRecordsById: Map<string, ClientRecord>;
   emailRecord: EmailRecord;
   requestRowsById: Map<string, RequestOverview>;
@@ -33,25 +41,27 @@ interface MapEmailRecordArgs {
 }
 
 export function mapEmailRecordToListItem({
+  attachmentRecordsByEmailId,
   clientRecordsById,
   emailRecord,
   requestRowsById,
   threadRecordsById,
 }: Readonly<MapEmailRecordArgs>): EmailListItem {
+  const rawClassification = readStoredClassification(emailRecord);
   const threadId = readString(emailRecord, ["thread_id", "threadId"]);
   const threadRecord = threadId ? threadRecordsById.get(threadId) ?? null : null;
-  const clientId = readString(emailRecord, ["client_id", "clientId"]);
+  const clientId =
+    readString(emailRecord, ["client_id", "clientId"]) ??
+    readString(rawClassification, ["client_id"]) ??
+    null;
   const clientRecord = clientId ? clientRecordsById.get(clientId) ?? null : null;
   const linkedRequestId =
     readString(emailRecord, ["request_id", "linked_request_id", "crm_request_id"]) ??
+    readString(rawClassification, ["linkedRequestId", "linked_request_id", "request_id"]) ??
     null;
   const linkedRequestRow = linkedRequestId
     ? requestRowsById.get(linkedRequestId) ?? null
     : null;
-  const classification =
-    parseClassificationFromRecord(emailRecord) ??
-    parseClassificationFromRecord(threadRecord);
-
   const fromEmail =
     readString(emailRecord, ["from_email", "sender_email", "email_from"]) ??
     extractEmailAddress(readString(emailRecord, ["sender", "from"]) ?? null) ??
@@ -63,6 +73,9 @@ export function mapEmailRecordToListItem({
   const subject =
     readString(emailRecord, ["subject", "thread_subject", "title"]) ??
     "Sans sujet";
+  const attachments = (attachmentRecordsByEmailId.get(emailRecord.id) ?? [])
+    .map(mapAttachmentRecordToListItem)
+    .sort((left, right) => left.fileName.localeCompare(right.fileName));
   const receivedAt =
     readString(emailRecord, ["received_at", "sent_at", "created_at"]) ??
     new Date().toISOString();
@@ -91,6 +104,18 @@ export function mapEmailRecordToListItem({
       "content",
       "html_text",
     ]) ?? null;
+  const bodyHtml =
+    readString(emailRecord, ["body_html", "html_content", "html_body"]) ?? null;
+  const classification = parseClassificationFromRecord({
+    existingClassification: rawClassification,
+    emailRecord,
+    fromEmail,
+    fromName,
+    previewText,
+    subject,
+    threadRecord,
+    bodyText,
+  });
   const rawStatus =
     readString(emailRecord, ["processing_status", "status", "triage_status"]) ??
     "new";
@@ -107,12 +132,9 @@ export function mapEmailRecordToListItem({
     readString(emailRecord, ["client_name", "detected_client_name"]) ??
     readString(clientRecord, ["name", "client_name"]) ??
     "Client non détecté";
-  const detectedType =
-    classification.suggestedFields.requestType ??
-    formatDetectedTypeLabel(
-      readString(emailRecord, ["detected_type", "request_type", "email_type"]),
-    ) ??
-    null;
+  const detectedType = formatDetectedTypeLabel(
+    classification.suggestedFields.requestType,
+  );
   const summary =
     classification.suggestedFields.summary ??
     readString(emailRecord, ["ai_summary", "summary"]) ??
@@ -123,6 +145,8 @@ export function mapEmailRecordToListItem({
     (threadId ? `Thread ${compactIdentifier(threadId, 6)}` : "Thread isolé");
 
   return {
+    attachments,
+    bodyHtml,
     id: emailRecord.id,
     threadId,
     threadLabel,
@@ -146,21 +170,24 @@ export function mapEmailRecordToListItem({
     classification: {
       ...classification,
       confidence,
-      suggestedFields: {
-        ...classification.suggestedFields,
-        aiConfidence:
-          confidence ?? classification.suggestedFields.aiConfidence ?? null,
-        clientId:
-          classification.suggestedFields.clientId ??
-          clientId ??
-          null,
-        clientName,
-        contactName:
-          classification.suggestedFields.contactName ?? fromName ?? null,
-        requestType:
-          classification.suggestedFields.requestType ?? detectedType ?? null,
-        summary,
-      },
+      suggestedFields: mergeEmailQualificationDraft(
+        classification.suggestedFields,
+        {
+          aiConfidence: confidence ?? classification.suggestedFields.aiConfidence,
+          clientId:
+            classification.suggestedFields.clientId ??
+            clientId ??
+            null,
+          clientName,
+          contactName:
+            classification.suggestedFields.contactName ?? fromName ?? null,
+          requestType:
+            classification.suggestedFields.requestType ??
+            null,
+          summary,
+          title: classification.suggestedFields.title || subject,
+        },
+      ),
     },
     isUnread:
       readBoolean(emailRecord, ["is_unread", "unread"]) ??
@@ -168,14 +195,43 @@ export function mapEmailRecordToListItem({
   };
 }
 
-export function getEmailRelatedIds(emailRecord: EmailRecord) {
+function mapAttachmentRecordToListItem(
+  attachmentRecord: EmailAttachmentRecord,
+): EmailAttachmentListItem {
   return {
-    clientId: readString(emailRecord, ["client_id", "clientId"]),
+    id: attachmentRecord.id,
+    fileName:
+      readString(attachmentRecord, ["filename", "file_name", "name", "title"]) ??
+      "Pièce jointe",
+    mimeType:
+      readString(attachmentRecord, ["mime_type", "content_type", "type"]) ?? null,
+    sizeBytes:
+      readNumber(attachmentRecord, ["size_bytes", "file_size", "size"]) ?? null,
+    storagePath:
+      readString(attachmentRecord, [
+        "storage_path",
+        "file_url",
+        "public_url",
+        "url",
+      ]) ?? null,
+  };
+}
+
+export function getEmailRelatedIds(emailRecord: EmailRecord) {
+  const rawClassification = readStoredClassification(emailRecord);
+
+  return {
+    clientId:
+      readString(emailRecord, ["client_id", "clientId"]) ??
+      readString(rawClassification, ["client_id"]) ??
+      null,
     requestId: readString(emailRecord, [
       "request_id",
       "linked_request_id",
       "crm_request_id",
-    ]),
+    ]) ??
+      readString(rawClassification, ["linkedRequestId", "linked_request_id", "request_id"]) ??
+      null,
     threadId: readString(emailRecord, ["thread_id", "threadId"]),
   };
 }
@@ -214,8 +270,7 @@ export function hydrateEmailQualificationFields(
     clientName: matchedClient?.label ?? email.clientName,
     classification: {
       ...email.classification,
-      suggestedFields: {
-        ...fields,
+      suggestedFields: mergeEmailQualificationDraft(fields, {
         clientId: matchedClient?.id ?? fields.clientId ?? email.clientId ?? null,
         clientName: matchedClient?.label ?? fields.clientName ?? email.clientName,
         contactId: matchedContact?.id ?? fields.contactId ?? null,
@@ -226,40 +281,56 @@ export function hydrateEmailQualificationFields(
           matchedDepartment?.id ?? fields.productDepartmentId ?? null,
         productDepartmentName:
           matchedDepartment?.label ?? fields.productDepartmentName ?? null,
-      },
+      }),
     },
   };
 }
 
-function parseClassificationFromRecord(
-  record: Record<string, unknown> | null | undefined,
-): EmailClassificationSummary {
+function parseClassificationFromRecord(input: {
+  bodyText: string | null;
+  emailRecord: EmailRecord;
+  existingClassification: Record<string, unknown> | null;
+  fromEmail: string;
+  fromName: string;
+  previewText: string;
+  subject: string;
+  threadRecord: EmailThreadRecord | null;
+}): EmailClassificationResult {
   const rawClassification =
-    readObject(record, [
+    input.existingClassification ??
+    readObject(input.threadRecord, [
       "ai_classification",
       "classification",
       "classification_json",
-      "ai_classification_json",
-      "detected_payload",
       "analysis",
     ]) ??
     parseJsonObject(
-      readString(record, [
+      readString(input.threadRecord, [
         "ai_classification",
         "classification",
         "classification_json",
-        "ai_classification_json",
-        "detected_payload",
         "analysis",
       ]),
     );
-  const suggestedFields = buildSuggestedFields(record, rawClassification);
+
+  const helperDraft = buildEmailQualificationDraft({
+    bodyText: input.bodyText,
+    fromName: input.fromName,
+    previewText: input.previewText,
+    subject: input.subject,
+  });
+  const suggestedFields = buildSuggestedFields(
+    input.emailRecord,
+    rawClassification,
+    helperDraft,
+  );
 
   return {
     confidence:
       suggestedFields.aiConfidence ??
       normalizeConfidence(readNumber(rawClassification, ["confidence", "score"])),
     raw: rawClassification,
+    source: rawClassification ? "stored" : "rules_v1",
     simplifiedJson: buildSimplifiedJson(rawClassification, suggestedFields),
     suggestedFields,
   };
@@ -268,33 +339,9 @@ function parseClassificationFromRecord(
 function buildSuggestedFields(
   record: Record<string, unknown> | null | undefined,
   rawClassification: Record<string, unknown> | null,
-): EmailQualificationFields {
-  const clientName =
-    readString(rawClassification, ["client_name", "client", "brand"]) ??
-    readString(record, ["detected_client_name", "client_name"]) ??
-    null;
-  const contactName =
-    readString(rawClassification, ["contact_name", "contact"]) ??
-    readString(record, ["contact_name"]) ??
-    null;
-  const productDepartmentName =
-    readString(rawClassification, ["product_department", "department", "department_name"]) ??
-    readString(record, ["department_name", "detected_department"]) ??
-    null;
-  const modelName =
-    readString(rawClassification, ["model_name", "style_name", "reference"]) ??
-    readString(record, ["model_name", "style_name", "reference"]) ??
-    null;
-  const dueAt = normalizeDateInput(
-    readString(rawClassification, ["deadline", "due_at", "target_date"]) ??
-      readString(record, ["detected_deadline", "deadline", "due_at"]),
-  );
-  const requestType = normalizeRequestTypeValue(
-    readString(rawClassification, ["request_type", "type", "email_type"]) ??
-      readString(record, ["detected_type", "request_type", "email_type"]),
-  );
-
-  return {
+  helperDraft: EmailQualificationDraft,
+): EmailQualificationDraft {
+  return mergeEmailQualificationDraft(helperDraft, {
     aiConfidence:
       normalizeConfidence(
         readNumber(record, [
@@ -302,49 +349,92 @@ function buildSuggestedFields(
           "classification_confidence",
           "confidence",
         ]) ?? readNumber(rawClassification, ["confidence", "score"]),
-      ) ?? null,
+      ) ?? helperDraft.aiConfidence,
+    assignedUserId:
+      readString(rawClassification, ["assigned_user_id"]) ??
+      readString(record, ["assigned_user_id"]) ??
+      helperDraft.assignedUserId,
+    assignedUserName:
+      readString(rawClassification, ["assigned_user_name"]) ??
+      readString(record, ["assigned_user_name"]) ??
+      helperDraft.assignedUserName,
     clientId:
       readString(rawClassification, ["client_id"]) ??
       readString(record, ["client_id"]) ??
-      null,
-    clientName,
+      helperDraft.clientId,
+    clientName:
+      readString(rawClassification, ["client_name", "client", "brand"]) ??
+      readString(record, ["detected_client_name", "client_name"]) ??
+      helperDraft.clientName,
     contactId:
       readString(rawClassification, ["contact_id"]) ??
       readString(record, ["contact_id"]) ??
-      null,
-    contactName,
-    dueAt,
+      helperDraft.contactId,
+    contactName:
+      readString(rawClassification, ["contact_name", "contact"]) ??
+      readString(record, ["contact_name"]) ??
+      helperDraft.contactName,
+    dueAt: normalizeDateInput(
+      readString(rawClassification, ["deadline", "due_at", "target_date"]) ??
+        readString(record, ["detected_deadline", "deadline", "due_at"]) ??
+        helperDraft.dueAt,
+    ),
     modelId:
       readString(rawClassification, ["model_id"]) ??
       readString(record, ["model_id"]) ??
-      null,
-    modelName,
+      helperDraft.modelId,
+    modelName:
+      readString(rawClassification, ["model_name", "style_name", "reference"]) ??
+      readString(record, ["model_name", "style_name", "reference"]) ??
+      helperDraft.modelName,
     priority: mapSuggestedPriority(
       readString(rawClassification, ["priority", "priority_level"]) ??
-        readString(record, ["detected_priority", "priority"]),
+        readString(record, ["detected_priority", "priority"]) ??
+        helperDraft.priority,
     ),
     productDepartmentId:
       readString(rawClassification, ["product_department_id", "department_id"]) ??
       readString(record, ["product_department_id"]) ??
-      null,
-    productDepartmentName,
-    requestType,
+      helperDraft.productDepartmentId,
+    productDepartmentName:
+      readString(rawClassification, ["product_department", "department", "department_name"]) ??
+      readString(record, ["department_name", "detected_department"]) ??
+      helperDraft.productDepartmentName,
+    requestType:
+      normalizeRequestTypeValue(
+        readString(rawClassification, ["request_type", "type", "email_type"]) ??
+          readString(record, ["detected_type", "request_type", "email_type"]),
+      ) ?? helperDraft.requestType,
     requestedAction:
-      readString(rawClassification, ["requested_action", "action_expected", "next_action", "action"]) ??
+      readString(rawClassification, [
+        "requested_action",
+        "action_expected",
+        "next_action",
+        "action",
+      ]) ??
       readString(record, ["requested_action", "action_expected", "expected_action"]) ??
-      null,
+      helperDraft.requestedAction,
+    requiresHumanValidation:
+      readBoolean(rawClassification, ["requires_human_validation"]) ??
+      readBoolean(record, ["requires_human_validation"]) ??
+      helperDraft.requiresHumanValidation,
     summary:
       readString(rawClassification, ["summary", "short_summary"]) ??
       readString(record, ["ai_summary", "summary"]) ??
-      null,
-  };
+      helperDraft.summary,
+    title:
+      readString(rawClassification, ["title"]) ??
+      readString(record, ["request_title", "title"]) ??
+      helperDraft.title,
+  });
 }
 
 function buildSimplifiedJson(
   classification: Record<string, unknown> | null,
-  suggestedFields: EmailQualificationFields,
+  suggestedFields: EmailQualificationDraft,
 ) {
   return {
+    title: suggestedFields.title,
     client: suggestedFields.clientName,
     contact: suggestedFields.contactName,
     productDepartment: suggestedFields.productDepartmentName,
@@ -354,6 +444,8 @@ function buildSimplifiedJson(
     dueAt: suggestedFields.dueAt,
     summary: suggestedFields.summary,
     requestedAction: suggestedFields.requestedAction,
+    assignedUserId: suggestedFields.assignedUserId,
+    requiresHumanValidation: suggestedFields.requiresHumanValidation,
     aiConfidence: suggestedFields.aiConfidence,
     hasRawClassification: Boolean(classification),
   };
@@ -428,26 +520,37 @@ function normalizeText(value: string) {
   return value.trim().toLowerCase();
 }
 
-function normalizeDateInput(value: string | null) {
-  if (!value) {
-    return null;
-  }
-
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-
-  return parsed.toISOString().slice(0, 10);
-}
-
 function normalizeRequestTypeValue(value: string | null) {
   if (!value) {
     return null;
   }
 
   return value.toLowerCase().trim().replace(/\s+/g, "_");
+}
+
+function readStoredClassification(
+  record: Record<string, unknown> | null | undefined,
+) {
+  return (
+    readObject(record, [
+      "ai_classification",
+      "classification",
+      "classification_json",
+      "ai_classification_json",
+      "detected_payload",
+      "analysis",
+    ]) ??
+    parseJsonObject(
+      readString(record, [
+        "ai_classification",
+        "classification",
+        "classification_json",
+        "ai_classification_json",
+        "detected_payload",
+        "analysis",
+      ]),
+    )
+  );
 }
 
 function extractSenderName(value: string | null) {

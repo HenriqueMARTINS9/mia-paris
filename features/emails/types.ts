@@ -1,12 +1,27 @@
+import type { DocumentFormOptions } from "@/features/documents/types";
 import type {
   RequestLinkOption,
   RequestPriority,
 } from "@/features/requests/types";
+import type { RequestAssigneeOption } from "@/features/requests/types";
 
 export type EmailProcessingStatus = "new" | "review" | "processed";
 
-export interface EmailQualificationFields {
+export type EmailQualificationRequestType =
+  | "price_request"
+  | "deadline_request"
+  | "tds_request"
+  | "swatch_request"
+  | "trim_validation"
+  | "production_followup"
+  | "logistics"
+  | "development"
+  | "compliance";
+
+export interface EmailQualificationDraft {
   aiConfidence: number | null;
+  assignedUserId: string | null;
+  assignedUserName: string | null;
   clientId: string | null;
   clientName: string | null;
   contactId: string | null;
@@ -17,19 +32,34 @@ export interface EmailQualificationFields {
   priority: RequestPriority;
   productDepartmentId: string | null;
   productDepartmentName: string | null;
-  requestType: string | null;
+  requestType: EmailQualificationRequestType | string | null;
   requestedAction: string | null;
+  requiresHumanValidation: boolean;
   summary: string | null;
+  title: string;
 }
 
-export interface EmailClassificationSummary {
+export type EmailQualificationFields = EmailQualificationDraft;
+
+export interface EmailClassificationResult {
   confidence: number | null;
   raw: Record<string, unknown> | null;
+  source: "stored" | "rules_v1";
   simplifiedJson: Record<string, unknown> | null;
-  suggestedFields: EmailQualificationFields;
+  suggestedFields: EmailQualificationDraft;
+}
+
+export interface EmailAttachmentListItem {
+  id: string;
+  fileName: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  storagePath: string | null;
 }
 
 export interface EmailListItem {
+  attachments: EmailAttachmentListItem[];
+  bodyHtml: string | null;
   id: string;
   threadId: string | null;
   threadLabel: string;
@@ -48,7 +78,7 @@ export interface EmailListItem {
   linkedRequestLabel: string | null;
   summary: string | null;
   confidence: number | null;
-  classification: EmailClassificationSummary;
+  classification: EmailClassificationResult;
   isUnread: boolean;
 }
 
@@ -60,15 +90,32 @@ export interface EmailQualificationOption {
 }
 
 export interface EmailQualificationOptions {
+  assignees: RequestAssigneeOption[];
   clients: EmailQualificationOption[];
   contacts: EmailQualificationOption[];
   models: EmailQualificationOption[];
   productDepartments: EmailQualificationOption[];
 }
 
+export interface ExistingRequestMatch extends RequestLinkOption {
+  requestType?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface GmailInboxStatus {
+  connected: boolean;
+  emailAddress: string | null;
+  error: string | null;
+  inboxId: string | null;
+  lastSyncedAt: string | null;
+}
+
 export interface EmailsPageData {
+  documentOptions: DocumentFormOptions;
+  documentOptionsError: string | null;
   emails: EmailListItem[];
   error: string | null;
+  gmailInbox: GmailInboxStatus;
   qualificationOptions: EmailQualificationOptions;
   qualificationOptionsError: string | null;
   requestOptions: RequestLinkOption[];
@@ -79,6 +126,26 @@ export type EmailMutationField =
   | "status"
   | "request_link"
   | "request_creation";
+
+export interface CreateRequestFromEmailPayload {
+  emailId: string;
+  qualification: EmailQualificationDraft;
+}
+
+export interface RequestAutoTaskRule {
+  requestType: EmailQualificationRequestType | string;
+  taskTitle: string;
+  taskType: string;
+}
+
+export interface GmailSyncResult {
+  connectedInboxEmail: string | null;
+  ignoredMessages: number;
+  importedMessages: number;
+  importedThreads: number;
+  message: string;
+  ok: boolean;
+}
 
 export interface EmailMutationResult {
   ok: boolean;

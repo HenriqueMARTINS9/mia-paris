@@ -13,6 +13,12 @@ export default async function ProductionsRoutePage() {
   const data = await getProductionsPageData();
 
   return (
-    <ProductionsPage productions={data.productions} error={data.error} />
+    <ProductionsPage
+      productions={data.productions}
+      detailsById={data.detailsById}
+      formOptions={data.formOptions}
+      formOptionsError={data.formOptionsError}
+      error={data.error}
+    />
   );
 }

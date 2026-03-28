@@ -1,5 +1,6 @@
 import { mapRawRequestPriorityToUiPriority } from "@/features/requests/metadata";
 import type {
+  EmailQualificationRequestType,
   EmailProcessingStatus,
 } from "@/features/emails/types";
 import type { RequestPriority } from "@/features/requests/types";
@@ -12,10 +13,13 @@ export const emailRequestTypeOptions = [
   "swatch_request",
   "trim_validation",
   "production_followup",
+  "logistics",
+  "development",
+  "compliance",
 ] as const;
 
 export const emailRequestTypeMeta: Record<
-  (typeof emailRequestTypeOptions)[number],
+  EmailQualificationRequestType,
   { label: string }
 > = {
   price_request: { label: "Demande de prix" },
@@ -24,6 +28,9 @@ export const emailRequestTypeMeta: Record<
   swatch_request: { label: "Demande d’échantillon" },
   trim_validation: { label: "Validation trim" },
   production_followup: { label: "Suivi production" },
+  logistics: { label: "Logistique" },
+  development: { label: "Développement" },
+  compliance: { label: "Conformité" },
 };
 
 export const emailStatusMeta: Record<
@@ -45,9 +52,9 @@ export const emailStatusMeta: Record<
 };
 
 const emailStatusSynonyms: Record<EmailProcessingStatus, string[]> = {
-  new: ["new", "open", "pending", "unread"],
+  new: ["pending", "new", "open", "unread"],
   review: ["review", "to_review", "needs_review", "flagged"],
-  processed: ["processed", "done", "qualified", "closed"],
+  processed: ["processed", "done", "qualified", "classified", "closed"],
 };
 
 export function mapRawEmailStatusToUiStatus(
@@ -85,7 +92,7 @@ export function formatDetectedTypeLabel(value: string | null | undefined) {
     return null;
   }
 
-  const normalized = value.toLowerCase().trim() as (typeof emailRequestTypeOptions)[number];
+  const normalized = value.toLowerCase().trim() as EmailQualificationRequestType;
 
   if (normalized in emailRequestTypeMeta) {
     return emailRequestTypeMeta[normalized].label;

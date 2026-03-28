@@ -2,20 +2,33 @@ import type {
   ProductionRecord,
   OrderRecord,
   ClientRecord,
+  DocumentRecord,
   ModelRecord,
   RequestOverview,
+  ActivityLogRecord,
+  DeadlineRecord,
+  TaskRecord,
 } from "@/types/crm";
 import {
   compactIdentifier,
   readString,
   type UnknownRecord,
+  titleCaseFromSnake,
 } from "@/lib/record-helpers";
 import {
   formatProductionModeLabel,
   mapRawProductionRiskToUiRisk,
   mapRawProductionStatusToUiStatus,
 } from "@/features/productions/metadata";
-import type { ProductionListItem } from "@/features/productions/types";
+import type {
+  ProductionActivityItem,
+  ProductionDetailItem,
+  ProductionLinkedDeadlineItem,
+  ProductionLinkedDocumentItem,
+  ProductionLinkedRequestItem,
+  ProductionLinkedTaskItem,
+  ProductionListItem,
+} from "@/features/productions/types";
 
 interface MapProductionRecordArgs {
   clientRecordsById: Map<string, ClientRecord>;
@@ -130,6 +143,7 @@ export function mapProductionRecordToListItem({
       "end_date",
     ]),
     blockingReason,
+    notes: readString(productionRecord, ["notes", "internal_notes"]),
     createdAt: readString(productionRecord, ["created_at"]),
     updatedAt: readString(productionRecord, ["updated_at"]),
     isBlocked:
@@ -159,4 +173,166 @@ export function getNestedForeignKey(
   keys: string[],
 ) {
   return readString(record, keys);
+}
+
+export function mapProductionLinkedRequestItem(request: RequestOverview): ProductionLinkedRequestItem {
+  return {
+    id: request.id,
+    label: `${request.client_name ?? "Client"} · ${request.title}`,
+    priority: request.priority,
+    status: request.status,
+  };
+}
+
+export function mapProductionLinkedTaskItem(row: TaskRecord): ProductionLinkedTaskItem {
+  return {
+    id: row.id,
+    title: readString(row, ["title", "label", "name"]) ?? "Tâche",
+    dueAt: readString(row, ["due_at", "deadline_at"]),
+    ownerName: readString(row, ["assigned_user_name", "owner_name", "assignee_name"]),
+    priority: readString(row, ["priority"]),
+    status: readString(row, ["status"]),
+  };
+}
+
+export function mapProductionLinkedDeadlineItem(
+  row: DeadlineRecord,
+): ProductionLinkedDeadlineItem {
+  return {
+    id: row.id,
+    label: readString(row, ["label", "title", "name"]) ?? "Deadline",
+    deadlineAt: readString(row, ["deadline_at", "due_at"]),
+    priority: readString(row, ["priority"]),
+    status: readString(row, ["status"]),
+  };
+}
+
+export function mapProductionLinkedDocumentItem(
+  row: DocumentRecord,
+): ProductionLinkedDocumentItem {
+  return {
+    id: row.id,
+    name: readString(row, ["title", "name", "file_name"]) ?? "Document",
+    type:
+      titleCaseFromSnake(
+        readString(row, ["document_type", "type", "mime_type"]) ?? "document",
+      ) ?? "Document",
+    updatedAt: readString(row, ["updated_at", "created_at"]),
+    url: readString(row, ["url", "file_url", "public_url", "storage_path"]),
+  };
+}
+
+export function buildProductionHistory(input: {
+  deadlines: ProductionLinkedDeadlineItem[];
+  documents: ProductionLinkedDocumentItem[];
+  logs: ActivityLogRecord[];
+  production: ProductionListItem;
+  requests: ProductionLinkedRequestItem[];
+  tasks: ProductionLinkedTaskItem[];
+}): ProductionActivityItem[] {
+  const events: ProductionActivityItem[] = [];
+
+  if (input.production.createdAt) {
+    events.push({
+      date: input.production.createdAt,
+      description: input.production.productionModeLabel,
+      id: `${input.production.id}-created`,
+      title: "Production créée",
+      type: "production",
+    });
+  }
+
+  for (const request of input.requests) {
+    events.push({
+      date: input.production.updatedAt ?? input.production.createdAt ?? new Date().toISOString(),
+      description: request.status,
+      id: `request-${request.id}`,
+      title: request.label,
+      type: "request",
+    });
+  }
+
+  for (const task of input.tasks) {
+    if (!task.dueAt) {
+      continue;
+    }
+
+    events.push({
+      date: task.dueAt,
+      description: [task.status, task.ownerName].filter(Boolean).join(" · ") || null,
+      id: `task-${task.id}`,
+      title: task.title,
+      type: "task",
+    });
+  }
+
+  for (const deadline of input.deadlines) {
+    if (!deadline.deadlineAt) {
+      continue;
+    }
+
+    events.push({
+      date: deadline.deadlineAt,
+      description: [deadline.status, deadline.priority].filter(Boolean).join(" · ") || null,
+      id: `deadline-${deadline.id}`,
+      title: deadline.label,
+      type: "deadline",
+    });
+  }
+
+  for (const document of input.documents) {
+    if (!document.updatedAt) {
+      continue;
+    }
+
+    events.push({
+      date: document.updatedAt,
+      description: document.type,
+      id: `document-${document.id}`,
+      title: document.name,
+      type: "document",
+    });
+  }
+
+  for (const log of input.logs) {
+    const date = readString(log, ["created_at"]);
+
+    if (!date) {
+      continue;
+    }
+
+    events.push({
+      date,
+      description:
+        readString(log, ["description", "action_type", "action"]) ??
+        "Activité liée",
+      id: `log-${log.id}`,
+      title:
+        titleCaseFromSnake(readString(log, ["action_type", "action"])) ?? "Activité",
+      type: "log",
+    });
+  }
+
+  return events.sort(
+    (left, right) =>
+      new Date(right.date).getTime() - new Date(left.date).getTime(),
+  );
+}
+
+export function buildProductionDetailItem(input: {
+  deadlines: ProductionLinkedDeadlineItem[];
+  documents: ProductionLinkedDocumentItem[];
+  history: ProductionActivityItem[];
+  production: ProductionListItem;
+  requests: ProductionLinkedRequestItem[];
+  tasks: ProductionLinkedTaskItem[];
+}): ProductionDetailItem {
+  return {
+    ...input.production,
+    linkedDeadlines: input.deadlines,
+    linkedDocuments: input.documents,
+    linkedRequests: input.requests,
+    linkedTasks: input.tasks,
+    history: input.history,
+  };
 }

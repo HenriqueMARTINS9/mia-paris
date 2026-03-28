@@ -1,28 +1,26 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-import { createRequestFromEmailAction } from "@/features/emails/actions/update-email";
-import {
-  emailRequestTypeMeta,
-  emailRequestTypeOptions,
-} from "@/features/emails/metadata";
-import { RequestCreationActions } from "@/features/emails/components/request-creation-actions";
-import { SuggestedFieldsCard } from "@/features/emails/components/suggested-fields-card";
-import type {
-  EmailListItem,
-  EmailQualificationFields,
-  EmailQualificationOptions,
-} from "@/features/emails/types";
-import { requestPriorityMeta } from "@/features/requests/metadata";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { createRequestFromEmailAction } from "@/features/emails/actions/create-request-from-email";
+import { ClientDepartmentModelSelectors } from "@/features/emails/components/client-department-model-selectors";
+import { PrioritySelect } from "@/features/emails/components/priority-select";
+import { QualificationActionsBar } from "@/features/emails/components/qualification-actions-bar";
+import { QualificationFieldGroup } from "@/features/emails/components/qualification-field-group";
+import { RequestTypeSelect } from "@/features/emails/components/request-type-select";
+import { SuggestedFieldsCard } from "@/features/emails/components/suggested-fields-card";
+import type {
+  EmailListItem,
+  EmailQualificationDraft,
+  EmailQualificationOptions,
+} from "@/features/emails/types";
 
 export function EmailQualificationPanel({
   email,
@@ -35,40 +33,29 @@ export function EmailQualificationPanel({
 }>) {
   const router = useRouter();
   const [isCreatePending, startCreateTransition] = useTransition();
-  const [formState, setFormState] = useState<EmailQualificationFields>(
+  const [currentLinkedRequestId, setCurrentLinkedRequestId] = useState<string | null>(
+    email.linkedRequestId,
+  );
+  const [formState, setFormState] = useState<EmailQualificationDraft>(
     email.classification.suggestedFields,
   );
 
-  const clientScopedContacts = useMemo(() => {
-    if (!formState.clientId) {
-      return qualificationOptions.contacts;
-    }
-
-    return qualificationOptions.contacts.filter(
-      (contact) => contact.clientId === formState.clientId,
-    );
-  }, [formState.clientId, qualificationOptions.contacts]);
-
-  const clientScopedModels = useMemo(() => {
-    if (!formState.clientId) {
-      return qualificationOptions.models;
-    }
-
-    return qualificationOptions.models.filter(
-      (model) => model.clientId === formState.clientId,
-    );
-  }, [formState.clientId, qualificationOptions.models]);
+  function patchDraft(nextDraft: Partial<EmailQualificationDraft>) {
+    setFormState((current) => ({
+      ...current,
+      ...nextDraft,
+    }));
+  }
 
   function handleCreateRequest() {
     startCreateTransition(async () => {
       const result = await createRequestFromEmailAction({
         emailId: email.id,
-        previewText: email.previewText,
         qualification: formState,
-        subject: email.subject,
       });
 
       if (result.ok) {
+        setCurrentLinkedRequestId(result.requestId ?? email.linkedRequestId);
         toast.success(result.message);
         router.refresh();
         return;
@@ -78,175 +65,107 @@ export function EmailQualificationPanel({
     });
   }
 
+  const qualificationSourceLabel =
+    email.classification.source === "stored"
+      ? "Qualification existante"
+      : "Préremplissage métier V1";
+
   return (
     <div className="space-y-4">
       <SuggestedFieldsCard fields={email.classification.suggestedFields} />
+
       <Card>
         <CardHeader className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline">Qualification validée</Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">{qualificationSourceLabel}</Badge>
+            {email.attachments.length > 0 ? (
+              <Badge variant="outline">
+                {email.attachments.length} PJ Gmail synchronisée
+                {email.attachments.length > 1 ? "s" : ""}
+              </Badge>
+            ) : null}
+            {formState.requiresHumanValidation ? (
+              <Badge variant="outline">Validation humaine requise</Badge>
+            ) : (
+              <Badge variant="outline">Prêt à transformer</Badge>
+            )}
           </div>
           <CardTitle className="text-base">
             Corriger les champs avant création de la demande
           </CardTitle>
         </CardHeader>
+
         <CardContent className="grid gap-4">
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Client">
+            <QualificationFieldGroup label="Titre demande">
+              <Input
+                value={formState.title}
+                onChange={(event) => patchDraft({ title: event.target.value })}
+                placeholder="Objet métier de la demande"
+              />
+            </QualificationFieldGroup>
+
+            <QualificationFieldGroup label="Responsable">
               <Select
-                value={formState.clientId ?? ""}
+                value={formState.assignedUserId ?? ""}
                 onChange={(event) => {
-                  const nextClientId = event.target.value || null;
-                  const selectedClient = qualificationOptions.clients.find(
-                    (client) => client.id === nextClientId,
+                  const nextAssigneeId = event.target.value || null;
+                  const selectedAssignee = qualificationOptions.assignees.find(
+                    (assignee) => assignee.id === nextAssigneeId,
                   );
 
-                  setFormState((current) => ({
-                    ...current,
-                    clientId: nextClientId,
-                    clientName: selectedClient?.label ?? current.clientName,
-                    contactId: null,
-                    modelId: null,
-                  }));
+                  patchDraft({
+                    assignedUserId: nextAssigneeId,
+                    assignedUserName: selectedAssignee?.fullName ?? null,
+                  });
                 }}
               >
-                <option value="">Aucun client</option>
-                {qualificationOptions.clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.label}
+                <option value="">
+                  {qualificationOptions.assignees.length > 0
+                    ? "Aucun responsable"
+                    : "Aucun utilisateur disponible"}
+                </option>
+                {qualificationOptions.assignees.map((assignee) => (
+                  <option key={assignee.id} value={assignee.id}>
+                    {assignee.fullName}
                   </option>
                 ))}
               </Select>
-            </Field>
+            </QualificationFieldGroup>
 
-            <Field label="Contact">
-              <Select
-                value={formState.contactId ?? ""}
-                onChange={(event) => {
-                  const nextContactId = event.target.value || null;
-                  const selectedContact = clientScopedContacts.find(
-                    (contact) => contact.id === nextContactId,
-                  );
+            <ClientDepartmentModelSelectors
+              draft={formState}
+              onChange={patchDraft}
+              options={qualificationOptions}
+            />
 
-                  setFormState((current) => ({
-                    ...current,
-                    contactId: nextContactId,
-                    contactName: selectedContact?.label ?? current.contactName,
-                  }));
-                }}
-              >
-                <option value="">Aucun contact</option>
-                {clientScopedContacts.map((contact) => (
-                  <option key={contact.id} value={contact.id}>
-                    {contact.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+            <QualificationFieldGroup label="Type de demande">
+              <RequestTypeSelect
+                value={formState.requestType}
+                onChange={(requestType) => patchDraft({ requestType })}
+              />
+            </QualificationFieldGroup>
 
-            <Field label="Département produit">
-              <Select
-                value={formState.productDepartmentId ?? ""}
-                onChange={(event) => {
-                  const nextDepartmentId = event.target.value || null;
-                  const selectedDepartment =
-                    qualificationOptions.productDepartments.find(
-                      (department) => department.id === nextDepartmentId,
-                    );
-
-                  setFormState((current) => ({
-                    ...current,
-                    productDepartmentId: nextDepartmentId,
-                    productDepartmentName:
-                      selectedDepartment?.label ?? current.productDepartmentName,
-                  }));
-                }}
-              >
-                <option value="">Aucun département</option>
-                {qualificationOptions.productDepartments.map((department) => (
-                  <option key={department.id} value={department.id}>
-                    {department.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            <Field label="Modèle">
-              <Select
-                value={formState.modelId ?? ""}
-                onChange={(event) => {
-                  const nextModelId = event.target.value || null;
-                  const selectedModel = clientScopedModels.find(
-                    (model) => model.id === nextModelId,
-                  );
-
-                  setFormState((current) => ({
-                    ...current,
-                    modelId: nextModelId,
-                    modelName: selectedModel?.label ?? current.modelName,
-                  }));
-                }}
-              >
-                <option value="">Aucun modèle</option>
-                {clientScopedModels.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            <Field label="Type de demande">
-              <Select
-                value={formState.requestType ?? ""}
-                onChange={(event) =>
-                  setFormState((current) => ({
-                    ...current,
-                    requestType: event.target.value || null,
-                  }))
-                }
-              >
-                <option value="">Sélectionner un type</option>
-                {emailRequestTypeOptions.map((requestType) => (
-                  <option key={requestType} value={requestType}>
-                    {emailRequestTypeMeta[requestType].label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            <Field label="Priorité">
-              <Select
+            <QualificationFieldGroup label="Priorité">
+              <PrioritySelect
                 value={formState.priority}
-                onChange={(event) =>
-                  setFormState((current) => ({
-                    ...current,
-                    priority: event.target.value as EmailQualificationFields["priority"],
-                  }))
-                }
-              >
-                {(["critical", "high", "normal"] as const).map((priority) => (
-                  <option key={priority} value={priority}>
-                    {requestPriorityMeta[priority].label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+                onChange={(priority) => patchDraft({ priority })}
+              />
+            </QualificationFieldGroup>
 
-            <Field label="Due date">
+            <QualificationFieldGroup label="Due date">
               <Input
                 type="date"
                 value={formState.dueAt ?? ""}
                 onChange={(event) =>
-                  setFormState((current) => ({
-                    ...current,
+                  patchDraft({
                     dueAt: event.target.value || null,
-                  }))
+                  })
                 }
               />
-            </Field>
+            </QualificationFieldGroup>
 
-            <Field label="Confiance IA (0 à 1)">
+            <QualificationFieldGroup label="Confiance règle / IA (0 à 1)">
               <Input
                 type="number"
                 min="0"
@@ -256,43 +175,54 @@ export function EmailQualificationPanel({
                 onChange={(event) => {
                   const parsed = Number(event.target.value);
 
-                  setFormState((current) => ({
-                    ...current,
+                  patchDraft({
                     aiConfidence:
                       event.target.value.length === 0 || Number.isNaN(parsed)
                         ? null
                         : parsed,
-                  }));
+                  });
                 }}
               />
-            </Field>
+            </QualificationFieldGroup>
+
+            <QualificationFieldGroup label="Validation humaine">
+              <Select
+                value={formState.requiresHumanValidation ? "yes" : "no"}
+                onChange={(event) =>
+                  patchDraft({
+                    requiresHumanValidation: event.target.value === "yes",
+                  })
+                }
+              >
+                <option value="yes">Oui</option>
+                <option value="no">Non</option>
+              </Select>
+            </QualificationFieldGroup>
           </div>
 
-          <Field label="Résumé métier">
+          <QualificationFieldGroup label="Résumé métier">
             <Textarea
               value={formState.summary ?? ""}
               onChange={(event) =>
-                setFormState((current) => ({
-                  ...current,
+                patchDraft({
                   summary: event.target.value || null,
-                }))
+                })
               }
               className="min-h-[120px]"
             />
-          </Field>
+          </QualificationFieldGroup>
 
-          <Field label="Action demandée">
+          <QualificationFieldGroup label="Action demandée">
             <Textarea
               value={formState.requestedAction ?? ""}
               onChange={(event) =>
-                setFormState((current) => ({
-                  ...current,
+                patchDraft({
                   requestedAction: event.target.value || null,
-                }))
+                })
               }
               className="min-h-[96px]"
             />
-          </Field>
+          </QualificationFieldGroup>
 
           {qualificationOptionsError ? (
             <p className="text-sm text-muted-foreground">
@@ -301,28 +231,19 @@ export function EmailQualificationPanel({
           ) : null}
         </CardContent>
       </Card>
-      <RequestCreationActions
-        canCreate={Boolean(formState.requestType) && !email.linkedRequestId}
+
+      <QualificationActionsBar
+        canCreate={
+          Boolean(formState.requestType) &&
+          formState.title.trim().length > 0 &&
+          !currentLinkedRequestId
+        }
         currentPriority={formState.priority}
         currentRequestType={formState.requestType}
-        linkedRequestId={email.linkedRequestId}
+        linkedRequestId={currentLinkedRequestId}
         isPending={isCreatePending}
         onCreateRequest={handleCreateRequest}
       />
-    </div>
-  );
-}
-
-function Field({
-  children,
-  label,
-}: Readonly<{ children: ReactNode; label: string }>) {
-  return (
-    <div className="grid gap-2">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-        {label}
-      </p>
-      {children}
     </div>
   );
 }

@@ -26,10 +26,14 @@ import {
 import { EmailFilters } from "@/features/emails/components/email-filters";
 import { EmailPreviewPanel } from "@/features/emails/components/email-preview-panel";
 import { EmailsTable } from "@/features/emails/components/emails-table";
+import { GmailSyncControls } from "@/features/emails/components/gmail-sync-controls";
 import type { EmailListItem, EmailsPageData } from "@/features/emails/types";
 
 export function EmailsPage({
+  documentOptions,
+  documentOptionsError = null,
   emails,
+  gmailInbox,
   qualificationOptions,
   qualificationOptionsError = null,
   requestOptions,
@@ -100,10 +104,7 @@ export function EmailsPage({
             <ArrowDownToLine className="h-4 w-4" />
             Exporter
           </Button>
-          <Button variant="secondary">
-            <ScanSearch className="h-4 w-4" />
-            Lancer qualification
-          </Button>
+          <GmailSyncControls gmailInbox={gmailInbox} />
         </>
       }
     />
@@ -235,6 +236,8 @@ export function EmailsPage({
           </SheetHeader>
           <div className="mt-6 overflow-y-auto pb-6">
             <EmailPreviewPanel
+              documentOptions={documentOptions}
+              documentOptionsError={documentOptionsError}
               email={selectedEmail}
               mode="sheet"
               qualificationOptions={qualificationOptions}

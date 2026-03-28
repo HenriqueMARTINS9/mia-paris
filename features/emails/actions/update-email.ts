@@ -2,19 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createDeadlineAction } from "@/features/deadlines/actions/create-deadline";
 import { mapUiEmailStatusToDatabaseValues } from "@/features/emails/metadata";
 import type {
   EmailMutationResult,
   EmailProcessingStatus,
-  EmailQualificationFields,
 } from "@/features/emails/types";
-import { mapUiPriorityToDatabasePriority } from "@/features/requests/metadata";
-import { createRequestTaskAction } from "@/features/tasks/actions/create-request-task";
 import {
   isMissingSupabaseColumnError,
+  isMissingSupabaseResourceError,
   supabaseRestInsert,
   supabaseRestPatch,
+  type SupabaseRestErrorPayload,
 } from "@/lib/supabase/rest";
 
 interface UpdateEmailStatusInput {
@@ -26,45 +24,6 @@ interface AttachEmailToRequestInput {
   emailId: string;
   requestId: string;
 }
-
-interface CreateRequestFromEmailInput {
-  emailId: string;
-  previewText: string;
-  qualification: EmailQualificationFields;
-  subject: string;
-}
-
-interface AutoTaskRule {
-  taskTitle: string;
-  taskType: string;
-}
-
-const requestAutomationRules: Partial<Record<string, AutoTaskRule>> = {
-  price_request: {
-    taskTitle: "Vérifier la demande de prix",
-    taskType: "price_check",
-  },
-  deadline_request: {
-    taskTitle: "Vérifier le délai demandé",
-    taskType: "deadline_check",
-  },
-  tds_request: {
-    taskTitle: "Préparer l’envoi de la fiche technique",
-    taskType: "tds_send",
-  },
-  swatch_request: {
-    taskTitle: "Préparer les swatches demandés",
-    taskType: "swatch_prepare",
-  },
-  trim_validation: {
-    taskTitle: "Suivre la validation trim",
-    taskType: "validation_followup",
-  },
-  production_followup: {
-    taskTitle: "Passer en revue le suivi production",
-    taskType: "internal_review",
-  },
-};
 
 export async function markEmailProcessedAction(
   input: Omit<UpdateEmailStatusInput, "status">,
@@ -84,6 +43,15 @@ export async function markEmailForReviewAction(
   });
 }
 
+export async function ignoreEmailForNowAction(
+  input: Omit<UpdateEmailStatusInput, "status">,
+): Promise<EmailMutationResult> {
+  return updateEmailStatus({
+    emailId: input.emailId,
+    status: "new",
+  });
+}
+
 export async function attachEmailToRequestAction(
   input: AttachEmailToRequestInput,
 ): Promise<EmailMutationResult> {
@@ -95,97 +63,98 @@ export async function attachEmailToRequestAction(
     };
   }
 
-  const payloads = [
-    { request_id: input.requestId },
-    { linked_request_id: input.requestId },
-    { crm_request_id: input.requestId },
-  ];
+  const classificationPayload = {
+    linkedRequestId: input.requestId,
+    linkMode: "existing_request",
+    validatedAt: new Date().toISOString(),
+  };
+  const payloads: Array<Record<string, unknown>> = [];
+
+  for (const statusColumn of ["processing_status", "status", "triage_status"]) {
+    for (const statusValue of ["classified", "processed"]) {
+      for (const requestColumn of [
+        "request_id",
+        "linked_request_id",
+        "crm_request_id",
+      ]) {
+        payloads.push({
+          [requestColumn]: input.requestId,
+          [statusColumn]: statusValue,
+          ai_classification: classificationPayload,
+          is_processed: true,
+        });
+        payloads.push({
+          [requestColumn]: input.requestId,
+          [statusColumn]: statusValue,
+          classification_json: classificationPayload,
+          is_processed: true,
+        });
+        payloads.push({
+          [requestColumn]: input.requestId,
+          [statusColumn]: statusValue,
+          is_processed: true,
+        });
+      }
+    }
+  }
 
   const result = await patchEmailWithPayloads({
     emailId: input.emailId,
     field: "request_link",
     payloads,
-    successMessage: "Email rattaché à la demande existante.",
+    successMessage: "Email rattaché à la demande existante et marqué traité.",
   });
 
   if (result.ok) {
+    await createActivityLogEntry({
+      action: "email_attached_to_existing_request",
+      description: `Email ${input.emailId} rattaché à la demande ${input.requestId}.`,
+      entityId: input.emailId,
+      entityType: "email",
+      payload: classificationPayload,
+      requestId: input.requestId,
+    });
     revalidatePath(`/requests/${input.requestId}`);
     revalidatePath("/demandes");
+
+    return {
+      ...result,
+      requestId: input.requestId,
+    };
   }
 
   return result;
 }
 
-export async function createRequestFromEmailAction(
-  input: CreateRequestFromEmailInput,
-): Promise<EmailMutationResult> {
-  if (!input.emailId) {
-    return {
-      ok: false,
-      field: "request_creation",
-      message: "Identifiant email manquant.",
-    };
-  }
-
-  if (!input.qualification.requestType) {
-    return {
-      ok: false,
-      field: "request_creation",
-      message: "Sélectionne un type de demande avant de créer le dossier.",
-    };
-  }
-
-  const requestInsertResult = await insertRequestFromEmail(input);
-
-  if (!requestInsertResult.ok || !requestInsertResult.requestId) {
-    return requestInsertResult;
-  }
-
-  const requestId = requestInsertResult.requestId;
-  const syncEmailResult = await syncEmailAfterRequestCreation({
-    emailId: input.emailId,
-    qualification: input.qualification,
-    requestId,
-  });
-  const automationSummary = await runEmailAutomationRules({
-    requestId,
-    subject: input.subject,
-    qualification: input.qualification,
-  });
-
-  revalidatePath("/emails");
-  revalidatePath("/demandes");
-  revalidatePath(`/requests/${requestId}`);
-  revalidatePath("/taches");
-  revalidatePath("/deadlines");
-  revalidatePath("/", "layout");
-
-  const messages = ["Demande créée depuis l’email."];
-
-  if (syncEmailResult.ok) {
-    messages.push("Email source synchronisé.");
-  } else {
-    messages.push("Le lien email <-> demande reste partiel.");
-  }
-
-  if (automationSummary.taskCreated) {
-    messages.push("Tâche automatique créée.");
-  }
-
-  if (automationSummary.deadlineCreated) {
-    messages.push("Deadline automatique créée.");
-  }
-
-  if (automationSummary.warnings.length > 0) {
-    messages.push(automationSummary.warnings.join(" "));
-  }
-
-  return {
-    ok: true,
-    field: "request_creation",
-    message: messages.join(" "),
-    requestId,
+async function createActivityLogEntry(input: {
+  action: string;
+  description: string;
+  entityId: string | null;
+  entityType: string;
+  payload: Record<string, unknown>;
+  requestId: string | null;
+}) {
+  const payload: Record<string, unknown> = {
+    action: input.action,
+    action_type: input.action,
+    actor_id: null,
+    actor_type: "system",
+    created_at: new Date().toISOString(),
+    description: input.description,
+    entity_id: input.entityId,
+    entity_type: input.entityType,
+    metadata: input.payload,
+    payload: input.payload,
+    request_id: input.requestId,
   };
+
+  const result = await insertWithMissingColumnFallback("activity_logs", payload, {
+    select: "id",
+  });
+
+  if (result.error && !isMissingSupabaseResourceError(result.rawError)) {
+    console.warn("[emails] activity log insert failed", result.error);
+  }
 }
 
 async function updateEmailStatus(
@@ -193,12 +162,19 @@ async function updateEmailStatus(
 ): Promise<EmailMutationResult> {
   const payloads: Array<Record<string, unknown>> = [];
 
-  for (const column of ["processing_status", "status", "triage_status"]) {
-    for (const value of mapUiEmailStatusToDatabaseValues(input.status)) {
-      payloads.push({
-        [column]: value,
-      });
-    }
+  for (const value of mapUiEmailStatusToDatabaseValues(input.status)) {
+    payloads.push({
+      processing_status: value,
+      is_processed: input.status === "processed",
+    });
+    payloads.push({
+      status: value,
+      is_processed: input.status === "processed",
+    });
+    payloads.push({
+      triage_status: value,
+      is_processed: input.status === "processed",
+    });
   }
 
   return patchEmailWithPayloads({
@@ -208,54 +184,9 @@ async function updateEmailStatus(
     successMessage:
       input.status === "processed"
         ? "Email marqué comme traité."
-        : "Email marqué à revoir.",
-  });
-}
-
-async function syncEmailAfterRequestCreation(input: {
-  emailId: string;
-  qualification: EmailQualificationFields;
-  requestId: string;
-}) {
-  const classificationPayload = {
-    requestId: input.requestId,
-    validatedAt: new Date().toISOString(),
-    qualification: input.qualification,
-  };
-
-  const payloads: Array<Record<string, unknown>> = [];
-
-  for (const statusColumn of ["processing_status", "status", "triage_status"]) {
-    for (const processedValue of mapUiEmailStatusToDatabaseValues("processed")) {
-      for (const requestColumn of [
-        "request_id",
-        "linked_request_id",
-        "crm_request_id",
-      ]) {
-        for (const classificationColumn of [
-          "ai_classification",
-          "classification_json",
-        ]) {
-          payloads.push({
-            [statusColumn]: processedValue,
-            [requestColumn]: input.requestId,
-            [classificationColumn]: classificationPayload,
-          });
-        }
-
-        payloads.push({
-          [statusColumn]: processedValue,
-          [requestColumn]: input.requestId,
-        });
-      }
-    }
-  }
-
-  return patchEmailWithPayloads({
-    emailId: input.emailId,
-    field: "request_link",
-    payloads,
-    successMessage: "Email source synchronisé avec la demande créée.",
+        : input.status === "review"
+          ? "Email marqué à revoir."
+          : "Email laissé en attente pour plus tard.",
   });
 }
 
@@ -276,7 +207,7 @@ async function patchEmailWithPayloads(options: {
   let latestError: string | null = null;
 
   for (const payload of options.payloads) {
-    const result = await supabaseRestPatch<Array<Record<string, unknown>>>(
+    const result = await patchWithMissingColumnFallback(
       "emails",
       {
         ...payload,
@@ -323,149 +254,92 @@ async function patchEmailWithPayloads(options: {
   };
 }
 
-async function insertRequestFromEmail(
-  input: CreateRequestFromEmailInput,
-): Promise<EmailMutationResult> {
-  const qualification = input.qualification;
-  const payloadCandidates: Array<Record<string, unknown>> = [
-    {
-      title: input.subject.trim(),
-      client_id: qualification.clientId,
-      contact_id: qualification.contactId,
-      product_department_id: qualification.productDepartmentId,
-      model_id: qualification.modelId,
-      request_type: qualification.requestType,
-      priority: mapUiPriorityToDatabasePriority(qualification.priority),
-      status: "new",
-      due_at: toIsoDate(qualification.dueAt),
-      summary: qualification.summary ?? input.previewText,
-      requested_action: qualification.requestedAction,
-      ai_confidence: qualification.aiConfidence,
-      source_email_id: input.emailId,
-      updated_at: new Date().toISOString(),
-    },
-    {
-      title: input.subject.trim(),
-      request_type: qualification.requestType,
-      priority: mapUiPriorityToDatabasePriority(qualification.priority),
-      status: "new",
-      due_at: toIsoDate(qualification.dueAt),
-      summary: qualification.summary ?? input.previewText,
-      source_email_id: input.emailId,
-      updated_at: new Date().toISOString(),
-    },
-    {
-      title: input.subject.trim(),
-      request_type: qualification.requestType,
-      priority: mapUiPriorityToDatabasePriority(qualification.priority),
-      status: "new",
-      updated_at: new Date().toISOString(),
-    },
-  ];
+async function patchWithMissingColumnFallback(
+  resource: string,
+  payload: Record<string, unknown>,
+  params: Record<string, string>,
+) {
+  const currentPayload = { ...payload };
 
-  let latestError: string | null = null;
-
-  for (const payload of payloadCandidates) {
-    const result = await supabaseRestInsert<Array<Record<string, unknown>>>(
-      "requests",
-      payload,
-      {
-        select: "id",
-      },
+  while (true) {
+    const result = await supabaseRestPatch<Array<Record<string, unknown>>>(
+      resource,
+      cleanPayload(currentPayload),
+      params,
     );
 
-    if (!result.error && result.data && result.data.length > 0) {
-      const requestId = result.data[0]?.id;
-
-      return {
-        ok: true,
-        field: "request_creation",
-        message: "Demande créée depuis l’email.",
-        requestId: typeof requestId === "string" ? requestId : null,
-      };
+    if (!result.error) {
+      return result;
     }
-
-    if (!result.error && (!result.data || result.data.length === 0)) {
-      latestError =
-        "Aucune demande n'a été créée. Vérifie les policies RLS et la structure de la table requests.";
-      continue;
-    }
-
-    latestError = `Création de demande impossible: ${result.error}`;
 
     if (!isMissingSupabaseColumnError(result.rawError)) {
-      break;
+      return result;
     }
-  }
 
-  return {
-    ok: false,
-    field: "request_creation",
-    message:
-      latestError ??
-      "Création de demande impossible depuis l’email. Vérifie les colonnes attendues sur requests.",
-  };
+    const missingColumn = extractMissingColumnName(result.rawError);
+
+    if (!missingColumn || !(missingColumn in currentPayload)) {
+      return result;
+    }
+
+    delete currentPayload[missingColumn];
+  }
 }
 
-async function runEmailAutomationRules(input: {
-  qualification: EmailQualificationFields;
-  requestId: string;
-  subject: string;
-}) {
-  const warnings: string[] = [];
-  let taskCreated = false;
-  let deadlineCreated = false;
-  const requestType = input.qualification.requestType ?? "";
-  const automationRule = requestAutomationRules[requestType];
+async function insertWithMissingColumnFallback(
+  resource: string,
+  payload: Record<string, unknown>,
+  params?: Record<string, string>,
+) {
+  const currentPayload = { ...payload };
 
-  if (automationRule) {
-    const taskResult = await createRequestTaskAction({
-      assignedUserId: null,
-      dueAt: input.qualification.dueAt,
-      priority: input.qualification.priority,
-      requestId: input.requestId,
-      taskType: automationRule.taskType,
-      title: automationRule.taskTitle,
-    });
+  while (true) {
+    const result = await supabaseRestInsert<Array<Record<string, unknown>>>(
+      resource,
+      cleanPayload(currentPayload),
+      params,
+    );
 
-    taskCreated = taskResult.ok;
-
-    if (!taskResult.ok) {
-      warnings.push(taskResult.message);
+    if (!result.error) {
+      return result;
     }
-  }
 
-  if (input.qualification.dueAt) {
-    const deadlineResult = await createDeadlineAction({
-      deadlineAt: input.qualification.dueAt,
-      label: buildDeadlineLabel(
-        input.qualification.requestedAction,
-        input.subject,
-      ),
-      priority: input.qualification.priority,
-      requestId: input.requestId,
-    });
-
-    deadlineCreated = deadlineResult.ok;
-
-    if (!deadlineResult.ok) {
-      warnings.push(deadlineResult.message);
+    if (!isMissingSupabaseColumnError(result.rawError)) {
+      return result;
     }
-  }
 
-  return {
-    deadlineCreated,
-    taskCreated,
-    warnings,
-  };
+    const missingColumn = extractMissingColumnName(result.rawError);
+
+    if (!missingColumn || !(missingColumn in currentPayload)) {
+      return result;
+    }
+
+    delete currentPayload[missingColumn];
+  }
 }
 
-function buildDeadlineLabel(requestedAction: string | null, subject: string) {
-  if (requestedAction && requestedAction.trim().length > 0) {
-    return requestedAction.trim();
+function cleanPayload(payload: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined),
+  );
+}
+
+function extractMissingColumnName(error: SupabaseRestErrorPayload | null) {
+  if (!error) {
+    return null;
   }
 
-  return `Suivi email: ${subject.trim().slice(0, 72)}`;
+  const haystack = [
+    error.message,
+    error.details,
+    error.error,
+    error.hint,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const match = haystack.match(/column ["']?([a-zA-Z0-9_]+)["']?/i);
+
+  return match?.[1] ?? null;
 }
 
 function getEmailMutationErrorMessage(message: string) {
@@ -480,14 +354,4 @@ function getEmailMutationErrorMessage(message: string) {
   }
 
   return `Mutation impossible sur emails: ${message}`;
-}
-
-function toIsoDate(value: string | null) {
-  if (!value) {
-    return null;
-  }
-
-  const parsed = new Date(`${value}T09:00:00`);
-
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }

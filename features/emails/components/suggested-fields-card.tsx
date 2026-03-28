@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatDetectedTypeLabel } from "@/features/emails/metadata";
 import type { EmailQualificationFields } from "@/features/emails/types";
 
 export function SuggestedFieldsCard({
@@ -16,6 +17,7 @@ export function SuggestedFieldsCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="grid gap-3 sm:grid-cols-2">
+        <FieldItem label="Titre suggéré" value={fields.title} />
         <FieldItem label="Client détecté" value={fields.clientName} />
         <FieldItem label="Contact détecté" value={fields.contactName} />
         <FieldItem
@@ -23,10 +25,21 @@ export function SuggestedFieldsCard({
           value={fields.productDepartmentName}
         />
         <FieldItem label="Modèle détecté" value={fields.modelName} />
-        <FieldItem label="Type détecté" value={fields.requestType} />
+        <FieldItem
+          label="Type détecté"
+          value={formatDetectedTypeLabel(fields.requestType) ?? fields.requestType}
+        />
         <FieldItem label="Priorité" value={fields.priority} />
         <FieldItem label="Deadline" value={fields.dueAt} />
         <FieldItem label="Action attendue" value={fields.requestedAction} />
+        <FieldItem
+          label="Responsable suggéré"
+          value={fields.assignedUserName}
+        />
+        <FieldItem
+          label="Validation humaine"
+          value={fields.requiresHumanValidation ? "Oui" : "Non"}
+        />
         <FieldItem
           label="Confiance IA"
           value={

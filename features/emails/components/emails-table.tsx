@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { emailStatusMeta } from "@/features/emails/metadata";
+import { ProcessingStatusBadge } from "@/features/emails/components/processing-status-badge";
 import type { EmailListItem } from "@/features/emails/types";
 import { cn, formatDateTime } from "@/lib/utils";
 
@@ -109,15 +109,7 @@ export function EmailsTable({
                 )}
               </TableCell>
               <TableCell>
-                <Badge
-                  className={cn(
-                    email.status === "new" && "border-primary/[0.15] bg-primary/[0.08] text-primary",
-                    email.status === "review" && "border-destructive/20 bg-destructive/10 text-destructive",
-                    email.status === "processed" && "border-[rgba(55,106,79,0.16)] bg-[rgba(55,106,79,0.1)] text-[var(--success)]",
-                  )}
-                >
-                  {emailStatusMeta[email.status].label}
-                </Badge>
+                <ProcessingStatusBadge status={email.status} />
               </TableCell>
               <TableCell>
                 <p className="font-semibold">{email.clientName}</p>
