@@ -6,6 +6,7 @@ import { authorizeServerAction } from "@/features/auth/server-authorization";
 import { notifyCriticalTask } from "@/features/notifications/lib/operational-notifications";
 import type { RequestPriority, RequestMutationResult } from "@/features/requests/types";
 import { mapUiPriorityToDatabasePriority } from "@/features/requests/metadata";
+import { recordAuditEvent } from "@/lib/action-runtime";
 import { supabaseRestInsert } from "@/lib/supabase/rest";
 
 interface CreateRequestTaskInput {
@@ -66,6 +67,20 @@ export async function createTaskAction(
   );
 
   if (result.error) {
+    await recordAuditEvent({
+      action: "create_task",
+      actorId: authorization.currentUser.appUser?.id ?? null,
+      actorType: "user",
+      description: `Création de tâche impossible: ${result.error}`,
+      entityId: input.requestId ?? null,
+      entityType: "task",
+      payload,
+      requestId: input.requestId ?? null,
+      scope: "tasks.create",
+      source: "ui",
+      status: "failure",
+    });
+
     return {
       ok: false,
       field: "task",
@@ -74,6 +89,21 @@ export async function createTaskAction(
   }
 
   if (!result.data || result.data.length === 0) {
+    await recordAuditEvent({
+      action: "create_task",
+      actorId: authorization.currentUser.appUser?.id ?? null,
+      actorType: "user",
+      description:
+        "Aucune tâche n'a été créée. Vérifie les policies RLS et la structure de la table tasks.",
+      entityId: input.requestId ?? null,
+      entityType: "task",
+      payload,
+      requestId: input.requestId ?? null,
+      scope: "tasks.create",
+      source: "ui",
+      status: "failure",
+    });
+
     return {
       ok: false,
       field: "task",
@@ -96,6 +126,21 @@ export async function createTaskAction(
       title: input.title.trim(),
     });
   }
+
+  await recordAuditEvent({
+    action: "create_task",
+    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorType: "user",
+    description: "Tâche CRM créée.",
+    entityId:
+      typeof result.data[0]?.id === "string" ? result.data[0].id : input.requestId ?? null,
+    entityType: "task",
+    payload,
+    requestId: input.requestId ?? null,
+    scope: "tasks.create",
+    source: "ui",
+    status: "success",
+  });
 
   return {
     ok: true,

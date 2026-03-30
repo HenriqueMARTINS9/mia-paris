@@ -2,6 +2,7 @@ import type {
   RequestAssigneeOption,
   RequestOverviewListItem,
 } from "@/features/requests/types";
+import type { RequestHistoryPanelData } from "@/features/history/types";
 
 export type RequestNoteField = "notes" | "internal_notes" | "note";
 
@@ -14,7 +15,10 @@ export type RequestActivityCategory =
   | "email";
 
 export interface RequestDetailItem extends RequestOverviewListItem {
+  clientId: string | null;
+  contactId: string | null;
   createdAt: string;
+  modelId: string | null;
   modelName: string | null;
   modelReference: string | null;
   noteField: RequestNoteField | null;
@@ -75,6 +79,7 @@ export interface RequestDetailPageData {
   documents: RelatedDocumentItem[];
   error: string | null;
   history: RequestActivityItem[];
+  historyContext: RequestHistoryPanelData | null;
   request: RequestDetailItem | null;
   tasks: RelatedTaskItem[];
   validations: RelatedValidationItem[];

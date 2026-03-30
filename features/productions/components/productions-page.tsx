@@ -292,7 +292,11 @@ export function ProductionsPage({
             </SheetDescription>
           </SheetHeader>
           <div className="mt-6 overflow-y-auto pb-6">
-            <ProductionDetailPanel production={selectedProduction} mode="sheet" />
+            <ProductionDetailPanel
+              allProductions={productions}
+              production={selectedProduction}
+              mode="sheet"
+            />
           </div>
         </SheetContent>
       </Sheet>

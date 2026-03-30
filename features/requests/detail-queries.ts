@@ -11,6 +11,7 @@ import {
   mapRequestDetailItem,
   pickString,
 } from "@/features/requests/detail-mappers";
+import { getRequestHistoryPanelData } from "@/features/history/queries";
 import type {
   RequestDetailPageData,
   SupabaseRecord,
@@ -124,6 +125,7 @@ export async function getRequestDetailPageData(
       tasks,
       validations,
     });
+    const historyContext = await getRequestHistoryPanelData(request);
 
     return {
       assignees: assigneesResult.assignees,
@@ -132,6 +134,7 @@ export async function getRequestDetailPageData(
       documents,
       error: null,
       history,
+      historyContext,
       request,
       tasks,
       validations,
@@ -163,6 +166,7 @@ function createEmptyDetailPageData(error: string | null): RequestDetailPageData 
     documents: [],
     error,
     history: [],
+    historyContext: null,
     request: null,
     tasks: [],
     validations: [],

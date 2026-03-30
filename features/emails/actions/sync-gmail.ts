@@ -6,6 +6,7 @@ import { authorizeServerAction } from "@/features/auth/server-authorization";
 import { getGoogleGmailEnv, hasGoogleGmailEnv } from "@/lib/google/env";
 import type { GmailSyncResult } from "@/features/emails/types";
 import { syncLatestGmailMessagesForCurrentUser } from "@/features/emails/lib/gmail-sync";
+import { recordAuditEvent } from "@/lib/action-runtime";
 
 export async function syncGmailInboxAction(limit?: number): Promise<GmailSyncResult> {
   const authorization = await authorizeServerAction("emails.sync");
@@ -43,6 +44,28 @@ export async function syncGmailInboxAction(limit?: number): Promise<GmailSyncRes
   const result = await syncLatestGmailMessagesForCurrentUser(
     limit ?? env.googleGmailInitialSyncLimit,
   );
+
+  await recordAuditEvent({
+    action: "run_gmail_sync",
+    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorType: "user",
+    description: result.message,
+    entityId: result.connectedInboxEmail,
+    entityType: "gmail_sync",
+    payload: {
+      connectedInboxEmail: result.connectedInboxEmail,
+      errorCount: result.errorCount ?? 0,
+      ignoredMessages: result.ignoredMessages,
+      importedMessages: result.importedMessages,
+      importedThreads: result.importedThreads,
+      queryUsed: result.queryUsed ?? null,
+      syncMode: result.syncMode ?? null,
+    },
+    requestId: null,
+    scope: "emails.sync",
+    source: "ui",
+    status: result.ok ? "success" : "failure",
+  });
 
   if (result.ok) {
     revalidatePath("/emails");

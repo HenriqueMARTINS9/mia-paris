@@ -1,22 +1,26 @@
 import type { Metadata } from "next";
 
-import { PlaceholderPage } from "@/components/crm/placeholder-page";
+import { AssistantReadyActionsPanel } from "@/features/openclaw/components/assistant-ready-actions-panel";
+import { OpenClawTestConsole } from "@/features/openclaw/components/openclaw-test-console";
+import { getOpenClawActionDescriptors } from "@/features/openclaw/integration";
+import { getAssistantReadyWorkspaceData } from "@/features/openclaw/crm-actions";
 
 export const metadata: Metadata = {
   title: "Assistant OpenClaw",
 };
 
-export default function AssistantOpenclawPage() {
+export const dynamic = "force-dynamic";
+
+export default async function AssistantOpenclawPage() {
+  const [data, descriptors] = await Promise.all([
+    getAssistantReadyWorkspaceData(),
+    Promise.resolve(getOpenClawActionDescriptors()),
+  ]);
+
   return (
-    <PlaceholderPage
-      eyebrow="Étape 10 · Assistant OpenClaw"
-      title="Assistant OpenClaw"
-      description="La préparation de l'intégration OpenClaw prendra place ici pour orchestrer les actions, copiloter la qualification et proposer les prochains gestes métier."
-      focus={[
-        "Zone de préparation des prompts, outils et permissions agentiques.",
-        "Vue sur les entités métier exposées à l'assistant textile.",
-        "Mécanismes de tests et de garde-fous avant automatisation complète.",
-      ]}
-    />
+    <div className="flex flex-col gap-6">
+      <AssistantReadyActionsPanel data={data} />
+      <OpenClawTestConsole actions={descriptors} />
+    </div>
   );
 }

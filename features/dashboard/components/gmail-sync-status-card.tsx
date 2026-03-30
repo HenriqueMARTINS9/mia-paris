@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, RefreshCcw } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { GmailSyncErrorState } from "@/features/emails/components/gmail-sync-error-state";
 import { GmailSyncControls } from "@/features/emails/components/gmail-sync-controls";
 import type { GmailInboxStatus } from "@/features/emails/types";
 import type { GmailSyncSummary } from "@/features/dashboard/types";
@@ -84,7 +85,7 @@ export function GmailSyncStatusCard({
         )}
 
         {syncError ? (
-          <p className="text-sm text-muted-foreground">{syncError}</p>
+          <GmailSyncErrorState message={syncError} />
         ) : null}
 
         {latestSync?.queryUsed ? (

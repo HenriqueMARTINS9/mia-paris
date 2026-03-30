@@ -8,6 +8,7 @@ import { getGmailSyncSummaries } from "@/features/emails/lib/gmail-sync-history"
 import { getProductionsPageData } from "@/features/productions/queries";
 import { getRequestsOverviewPageData } from "@/features/requests/queries";
 import { getTasksPageData } from "@/features/tasks/queries";
+import { getAutomationWorkspaceData } from "@/features/automations/queries";
 import type { DashboardPageData } from "@/features/dashboard/types";
 import {
   isMissingSupabaseResourceError,
@@ -23,6 +24,22 @@ export async function getDashboardPageData(): Promise<DashboardPageData> {
   noStore();
 
   const emptyData: DashboardPageData = {
+    automationOverview: {
+      alerts: [],
+      error: null,
+      latestRun: null,
+      runs: [],
+      rules: [],
+      summary: {
+        criticalCount: 0,
+        decideOpen: 0,
+        highCount: 0,
+        lastRunAt: null,
+        processOpen: 0,
+        totalOpen: 0,
+      },
+      warning: null,
+    },
     emailRequestCreationFailures: 0,
     emailRequestsCreated: 0,
     error: null,
@@ -80,6 +97,7 @@ export async function getDashboardPageData(): Promise<DashboardPageData> {
       deadlinesData,
       productionsData,
       emailsData,
+      automationOverview,
       requestRowsResult,
       validationsResult,
       pipelineLogsResult,
@@ -89,6 +107,7 @@ export async function getDashboardPageData(): Promise<DashboardPageData> {
       getDeadlinesPageData(),
       getProductionsPageData(),
       getEmailsPageData(),
+      getAutomationWorkspaceData(),
       supabase.from("v_requests_overview").select("*"),
       supabaseRestSelectList<ValidationRecord>("validations", {
         select: "*",
@@ -141,6 +160,7 @@ export async function getDashboardPageData(): Promise<DashboardPageData> {
       .slice(0, 6);
 
     return {
+      automationOverview,
       emailRequestCreationFailures,
       emailRequestsCreated,
       error:

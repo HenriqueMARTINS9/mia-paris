@@ -1,6 +1,7 @@
 "use server";
 
 import { getCurrentUserContext } from "@/features/auth/queries";
+import { logOperationalError, recordAuditEvent } from "@/lib/action-runtime";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   SaveReplyDraftInput,
@@ -53,11 +54,46 @@ export async function saveReplyDraftAction(
       };
     }
 
+    await recordAuditEvent({
+      action: "save_reply_draft",
+      actorId: currentUser.appUser.id,
+      actorType: "user",
+      description: "Brouillon de réponse enregistré.",
+      entityId: `${input.context.sourceType}:${input.context.sourceId}`,
+      entityType: "reply_draft",
+      payload: {
+        bodyPreview: input.body.slice(0, 220),
+        replyType: input.replyType,
+        sourceId: input.context.sourceId,
+        sourceType: input.context.sourceType,
+        subject: input.subject,
+      },
+      requestId: input.context.requestId,
+      scope: "reply.save",
+      source: "ui",
+      status: "success",
+    });
+
     return {
       ok: true,
       message: "Brouillon enregistré pour ce compte.",
     };
   } catch (error) {
+    await logOperationalError({
+      entityId: `${input.context.sourceType}:${input.context.sourceId}`,
+      entityType: "reply_draft",
+      error,
+      message: "Enregistrement du brouillon impossible.",
+      payload: {
+        replyType: input.replyType,
+        sourceId: input.context.sourceId,
+        sourceType: input.context.sourceType,
+      },
+      requestId: input.context.requestId,
+      scope: "reply.save",
+      source: "ui",
+    });
+
     return {
       ok: false,
       message:

@@ -3,6 +3,7 @@ import "server-only";
 import { unstable_noStore as noStore } from "next/cache";
 
 import { getDashboardPageData } from "@/features/dashboard/queries";
+import { getAutomationWorkspaceData } from "@/features/automations/queries";
 import { getDeadlinesPageData } from "@/features/deadlines/queries";
 import { getEmailsPageData } from "@/features/emails/queries";
 import { getProductionsPageData } from "@/features/productions/queries";
@@ -15,6 +16,7 @@ export async function getTodayOverviewData(): Promise<TodayOverviewData> {
 
   const [
     dashboard,
+    automationOverview,
     requestsData,
     tasksData,
     deadlinesData,
@@ -22,6 +24,7 @@ export async function getTodayOverviewData(): Promise<TodayOverviewData> {
     emailsData,
   ] = await Promise.all([
     getDashboardPageData(),
+    getAutomationWorkspaceData(),
     getRequestsOverviewPageData(),
     getTasksPageData(),
     getDeadlinesPageData(),
@@ -115,6 +118,7 @@ export async function getTodayOverviewData(): Promise<TodayOverviewData> {
     .slice(0, 6);
 
   return {
+    automationOverview,
     blockedProductions,
     emailsToTriage,
     error:

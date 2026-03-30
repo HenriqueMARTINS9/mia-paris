@@ -15,12 +15,15 @@ export interface ActivityLogInput {
   action: string;
   actorId?: string | null;
   actorType?: string | null;
+  scope?: string | null;
   createdAt?: string;
   description: string;
   entityId?: string | null;
   entityType: string;
   payload?: Record<string, unknown> | null;
   requestId?: string | null;
+  source?: "assistant" | "system" | "ui" | null;
+  status?: "failure" | "success" | null;
 }
 
 export async function insertActivityLogViaRest(input: ActivityLogInput) {
@@ -98,9 +101,15 @@ export async function insertActivityLogViaAdmin(input: ActivityLogInput) {
 
 function buildActivityLogPayload(input: ActivityLogInput) {
   const payload = input.payload ?? null;
+  const source =
+    input.source ??
+    (input.actorType === "user" ? "ui" : "system");
+  const status = input.status ?? "success";
 
   return cleanPayload({
     action: input.action,
+    action_source: source,
+    action_status: status,
     action_type: input.action,
     actor_id: input.actorId ?? null,
     actor_type: input.actorType ?? "system",
@@ -111,6 +120,9 @@ function buildActivityLogPayload(input: ActivityLogInput) {
     metadata: payload,
     payload,
     request_id: input.requestId ?? null,
+    scope: input.scope ?? null,
+    source,
+    status,
   });
 }
 

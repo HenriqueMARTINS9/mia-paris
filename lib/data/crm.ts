@@ -6,6 +6,7 @@ import { createSupabaseServerClient, hasSupabaseEnv } from "@/lib/supabase/serve
 import type { CrmSummary } from "@/types/crm";
 
 const fallbackSummary: CrmSummary = {
+  actionItems: 0,
   openTasks: 0,
   criticalDeadlines: 0,
   pendingValidations: 0,
@@ -32,16 +33,21 @@ export async function getCrmSummary() {
         supabase.from("emails").select("*", { count: "exact", head: true }),
       ]);
 
-    const [pendingValidationsResult, activeProductionsResult] =
+    const [pendingValidationsResult, activeProductionsResult, actionItemsResult] =
       await Promise.all([
         supabase
           .from("v_requests_overview")
           .select("*", { count: "exact", head: true })
           .eq("request_type", "trim_validation"),
         supabase.from("productions").select("*", { count: "exact", head: true }),
+        supabase
+          .from("automation_alerts")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "open"),
       ]);
 
     return {
+      actionItems: actionItemsResult.count ?? fallbackSummary.actionItems,
       openTasks: openTasksResult.count ?? fallbackSummary.openTasks,
       criticalDeadlines:
         criticalDeadlinesResult.count ?? fallbackSummary.criticalDeadlines,

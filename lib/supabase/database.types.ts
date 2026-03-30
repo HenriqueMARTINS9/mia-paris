@@ -1,5 +1,7 @@
 import type {
   ActivityLogRecord,
+  AutomationAlertRecord,
+  AutomationRunRecord,
   ClientRecord,
   ContactRecord,
   DeadlineCritical,
@@ -86,6 +88,18 @@ export interface Database {
         Row: GmailSyncRunRecord;
         Insert: Partial<GmailSyncRunRecord>;
         Update: Partial<GmailSyncRunRecord>;
+        Relationships: [];
+      };
+      automation_runs: {
+        Row: AutomationRunRecord;
+        Insert: Partial<AutomationRunRecord>;
+        Update: Partial<AutomationRunRecord>;
+        Relationships: [];
+      };
+      automation_alerts: {
+        Row: AutomationAlertRecord;
+        Insert: Partial<AutomationAlertRecord>;
+        Update: Partial<AutomationAlertRecord>;
         Relationships: [];
       };
       contacts: {

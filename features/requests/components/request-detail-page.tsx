@@ -16,6 +16,7 @@ import { CreateTaskDialog } from "@/features/tasks/components/create-task-dialog
 import { RequestMutationControls } from "@/features/requests/components/request-mutation-controls";
 import { RequestNoteForm } from "@/features/requests/components/request-note-form";
 import { RequestReplyCard } from "@/features/replies/components/request-reply-card";
+import { RequestHistoryPanel } from "@/features/history/components/request-history-panel";
 import { CreateDeadlineDialog } from "@/features/deadlines/components/create-deadline-dialog";
 import type { RequestDetailPageData } from "@/features/requests/detail-types";
 import {
@@ -360,6 +361,8 @@ export function RequestDetailPage({ data }: Readonly<RequestDetailPageProps>) {
               )}
             </CardContent>
           </Card>
+
+          <RequestHistoryPanel data={data.historyContext} />
         </div>
 
         <div className="space-y-6 xl:sticky xl:top-28 xl:self-start">
@@ -393,7 +396,7 @@ export function RequestDetailPage({ data }: Readonly<RequestDetailPageProps>) {
             noteField={request.noteField}
           />
 
-          <RequestReplyCard request={request} />
+          <RequestReplyCard request={request} historyContext={data.historyContext} />
 
           <CreateRequestTaskForm
             key={`${request.id}:${request.assignedUserId ?? "none"}:${request.dueAt}`}

@@ -22,6 +22,7 @@ import {
   supabaseRestPatch,
   supabaseRestSelectMaybeSingle,
 } from "@/lib/supabase/rest";
+import { recordAuditEvent } from "@/lib/action-runtime";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { RequestRecord } from "@/types/crm";
 
@@ -264,6 +265,23 @@ export async function appendRequestNoteAction(
   revalidatePath(`/requests/${input.requestId}`);
   revalidatePath("/demandes");
   revalidatePath("/", "layout");
+
+  await recordAuditEvent({
+    action: "add_note_to_request",
+    actorId: authorContext?.appUser?.id ?? null,
+    actorType: "user",
+    description: "Note métier ajoutée sur la demande.",
+    entityId: input.requestId,
+    entityType: "request",
+    payload: {
+      noteField: input.noteField,
+      notePreview: input.note.trim().slice(0, 220),
+    },
+    requestId: input.requestId,
+    scope: "requests.add_note",
+    source: "ui",
+    status: "success",
+  });
 
   return {
     ok: true,

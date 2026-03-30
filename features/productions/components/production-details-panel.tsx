@@ -11,19 +11,23 @@ import { Badge } from "@/components/ui/badge";
 import { ProductionEditForm } from "@/features/productions/components/production-edit-form";
 import { ProductionLinkedDocuments } from "@/features/productions/components/production-linked-documents";
 import { ProductionLinkedRequests } from "@/features/productions/components/production-linked-requests";
+import { buildProductionHistoryPanelData } from "@/features/history/builders";
+import { ProductionHistoryPanel } from "@/features/history/components/production-history-panel";
 import {
   ProductionStatusBadge,
   RiskBadge,
 } from "@/features/productions/components/production-badges";
-import type { ProductionDetailItem } from "@/features/productions/types";
+import type { ProductionDetailItem, ProductionListItem } from "@/features/productions/types";
 import { cn, formatDateTime, getDeadlineLabel } from "@/lib/utils";
 
 interface ProductionDetailsPanelProps {
+  allProductions?: ProductionListItem[];
   mode?: "desktop" | "sheet";
   production: ProductionDetailItem | null;
 }
 
 export function ProductionDetailsPanel({
+  allProductions = [],
   mode = "desktop",
   production,
 }: Readonly<ProductionDetailsPanelProps>) {
@@ -147,6 +151,13 @@ export function ProductionDetailsPanel({
       </Card>
 
       <ProductionLinkedDocuments documents={production.linkedDocuments} />
+
+      <ProductionHistoryPanel
+        data={buildProductionHistoryPanelData({
+          allProductions,
+          production,
+        })}
+      />
 
       <Card>
         <CardHeader>

@@ -4,6 +4,7 @@ import type { EmailListItem, GmailInboxStatus } from "@/features/emails/types";
 import type { ProductionListItem } from "@/features/productions/types";
 import type { RequestOverviewListItem } from "@/features/requests/types";
 import type { TaskListItem } from "@/features/tasks/types";
+import type { AutomationOverviewData } from "@/features/automations/types";
 
 export interface TodayOverviewKpis {
   blockedProductions: number;
@@ -15,6 +16,7 @@ export interface TodayOverviewKpis {
 }
 
 export interface TodayOverviewData {
+  automationOverview: AutomationOverviewData;
   blockedProductions: ProductionListItem[];
   emailsToTriage: EmailListItem[];
   error: string | null;

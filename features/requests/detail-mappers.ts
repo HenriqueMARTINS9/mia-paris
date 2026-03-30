@@ -60,9 +60,12 @@ export function mapRequestDetailItem(
   return {
     ...baseItem,
     assignedUserId: pickString(requestRow, "assigned_user_id") ?? baseItem.assignedUserId,
+    clientId: pickString(requestRow, "client_id"),
     clientName: clientDisplayName,
+    contactId: pickString(requestRow, "contact_id"),
     createdAt: pickString(requestRow, "created_at") ?? overviewRow.created_at,
     department: departmentDisplayName,
+    modelId: pickString(requestRow, "model_id"),
     modelName,
     modelReference,
     noteField,

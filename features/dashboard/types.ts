@@ -6,6 +6,7 @@ import type {
 import type { ProductionListItem } from "@/features/productions/types";
 import type { RequestOverviewListItem } from "@/features/requests/types";
 import type { TaskListItem } from "@/features/tasks/types";
+import type { AutomationOverviewData } from "@/features/automations/types";
 
 export interface DashboardKpis {
   emailsToReview: number;
@@ -34,6 +35,7 @@ export interface GmailSyncSummary {
 }
 
 export interface DashboardPageData {
+  automationOverview: AutomationOverviewData;
   emailRequestCreationFailures: number;
   emailRequestsCreated: number;
   error: string | null;

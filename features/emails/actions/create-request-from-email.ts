@@ -127,6 +127,7 @@ export async function createRequestFromEmailAction(
   if (!requestResult.ok || !requestResult.requestId) {
     await createActivityLogEntry({
       action: "request_creation_failed_from_email",
+      actorId: authorization.currentUser.appUser?.id ?? null,
       description: requestResult.message,
       entityId: emailResult.email.id,
       entityType: "email",
@@ -135,6 +136,8 @@ export async function createRequestFromEmailAction(
         qualification,
       },
       requestId: null,
+      source: "ui",
+      status: "failure",
     });
 
     return requestResult;
@@ -149,11 +152,14 @@ export async function createRequestFromEmailAction(
 
   await createActivityLogEntry({
     action: "request_created_from_email",
+    actorId: authorization.currentUser.appUser?.id ?? null,
     description: `Demande créée depuis l’email ${input.emailId}.`,
     entityId: requestId,
     entityType: "request",
     payload: buildClassificationPayload(input.emailId, qualification, requestId),
     requestId,
+    source: "ui",
+    status: "success",
   });
 
   const automationSummary = await runEmailAutomationRules({
@@ -545,6 +551,7 @@ async function createAutoTask(input: {
 
   await createActivityLogEntry({
     action: "auto_task_created",
+    actorId: null,
     description: `Tâche automatique créée (${input.taskType}).`,
     entityId: typeof taskId === "string" ? taskId : null,
     entityType: "task",
@@ -553,6 +560,8 @@ async function createAutoTask(input: {
       title: input.taskTitle,
     },
     requestId: input.requestId,
+    source: "system",
+    status: "success",
   });
 
   if (input.priority === "critical") {
@@ -600,6 +609,7 @@ async function createAutoDeadline(input: {
 
   await createActivityLogEntry({
     action: "auto_deadline_created",
+    actorId: null,
     description: "Deadline automatique créée depuis la qualification email.",
     entityId: typeof deadlineId === "string" ? deadlineId : null,
     entityType: "deadline",
@@ -608,6 +618,8 @@ async function createAutoDeadline(input: {
       label: input.label,
     },
     requestId: input.requestId,
+    source: "system",
+    status: "success",
   });
 
   await notifyUrgentDeadline({
@@ -624,17 +636,22 @@ async function createAutoDeadline(input: {
 
 async function createActivityLogEntry(input: {
   action: string;
+  actorId?: string | null;
   description: string;
   entityId: string | null;
   entityType: string;
   payload: Record<string, unknown>;
   requestId: string | null;
+  source?: "assistant" | "system" | "ui";
+  status?: "failure" | "success";
 }) {
   const payload: Record<string, unknown> = {
     action: input.action,
+    action_source: input.source ?? "system",
+    action_status: input.status ?? "success",
     action_type: input.action,
-    actor_id: null,
-    actor_type: "system",
+    actor_id: input.actorId ?? null,
+    actor_type: input.actorId ? "user" : "system",
     created_at: new Date().toISOString(),
     description: input.description,
     entity_id: input.entityId,
@@ -642,6 +659,9 @@ async function createActivityLogEntry(input: {
     metadata: input.payload,
     payload: input.payload,
     request_id: input.requestId,
+    scope: "emails.create_request_from_email",
+    source: input.source ?? "system",
+    status: input.status ?? "success",
   };
 
   const result = await insertWithMissingColumnFallback("activity_logs", payload, {

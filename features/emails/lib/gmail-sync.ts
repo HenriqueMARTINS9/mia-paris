@@ -2,6 +2,7 @@ import "server-only";
 
 import { getCurrentUserContext } from "@/features/auth/queries";
 import { recordGmailSyncRun } from "@/features/emails/lib/gmail-sync-history";
+import { resolveGmailSyncFailureMessage } from "@/features/emails/lib/gmail-sync-errors";
 import { parseGmailMessage } from "@/features/emails/lib/gmail-parser";
 import type { GmailSyncMode, GmailSyncResult } from "@/features/emails/types";
 import {
@@ -134,10 +135,11 @@ export async function syncLatestGmailMessagesForCurrentUser(
 
     return syncResult;
   } catch (error) {
-    const message =
+    const message = resolveGmailSyncFailureMessage(
       error instanceof Error
         ? error.message
-        : "Synchronisation Gmail impossible.";
+        : "Synchronisation Gmail impossible.",
+    );
 
     await admin
       .from("inboxes")
@@ -269,13 +271,13 @@ export async function getCurrentUserGmailInboxStatus() {
     };
   }
 
-  return {
-    connected: true,
-    emailAddress: inbox.email_address ?? null,
-    error: inbox.last_error ?? null,
-    inboxId: inbox.id,
-    lastSyncedAt: inbox.last_synced_at ?? null,
-  };
+    return {
+      connected: true,
+      emailAddress: inbox.email_address ?? null,
+      error: inbox.last_error ? resolveGmailSyncFailureMessage(inbox.last_error) : null,
+      inboxId: inbox.id,
+      lastSyncedAt: inbox.last_synced_at ?? null,
+    };
 }
 
 async function getSharedActiveGoogleInbox(admin: ReturnType<typeof createSupabaseAdminClient>) {

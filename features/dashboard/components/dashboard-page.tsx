@@ -16,6 +16,7 @@ import { MobileSyncStatusCard } from "@/features/dashboard/components/mobile-syn
 import { MobileUrgentTasksCard } from "@/features/dashboard/components/mobile-urgent-tasks-card";
 import { OverdueTasksPanel } from "@/features/dashboard/components/overdue-tasks-panel";
 import { PriorityRequestsPanel } from "@/features/dashboard/components/priority-requests-panel";
+import { AutomationSummaryCard } from "@/features/automations/components/automation-summary-card";
 import { CreateDeadlineDialog } from "@/features/deadlines/components/create-deadline-dialog";
 import type { DocumentFormOptions } from "@/features/documents/types";
 import type { ProductionFormOptions } from "@/features/productions/types";
@@ -112,6 +113,7 @@ export function DashboardPage({
 
       <div className="grid gap-4 md:hidden">
         <MobileDashboardKpis kpis={data.kpis} />
+        <AutomationSummaryCard compact overview={data.automationOverview} />
         <MobileInboxTriageCard emails={data.latestEmails} />
         <MobileUrgentTasksCard tasks={data.tasksUrgent} />
         <MobileBlockedProductionsCard productions={data.productionsAtRisk} />
@@ -147,6 +149,10 @@ export function DashboardPage({
 
       <div className="hidden md:block">
         <DashboardKpiCards kpis={data.kpis} />
+      </div>
+
+      <div className="hidden md:block">
+        <AutomationSummaryCard overview={data.automationOverview} />
       </div>
 
       <div className="hidden md:block">

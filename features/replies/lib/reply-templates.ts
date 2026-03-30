@@ -7,6 +7,8 @@ export const replyTemplateOrder = [
   "missing_items",
   "deadline_confirmation",
   "supplier_followup",
+  "production_update",
+  "logistics_response",
   "validation_feedback",
   "waiting_validation",
 ] as const satisfies ReplyDraftType[];

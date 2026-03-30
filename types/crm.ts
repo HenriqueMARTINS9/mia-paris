@@ -222,6 +222,53 @@ export interface GmailSyncRunRecord {
   [key: string]: JsonValue | undefined;
 }
 
+export interface AutomationRunRecord {
+  id: string;
+  triggered_by_user_id?: string | null;
+  mode?: string | null;
+  ok?: boolean | null;
+  total_open?: number | null;
+  process_open?: number | null;
+  decide_open?: number | null;
+  created_count?: number | null;
+  resolved_count?: number | null;
+  message?: string | null;
+  error_message?: string | null;
+  metadata?: JsonValue;
+  started_at?: string | null;
+  finished_at?: string | null;
+  created_at?: string | null;
+  [key: string]: JsonValue | undefined;
+}
+
+export interface AutomationAlertRecord {
+  id: string;
+  rule_key?: string | null;
+  rule_label?: string | null;
+  lane?: string | null;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  request_id?: string | null;
+  client_id?: string | null;
+  model_id?: string | null;
+  production_id?: string | null;
+  title?: string | null;
+  subtitle?: string | null;
+  client_name?: string | null;
+  reason?: string | null;
+  priority?: string | null;
+  next_action?: string | null;
+  link_href?: string | null;
+  status?: string | null;
+  detected_at?: string | null;
+  last_seen_at?: string | null;
+  resolved_at?: string | null;
+  metadata?: JsonValue;
+  created_at?: string | null;
+  updated_at?: string | null;
+  [key: string]: JsonValue | undefined;
+}
+
 export interface EmailRecord {
   id: string;
   inbox_id?: string | null;
@@ -385,17 +432,23 @@ export interface ActivityLogRecord {
   entity_type?: string | null;
   request_id?: string | null;
   action?: string | null;
+  action_source?: string | null;
+  action_status?: string | null;
   action_type?: string | null;
   description?: string | null;
   payload?: JsonValue;
   metadata?: JsonValue;
   actor_type?: string | null;
   actor_id?: string | null;
+  scope?: string | null;
+  source?: string | null;
+  status?: string | null;
   created_at?: string | null;
   [key: string]: JsonValue | undefined;
 }
 
 export interface CrmSummary {
+  actionItems: number;
   openTasks: number;
   criticalDeadlines: number;
   pendingValidations: number;

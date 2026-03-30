@@ -56,6 +56,16 @@ export async function ignoreEmailForNowAction(
 export async function attachEmailToRequestAction(
   input: AttachEmailToRequestInput,
 ): Promise<EmailMutationResult> {
+  const authorization = await authorizeServerAction("emails.qualify");
+
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      field: "request_link",
+      message: authorization.message,
+    };
+  }
+
   if (!input.requestId) {
     return {
       ok: false,
@@ -109,11 +119,14 @@ export async function attachEmailToRequestAction(
   if (result.ok) {
     await createActivityLogEntry({
       action: "email_attached_to_existing_request",
+      actorId: authorization.currentUser.appUser?.id ?? null,
       description: `Email ${input.emailId} rattaché à la demande ${input.requestId}.`,
       entityId: input.emailId,
       entityType: "email",
       payload: classificationPayload,
       requestId: input.requestId,
+      source: "ui",
+      status: "success",
     });
     revalidatePath(`/requests/${input.requestId}`);
     revalidatePath("/demandes");
@@ -124,22 +137,39 @@ export async function attachEmailToRequestAction(
     };
   }
 
+  await createActivityLogEntry({
+    action: "email_attach_to_request_failed",
+    actorId: authorization.currentUser.appUser?.id ?? null,
+    description: result.message,
+    entityId: input.emailId,
+    entityType: "email",
+    payload: classificationPayload,
+    requestId: input.requestId,
+    source: "ui",
+    status: "failure",
+  });
+
   return result;
 }
 
 async function createActivityLogEntry(input: {
   action: string;
+  actorId?: string | null;
   description: string;
   entityId: string | null;
   entityType: string;
   payload: Record<string, unknown>;
   requestId: string | null;
+  source?: "assistant" | "system" | "ui";
+  status?: "failure" | "success";
 }) {
   const payload: Record<string, unknown> = {
     action: input.action,
+    action_source: input.source ?? "system",
+    action_status: input.status ?? "success",
     action_type: input.action,
-    actor_id: null,
-    actor_type: "system",
+    actor_id: input.actorId ?? null,
+    actor_type: input.actorId ? "user" : "system",
     created_at: new Date().toISOString(),
     description: input.description,
     entity_id: input.entityId,
@@ -147,6 +177,9 @@ async function createActivityLogEntry(input: {
     metadata: input.payload,
     payload: input.payload,
     request_id: input.requestId,
+    scope: "emails.link_to_request",
+    source: input.source ?? "system",
+    status: input.status ?? "success",
   };
 
   const result = await insertWithMissingColumnFallback("activity_logs", payload, {

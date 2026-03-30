@@ -1,9 +1,12 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  BarChart3,
   Bot,
   Inbox,
   LayoutGrid,
+  OctagonAlert,
   PackageCheck,
+  Radar,
   Sparkles,
   Sun,
   TimerReset,
@@ -38,6 +41,21 @@ export const primaryNavigation: NavigationItem[] = [
     shortLabel: "Dash",
     description: "Vue pilotage global MIA PARIS",
     icon: LayoutGrid,
+  },
+  {
+    href: "/analytics",
+    label: "Analytics",
+    shortLabel: "Ana",
+    description: "Lecture pilotage des volumes, timings, risques et dérives métier",
+    icon: BarChart3,
+  },
+  {
+    href: "/a-traiter",
+    label: "À traiter",
+    shortLabel: "Act",
+    description: "Centre d’action pour arbitrer ce qui demande une décision humaine",
+    icon: OctagonAlert,
+    summaryKey: "actionItems",
   },
   {
     href: "/demandes",
@@ -96,5 +114,14 @@ export const secondaryNavigation: NavigationItem[] = [
     shortLabel: "Bot",
     description: "Préparation des intégrations copilote",
     icon: Bot,
+    requiredPermission: "assistant.read",
+  },
+  {
+    href: "/system",
+    label: "System",
+    shortLabel: "Sys",
+    description: "Monitoring prod minimal, sync Gmail et audit des actions sensibles",
+    icon: Radar,
+    requiredPermission: "monitoring.read",
   },
 ];

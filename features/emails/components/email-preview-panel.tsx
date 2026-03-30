@@ -14,6 +14,9 @@ import { EmailActionsBar } from "@/features/emails/components/email-actions-bar"
 import { EmailAttachmentsCard } from "@/features/emails/components/email-attachments-card";
 import { EmailQualificationPanel } from "@/features/emails/components/email-qualification-panel";
 import { ProcessingStatusBadge } from "@/features/emails/components/processing-status-badge";
+import { HistoricalSignalsCard } from "@/features/history/components/historical-signals-card";
+import { RelatedRequestsList } from "@/features/history/components/related-requests-list";
+import type { HistoricalSignal } from "@/features/history/types";
 import { EmailReplyCard } from "@/features/replies/components/email-reply-card";
 import type {
   EmailListItem,
@@ -59,6 +62,36 @@ export function EmailPreviewPanel({
         </CardContent>
       </Card>
     );
+  }
+
+  const relatedRequests = requestOptions
+    .filter((option) =>
+      option.label.toLowerCase().includes(email.clientName.toLowerCase()),
+    )
+    .slice(0, 6)
+    .map((option) => ({
+      clientName: email.clientName,
+      href: `/requests/${option.id}`,
+      id: option.id,
+      priority: "normal",
+      reason:
+        option.id === email.linkedRequestId
+          ? "Déjà reliée à cet email"
+          : "Demande proche chez le même client",
+      status: option.id === email.linkedRequestId ? "linked" : "open",
+      title: option.label,
+      updatedAt: null,
+    }));
+  const historySignals: HistoricalSignal[] = [];
+
+  if (relatedRequests.length >= 2) {
+    historySignals.push({
+      description:
+        "Plusieurs demandes du même client ressemblent à cet email. Vérifie d’abord un rattachement pour éviter un doublon.",
+      id: "email-client-history",
+      title: "Historique client à vérifier",
+      tone: "warning" as const,
+    });
   }
 
   return (
@@ -125,6 +158,8 @@ export function EmailPreviewPanel({
         </div>
 
         <ClassificationSummaryCard email={email} />
+        <HistoricalSignalsCard signals={historySignals} title="Historique utile" />
+        <RelatedRequestsList items={relatedRequests} title="Demandes proches déjà ouvertes" />
         <EmailReplyCard email={email} />
         <EmailQualificationPanel
           key={`${email.id}:${email.linkedRequestId ?? "none"}`}

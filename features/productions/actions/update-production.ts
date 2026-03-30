@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { insertActivityLogViaRest } from "@/lib/activity-logs";
+import { recordAuditEvent } from "@/lib/action-runtime";
 import { authorizeServerAction } from "@/features/auth/server-authorization";
 import { notifyBlockedProduction } from "@/features/notifications/lib/operational-notifications";
 import {
@@ -231,6 +232,9 @@ async function patchFirstMatchingPayload(options: {
         entityType: "production",
         payload,
         requestId,
+        scope: `productions.${options.field}`,
+        source: "ui",
+        status: "success",
       });
 
       if (options.onSuccess) {
@@ -263,6 +267,24 @@ async function patchFirstMatchingPayload(options: {
       break;
     }
   }
+
+  await recordAuditEvent({
+    action: `production_${options.field}_update_failed`,
+    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorType: "user",
+    description:
+      latestError ??
+      "Mutation impossible sur productions. Vérifie les colonnes disponibles.",
+    entityId: options.productionId,
+    entityType: "production",
+    payload: {
+      payloadsTried: options.payloads.length,
+    },
+    requestId: null,
+    scope: `productions.${options.field}`,
+    source: "ui",
+    status: "failure",
+  });
 
   return {
     ok: false,

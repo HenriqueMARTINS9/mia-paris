@@ -10,6 +10,7 @@ import { CreateDeadlineDialog } from "@/features/deadlines/components/create-dea
 import type { DocumentFormOptions } from "@/features/documents/types";
 import { NotificationPreferencesCard } from "@/features/notifications/components/notification-preferences-card";
 import type { NotificationPreferencesState } from "@/features/notifications/types";
+import { AutomationSummaryCard } from "@/features/automations/components/automation-summary-card";
 import { TodayBlockedProductionsPanel } from "@/features/today/components/today-blocked-productions-panel";
 import { TodayEmailsPanel } from "@/features/today/components/today-emails-panel";
 import { TodaySyncStatusPanel } from "@/features/today/components/today-sync-status-panel";
@@ -82,6 +83,8 @@ export function TodayOverviewPage({
         <TodayKpiCard label="Productions bloquées" value={data.kpis.blockedProductions} href="/productions" />
         <TodayKpiCard label="Validations en attente" value={data.kpis.pendingValidations} href="/validations-ia" />
       </div>
+
+      <AutomationSummaryCard compact overview={data.automationOverview} />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <TodayEmailsPanel emails={data.emailsToTriage} />

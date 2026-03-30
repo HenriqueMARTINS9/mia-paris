@@ -7,6 +7,7 @@ import { notifyUrgentDeadline } from "@/features/notifications/lib/operational-n
 import { mapUiPriorityToDatabasePriority } from "@/features/deadlines/metadata";
 import type { DeadlinePriority } from "@/features/deadlines/types";
 import type { RequestMutationResult } from "@/features/requests/types";
+import { recordAuditEvent } from "@/lib/action-runtime";
 import { supabaseRestInsert } from "@/lib/supabase/rest";
 
 interface CreateDeadlineInput {
@@ -65,6 +66,20 @@ export async function createDeadlineAction(
   );
 
   if (result.error) {
+    await recordAuditEvent({
+      action: "create_deadline",
+      actorId: authorization.currentUser.appUser?.id ?? null,
+      actorType: "user",
+      description: `Création de deadline impossible: ${result.error}`,
+      entityId: input.requestId ?? null,
+      entityType: "deadline",
+      payload,
+      requestId: input.requestId ?? null,
+      scope: "deadlines.create",
+      source: "ui",
+      status: "failure",
+    });
+
     return {
       ok: false,
       field: "deadline_at",
@@ -73,6 +88,21 @@ export async function createDeadlineAction(
   }
 
   if (!result.data || result.data.length === 0) {
+    await recordAuditEvent({
+      action: "create_deadline",
+      actorId: authorization.currentUser.appUser?.id ?? null,
+      actorType: "user",
+      description:
+        "Aucune deadline n'a été créée. Vérifie les policies RLS et la structure de la table deadlines.",
+      entityId: input.requestId ?? null,
+      entityType: "deadline",
+      payload,
+      requestId: input.requestId ?? null,
+      scope: "deadlines.create",
+      source: "ui",
+      status: "failure",
+    });
+
     return {
       ok: false,
       field: "deadline_at",
@@ -92,6 +122,21 @@ export async function createDeadlineAction(
     deadlineAt: payload.deadline_at as string,
     label: input.label.trim(),
     requestId: input.requestId,
+  });
+
+  await recordAuditEvent({
+    action: "create_deadline",
+    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorType: "user",
+    description: "Deadline créée.",
+    entityId:
+      typeof result.data[0]?.id === "string" ? result.data[0].id : input.requestId ?? null,
+    entityType: "deadline",
+    payload,
+    requestId: input.requestId ?? null,
+    scope: "deadlines.create",
+    source: "ui",
+    status: "success",
   });
 
   return {

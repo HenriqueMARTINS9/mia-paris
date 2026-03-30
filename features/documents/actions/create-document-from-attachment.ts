@@ -7,7 +7,7 @@ import type {
   DocumentActionResult,
 } from "@/features/documents/types";
 import { authorizeServerAction } from "@/features/auth/server-authorization";
-import { insertActivityLogViaRest } from "@/lib/activity-logs";
+import { recordAuditEvent } from "@/lib/action-runtime";
 import {
   isMissingSupabaseColumnError,
   supabaseRestInsert,
@@ -135,6 +135,20 @@ export async function createDocumentFromAttachmentAction(
   const insertResult = await insertWithMissingColumnFallback(payload);
 
   if (insertResult.error) {
+    await recordAuditEvent({
+      action: "create_document_from_attachment",
+      actorId: authorization.currentUser.appUser?.id ?? null,
+      actorType: "user",
+      description: `Création de document impossible: ${insertResult.error}`,
+      entityId: attachmentResult.data.id,
+      entityType: "document",
+      payload,
+      requestId: resolvedRequestId,
+      scope: "documents.create_from_attachment",
+      source: "ui",
+      status: "failure",
+    });
+
     return {
       ok: false,
       message: `Création de document impossible: ${insertResult.error}`,
@@ -143,8 +157,8 @@ export async function createDocumentFromAttachmentAction(
 
   const documentId = readString(insertResult.data?.[0] ?? null, ["id"]);
 
-  await insertActivityLogViaRest({
-    action: "document_created_from_email_attachment",
+  await recordAuditEvent({
+    action: "create_document_from_attachment",
     actorId: authorization.currentUser.appUser?.id ?? null,
     actorType: "user",
     description: `Document métier créé depuis la pièce jointe ${attachmentResult.data.id}.`,
@@ -159,6 +173,9 @@ export async function createDocumentFromAttachmentAction(
       storagePath,
     },
     requestId: resolvedRequestId,
+    scope: "documents.create_from_attachment",
+    source: "ui",
+    status: "success",
   });
 
   revalidatePath("/emails");

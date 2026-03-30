@@ -1,0 +1,641 @@
+import "server-only";
+
+import { authorizeServerPermissions } from "@/features/auth/server-authorization";
+import { assistantActionCatalog } from "@/features/assistant-actions/catalog";
+import type {
+  AssistantActionResult,
+  AssistantAddProductionNoteInput,
+  AssistantAddRequestNoteInput,
+  AssistantCreateDeadlineInput,
+  AssistantCreateTaskInput,
+  AssistantHistorySearchResult,
+  AssistantPrepareReplyDraftInput,
+  AssistantPrepareReplyDraftResult,
+  AssistantProductionList,
+  AssistantRequestBacklogList,
+  AssistantUnprocessedEmailList,
+  AssistantUrgencyList,
+  AssistantWorkspaceData,
+} from "@/features/assistant-actions/types";
+import {
+  createAssistantActionFailure,
+  createAssistantActionSuccess,
+  normalizeAssistantSource,
+  validateLookupTerm,
+  validateRequiredText,
+} from "@/features/assistant-actions/validators";
+import { getEmailsPageData } from "@/features/emails/queries";
+import { getProductionsPageData } from "@/features/productions/queries";
+import { updateProductionNotesAction } from "@/features/productions/actions/update-production";
+import { buildReplyDraft } from "@/features/replies/lib/build-reply-draft";
+import { appendRequestNoteAction } from "@/features/requests/actions/update-request";
+import { getRequestsOverviewPageData } from "@/features/requests/queries";
+import { createTaskAction } from "@/features/tasks/actions/create-request-task";
+import { getTodayOverviewData } from "@/features/today/queries";
+import { createDeadlineAction } from "@/features/deadlines/actions/create-deadline";
+import { logOperationalError, recordAuditEvent } from "@/lib/action-runtime";
+import { supabaseRestSelectMaybeSingle } from "@/lib/supabase/rest";
+
+export async function getTodayUrgencies(): Promise<
+  AssistantActionResult<AssistantUrgencyList>
+> {
+  const authorization = await authorizeServerPermissions(["assistant.read"]);
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const data = await getTodayOverviewData();
+
+  return createAssistantActionSuccess(
+    data.urgencies24h,
+    `${data.urgencies24h.length} urgence(s) remontée(s) pour aujourd’hui.`,
+  );
+}
+
+export async function getUnprocessedEmails(): Promise<
+  AssistantActionResult<AssistantUnprocessedEmailList>
+> {
+  const authorization = await authorizeServerPermissions(["assistant.read"]);
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const data = await getEmailsPageData();
+  const emails = data.emails.filter((email) => email.status !== "processed");
+
+  return createAssistantActionSuccess(
+    emails,
+    `${emails.length} email(s) non traité(s) ou à revoir.`,
+  );
+}
+
+export async function getRequestsWithoutAssignee(): Promise<
+  AssistantActionResult<AssistantRequestBacklogList>
+> {
+  const authorization = await authorizeServerPermissions(["assistant.read"]);
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const data = await getRequestsOverviewPageData();
+  const requests = data.requests.filter(
+    (request) => request.assignedUserId === null || request.owner === "Non assigné",
+  );
+
+  return createAssistantActionSuccess(
+    requests,
+    `${requests.length} demande(s) sans pilote assigné.`,
+  );
+}
+
+export async function getBlockedProductions(): Promise<
+  AssistantActionResult<AssistantProductionList>
+> {
+  const authorization = await authorizeServerPermissions(["assistant.read"]);
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const data = await getProductionsPageData();
+  const productions = data.productions.filter((production) => production.isBlocked);
+
+  return createAssistantActionSuccess(
+    productions,
+    `${productions.length} production(s) bloquée(s).`,
+  );
+}
+
+export async function getHighRiskProductions(): Promise<
+  AssistantActionResult<AssistantProductionList>
+> {
+  const authorization = await authorizeServerPermissions(["assistant.read"]);
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const data = await getProductionsPageData();
+  const productions = data.productions.filter(
+    (production) => production.risk === "critical" || production.risk === "high",
+  );
+
+  return createAssistantActionSuccess(
+    productions,
+    `${productions.length} production(s) à risque élevé.`,
+  );
+}
+
+export async function createTask(
+  input: AssistantCreateTaskInput,
+): Promise<AssistantActionResult<Awaited<ReturnType<typeof createTaskAction>>>> {
+  const authorization = await authorizeServerPermissions([
+    "assistant.write.safe",
+    "tasks.create",
+  ]);
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const titleValidation = validateRequiredText(input.title, "Le titre de tâche", 3);
+
+  if (!titleValidation.ok) {
+    return createAssistantActionFailure("validation_error", titleValidation.message);
+  }
+
+  const taskTypeValidation = validateRequiredText(input.taskType, "Le type de tâche", 2);
+
+  if (!taskTypeValidation.ok) {
+    return createAssistantActionFailure("validation_error", taskTypeValidation.message);
+  }
+
+  const result = await createTaskAction({
+    assignedUserId: input.assignedUserId ?? null,
+    dueAt: input.dueAt ?? null,
+    priority: input.priority,
+    requestId: input.requestId ?? null,
+    taskType: taskTypeValidation.value,
+    title: titleValidation.value,
+  });
+
+  if (!result.ok) {
+    return createAssistantActionFailure("error", result.message);
+  }
+
+  await recordAuditEvent({
+    action: "assistant_create_task",
+    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorType: "user",
+    description: result.message,
+    entityId: input.requestId ?? null,
+    entityType: "task",
+    payload: {
+      assignedUserId: input.assignedUserId ?? null,
+      dueAt: input.dueAt ?? null,
+      priority: input.priority,
+      requestId: input.requestId ?? null,
+      source: normalizeAssistantSource(input.source),
+      taskType: taskTypeValidation.value,
+      title: titleValidation.value,
+    },
+    requestId: input.requestId ?? null,
+    scope: "assistant_actions.create_task",
+    source: normalizeAssistantSource(input.source),
+    status: "success",
+  });
+
+  return createAssistantActionSuccess(result, result.message);
+}
+
+export async function createDeadline(
+  input: AssistantCreateDeadlineInput,
+): Promise<AssistantActionResult<Awaited<ReturnType<typeof createDeadlineAction>>>> {
+  const authorization = await authorizeServerPermissions([
+    "assistant.manage",
+    "deadlines.create",
+  ]);
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const labelValidation = validateRequiredText(input.label, "Le libellé de deadline", 3);
+
+  if (!labelValidation.ok) {
+    return createAssistantActionFailure("validation_error", labelValidation.message);
+  }
+
+  const dateValidation = validateRequiredText(input.deadlineAt, "La date de deadline");
+
+  if (!dateValidation.ok) {
+    return createAssistantActionFailure("validation_error", dateValidation.message);
+  }
+
+  const result = await createDeadlineAction({
+    deadlineAt: dateValidation.value,
+    label: labelValidation.value,
+    priority: input.priority,
+    requestId: input.requestId ?? null,
+  });
+
+  if (!result.ok) {
+    return createAssistantActionFailure("error", result.message);
+  }
+
+  await recordAuditEvent({
+    action: "assistant_create_deadline",
+    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorType: "user",
+    description: result.message,
+    entityId: input.requestId ?? null,
+    entityType: "deadline",
+    payload: {
+      deadlineAt: dateValidation.value,
+      label: labelValidation.value,
+      priority: input.priority,
+      requestId: input.requestId ?? null,
+      source: normalizeAssistantSource(input.source),
+    },
+    requestId: input.requestId ?? null,
+    scope: "assistant_actions.create_deadline",
+    source: normalizeAssistantSource(input.source),
+    status: "success",
+  });
+
+  return createAssistantActionSuccess(result, result.message);
+}
+
+export async function addNoteToRequest(
+  input: AssistantAddRequestNoteInput,
+): Promise<AssistantActionResult<Awaited<ReturnType<typeof appendRequestNoteAction>>>> {
+  const authorization = await authorizeServerPermissions([
+    "assistant.write.safe",
+    "requests.update",
+  ]);
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const noteValidation = validateRequiredText(input.note, "La note métier", 2);
+
+  if (!noteValidation.ok) {
+    return createAssistantActionFailure("validation_error", noteValidation.message);
+  }
+
+  const noteField = await detectRequestNoteField(input.requestId);
+
+  if (!noteField) {
+    return createAssistantActionFailure(
+      "not_found",
+      "Aucun champ de note compatible n’a été détecté sur la table requests.",
+    );
+  }
+
+  const result = await appendRequestNoteAction({
+    note: noteValidation.value,
+    noteField,
+    requestId: input.requestId,
+  });
+
+  if (!result.ok) {
+    return createAssistantActionFailure("error", result.message);
+  }
+
+  await recordAuditEvent({
+    action: "assistant_add_note_to_request",
+    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorType: "user",
+    description: result.message,
+    entityId: input.requestId,
+    entityType: "request",
+    payload: {
+      notePreview: noteValidation.value.slice(0, 220),
+      source: normalizeAssistantSource(input.source),
+    },
+    requestId: input.requestId,
+    scope: "assistant_actions.add_note_to_request",
+    source: normalizeAssistantSource(input.source),
+    status: "success",
+  });
+
+  return createAssistantActionSuccess(result, result.message);
+}
+
+export async function addNoteToProduction(
+  input: AssistantAddProductionNoteInput,
+): Promise<AssistantActionResult<Awaited<ReturnType<typeof updateProductionNotesAction>>>> {
+  const authorization = await authorizeServerPermissions([
+    "assistant.write.safe",
+    "productions.update",
+  ]);
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const notes = input.notes?.trim() ?? null;
+
+  if (!notes) {
+    return createAssistantActionFailure(
+      "validation_error",
+      "Ajoute une note opérationnelle avant de lancer l’action.",
+    );
+  }
+
+  const result = await updateProductionNotesAction({
+    notes,
+    productionId: input.productionId,
+  });
+
+  if (!result.ok) {
+    return createAssistantActionFailure("error", result.message);
+  }
+
+  await recordAuditEvent({
+    action: "assistant_add_note_to_production",
+    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorType: "user",
+    description: result.message,
+    entityId: input.productionId,
+    entityType: "production",
+    payload: {
+      notePreview: notes.slice(0, 220),
+      source: normalizeAssistantSource(input.source),
+    },
+    requestId: null,
+    scope: "assistant_actions.add_note_to_production",
+    source: normalizeAssistantSource(input.source),
+    status: "success",
+  });
+
+  return createAssistantActionSuccess(result, result.message);
+}
+
+export async function prepareReplyDraft(
+  input: AssistantPrepareReplyDraftInput,
+): Promise<AssistantActionResult<AssistantPrepareReplyDraftResult>> {
+  const authorization = await authorizeServerPermissions([
+    "assistant.write.safe",
+    "reply.generate",
+  ]);
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const subjectValidation = validateRequiredText(
+    input.context.subject,
+    "Le sujet de contexte",
+    2,
+  );
+
+  if (!subjectValidation.ok) {
+    return createAssistantActionFailure("validation_error", subjectValidation.message);
+  }
+
+  try {
+    const draft = buildReplyDraft({
+      ...input.context,
+      replyType: input.replyType,
+    });
+
+    await recordAuditEvent({
+      action: "assistant_prepare_reply_draft",
+      actorId: authorization.currentUser.appUser?.id ?? null,
+      actorType: "user",
+      description: "Brouillon assistant préparé.",
+      entityId: `${input.context.sourceType}:${input.context.sourceId}`,
+      entityType: "reply_draft",
+      payload: {
+        replyType: input.replyType,
+        source: normalizeAssistantSource(input.source),
+        sourceId: input.context.sourceId,
+        sourceType: input.context.sourceType,
+        subject: draft.subject,
+      },
+      requestId: input.context.requestId,
+      scope: "assistant_actions.prepare_reply",
+      source: normalizeAssistantSource(input.source),
+      status: "success",
+    });
+
+    return createAssistantActionSuccess(
+      {
+        draft,
+        message: "Brouillon préparé.",
+        ok: true,
+      },
+      "Brouillon assistant préparé.",
+    );
+  } catch (error) {
+    await logOperationalError({
+      actorId: authorization.currentUser.appUser?.id ?? null,
+      entityId: `${input.context.sourceType}:${input.context.sourceId}`,
+      entityType: "reply_draft",
+      error,
+      message: "Préparation du brouillon assistant impossible.",
+      payload: {
+        replyType: input.replyType,
+      },
+      requestId: input.context.requestId,
+      scope: "assistant_actions.prepare_reply",
+      source: normalizeAssistantSource(input.source),
+    });
+
+    return createAssistantActionFailure(
+      "error",
+      error instanceof Error ? error.message : "Préparation impossible.",
+    );
+  }
+}
+
+export async function searchClientHistory(
+  clientName: string,
+): Promise<AssistantActionResult<AssistantHistorySearchResult>> {
+  const authorization = await authorizeServerPermissions(["assistant.read"]);
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const term = validateLookupTerm(clientName, "Le nom client");
+
+  if (!term.ok) {
+    return createAssistantActionFailure("validation_error", term.message);
+  }
+
+  const [requestsData, emailsData, productionsData] = await Promise.all([
+    getRequestsOverviewPageData(),
+    getEmailsPageData(),
+    getProductionsPageData(),
+  ]);
+
+  const requests = requestsData.requests.filter(
+    (request) => request.clientName.toLowerCase() === term.value,
+  );
+  const emails = emailsData.emails.filter(
+    (email) => email.clientName.toLowerCase() === term.value,
+  );
+  const productions = productionsData.productions.filter(
+    (production) => production.clientName.toLowerCase() === term.value,
+  );
+
+  return createAssistantActionSuccess(
+    {
+      links: [
+        ...requests.slice(0, 3).map((request) => ({
+          href: `/requests/${request.id}`,
+          label: request.title,
+        })),
+        ...productions.slice(0, 2).map((production) => ({
+          href: "/productions",
+          label: production.orderNumber,
+        })),
+      ],
+      signals: [
+        requests.filter(
+          (request) => request.priority === "critical" || request.priority === "high",
+        ).length > 0
+          ? "Le client a récemment plusieurs demandes urgentes."
+          : null,
+        productions.filter((production) => production.isBlocked).length > 0
+          ? "Des productions liées à ce client ont déjà été bloquées."
+          : null,
+        emails.filter((email) => email.status === "review").length > 0
+          ? "Des emails du client sont encore à revoir."
+          : null,
+      ].filter((value): value is string => Boolean(value)),
+      summary: `${requests.length} demande(s), ${emails.length} email(s) et ${productions.length} production(s) trouvés pour ${clientName}.`,
+    },
+    `Historique consolidé pour ${clientName}.`,
+  );
+}
+
+export async function searchModelHistory(
+  modelName: string,
+): Promise<AssistantActionResult<AssistantHistorySearchResult>> {
+  const authorization = await authorizeServerPermissions(["assistant.read"]);
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const term = validateLookupTerm(modelName, "Le nom modèle");
+
+  if (!term.ok) {
+    return createAssistantActionFailure("validation_error", term.message);
+  }
+
+  const [requestsData, productionsData] = await Promise.all([
+    getRequestsOverviewPageData(),
+    getProductionsPageData(),
+  ]);
+
+  const requests = requestsData.requests.filter((request) =>
+    request.title.toLowerCase().includes(term.value),
+  );
+  const productions = productionsData.productions.filter((production) =>
+    production.modelName.toLowerCase().includes(term.value),
+  );
+
+  return createAssistantActionSuccess(
+    {
+      links: [
+        ...requests.slice(0, 3).map((request) => ({
+          href: `/requests/${request.id}`,
+          label: request.title,
+        })),
+        ...productions.slice(0, 3).map((production) => ({
+          href: "/productions",
+          label: production.orderNumber,
+        })),
+      ],
+      signals: [
+        productions.filter((production) => production.isBlocked).length > 0
+          ? "Ce modèle a déjà connu des blocages en production."
+          : null,
+        productions.filter(
+          (production) => production.risk === "critical" || production.risk === "high",
+        ).length > 0
+          ? "Ce modèle remonte plusieurs signaux de risque élevés."
+          : null,
+        requests.length >= 3 ? "Le modèle revient souvent dans les demandes récentes." : null,
+      ].filter((value): value is string => Boolean(value)),
+      summary: `${requests.length} demande(s) et ${productions.length} production(s) trouvées autour du modèle ${modelName}.`,
+    },
+    `Historique consolidé pour ${modelName}.`,
+  );
+}
+
+export async function getAssistantWorkspaceData(): Promise<AssistantWorkspaceData> {
+  const authorization = await authorizeServerPermissions(["assistant.read"]);
+
+  if (!authorization.ok) {
+    return {
+      actions: assistantActionCatalog,
+      error: authorization.message,
+      previews: [],
+    };
+  }
+
+  const [today, emailsResult, requestsResult, blockedResult, highRiskResult] =
+    await Promise.all([
+      getTodayOverviewData(),
+      getUnprocessedEmails(),
+      getRequestsWithoutAssignee(),
+      getBlockedProductions(),
+      getHighRiskProductions(),
+    ]);
+
+  return {
+    actions: assistantActionCatalog,
+    error: today.error,
+    previews: [
+      {
+        count: today.urgencies24h.length,
+        description: "Deadlines et retards immédiatement actionnables aujourd’hui.",
+        href: "/aujourdhui",
+        id: "today-urgencies",
+        label: "Urgences du jour",
+      },
+      {
+        count: emailsResult.data?.length ?? 0,
+        description: "Emails encore non traités ou toujours à revoir.",
+        href: "/emails",
+        id: "emails-unprocessed",
+        label: "Emails non traités",
+      },
+      {
+        count: requestsResult.data?.length ?? 0,
+        description: "Demandes sans owner clair à arbitrer rapidement.",
+        href: "/a-traiter",
+        id: "requests-unassigned",
+        label: "Demandes sans assignation",
+      },
+      {
+        count: blockedResult.data?.length ?? 0,
+        description: "Productions déjà bloquées côté opération.",
+        href: "/productions",
+        id: "productions-blocked",
+        label: "Productions bloquées",
+      },
+      {
+        count: highRiskResult.data?.length ?? 0,
+        description: "Productions high risk / critical à surveiller de près.",
+        href: "/productions",
+        id: "productions-high-risk",
+        label: "Productions à risque",
+      },
+    ],
+  };
+}
+
+async function detectRequestNoteField(requestId: string) {
+  const result = await supabaseRestSelectMaybeSingle<Record<string, unknown>>("requests", {
+    id: `eq.${requestId}`,
+    select: "id,notes,internal_notes,note",
+  });
+
+  if (result.error || !result.data) {
+    return null;
+  }
+
+  if ("notes" in result.data) {
+    return "notes" as const;
+  }
+
+  if ("internal_notes" in result.data) {
+    return "internal_notes" as const;
+  }
+
+  if ("note" in result.data) {
+    return "note" as const;
+  }
+
+  return null;
+}

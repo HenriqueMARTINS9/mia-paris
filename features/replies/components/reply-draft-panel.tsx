@@ -11,7 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthorization } from "@/features/auth/components/auth-role-provider";
 import { MobileReplyDraftSheet } from "@/features/replies/components/mobile-reply-draft-sheet";
-import { QuickReplyActions } from "@/features/replies/components/quick-reply-actions";
 import { generateReplyDraftAction } from "@/features/replies/actions/generate-reply-draft";
 import { saveReplyDraftAction } from "@/features/replies/actions/save-reply-draft";
 import { replyTypeMeta } from "@/features/replies/lib/build-reply-draft";
@@ -19,7 +18,7 @@ import {
   buildReplyDraftStorageKey,
   writeStoredReplyDraft,
 } from "@/features/replies/lib/reply-draft-storage";
-import { ReplyTypeSelect } from "@/features/replies/components/reply-type-select";
+import { ReplyTemplatePicker } from "@/features/replies/components/reply-template-picker";
 import type {
   ReplyDraft,
   ReplyDraftContext,
@@ -162,12 +161,7 @@ export function ReplyDraftPanel({
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 Type de réponse
               </p>
-              <ReplyTypeSelect
-                value={replyType}
-                onChange={setReplyType}
-                disabled={isPending}
-              />
-              <QuickReplyActions
+              <ReplyTemplatePicker
                 value={replyType}
                 onSelect={setReplyType}
                 disabled={isPending}

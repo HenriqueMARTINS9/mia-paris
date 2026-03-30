@@ -9,6 +9,10 @@ import {
 } from "@/features/auth/authorization";
 
 export async function authorizeServerAction(permission: AppPermission) {
+  return authorizeServerPermissions([permission]);
+}
+
+export async function authorizeServerPermissions(permissions: AppPermission[]) {
   const currentUser = await getCurrentUserContext();
 
   if (!currentUser?.authUser) {
@@ -19,8 +23,9 @@ export async function authorizeServerAction(permission: AppPermission) {
   }
 
   const role = normalizeAppUserRole(currentUser.appUser?.role ?? null);
+  const missingPermission = permissions.find((permission) => !canRole(role, permission));
 
-  if (!canRole(role, permission)) {
+  if (missingPermission) {
     return {
       ok: false as const,
       message: `Action non autorisée pour le rôle ${appRoleLabels[role]}.`,

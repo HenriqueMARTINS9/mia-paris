@@ -18,6 +18,10 @@ export const replyTypeMeta: Record<
     label: "Confirmation de délai",
     helper: "Cadre une réponse autour d’une date ou d’un timing attendu.",
   },
+  logistics_response: {
+    label: "Réponse logistique",
+    helper: "Cadre un retour sur livraison, export, packing ou expédition.",
+  },
   missing_items: {
     label: "Éléments manquants",
     helper: "Demande les pièces, validations ou informations manquantes.",
@@ -25,6 +29,10 @@ export const replyTypeMeta: Record<
   ownership: {
     label: "Prise en charge",
     helper: "Confirme qui pilote le dossier et la prochaine étape.",
+  },
+  production_update: {
+    label: "Point production",
+    helper: "Prépare un retour structuré après un point atelier ou production.",
   },
   supplier_followup: {
     label: "Relance fournisseur",
@@ -47,6 +55,25 @@ export function buildReplyDraft(
   const clientLine = input.clientName ? `pour ${input.clientName}` : "pour votre dossier";
   const requestTypeLabel = humanizeRequestType(input.requestType);
   const dueAtLabel = formatDueAt(input.dueAt);
+  const requestReferenceLine = input.requestReference?.trim()
+    ? `Référence de dossier: ${input.requestReference.trim()}`
+    : null;
+  const linkedRequestLine = input.linkedRequestTitle?.trim()
+    ? `Dossier lié: ${input.linkedRequestTitle.trim()}`
+    : null;
+  const productionLine = input.productionLabel?.trim()
+    ? `Production / ordre concerné: ${input.productionLabel.trim()}`
+    : null;
+  const productionStatusLine = input.productionStatus?.trim()
+    ? `Statut production actuel: ${humanizeValue(input.productionStatus.trim())}.`
+    : null;
+  const productionRiskLine = input.productionRisk?.trim()
+    ? `Niveau de risque perçu: ${humanizeValue(input.productionRisk.trim())}.`
+    : null;
+  const historyLine =
+    input.historicalSignals && input.historicalSignals.length > 0
+      ? `Points historiques utiles: ${input.historicalSignals.slice(0, 2).join(" · ")}`
+      : null;
   const summaryLine = input.summary?.trim()
     ? `Contexte repris: ${input.summary.trim()}`
     : null;
@@ -55,7 +82,17 @@ export function buildReplyDraft(
     : null;
   const recipients = input.recipientEmail ? [input.recipientEmail] : [];
 
-  const commonFooter = [requestedActionLine, summaryLine, signature]
+  const commonFooter = [
+    requestReferenceLine,
+    linkedRequestLine,
+    productionLine,
+    productionStatusLine,
+    productionRiskLine,
+    requestedActionLine,
+    summaryLine,
+    historyLine,
+    signature,
+  ]
     .filter(Boolean)
     .join("\n\n");
 
@@ -164,6 +201,52 @@ export function buildReplyDraft(
         .join("\n\n"),
       disclaimer:
         "Brouillon orienté suivi fournisseur. Ajuste le ton si le destinataire est un client.",
+      suggestedRecipients: recipients,
+      subject: ensureReplySubject(input.subject),
+      type: input.replyType,
+    };
+  }
+
+  if (input.replyType === "production_update") {
+    return {
+      body: [
+        `Bonjour ${recipientName},`,
+        `Voici notre point de situation actualisé ${clientLine}.`,
+        productionLine ?? "Nous avons fait un point production en interne sur le dossier.",
+        productionStatusLine ??
+          "Le suivi atelier / production a été revu et nous consolidons les prochaines étapes.",
+        productionRiskLine,
+        dueAtLabel
+          ? `Notre repère de délai reste actuellement le ${dueAtLabel}.`
+          : "Nous te confirmons le prochain jalon dès qu’il est verrouillé.",
+        commonFooter,
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+      disclaimer:
+        "Brouillon de point production. Vérifie que le statut atelier et les engagements de délai sont bien confirmés.",
+      suggestedRecipients: recipients,
+      subject: ensureReplySubject(input.subject),
+      type: input.replyType,
+    };
+  }
+
+  if (input.replyType === "logistics_response") {
+    return {
+      body: [
+        `Bonjour ${recipientName},`,
+        `Nous revenons vers vous concernant le volet logistique ${clientLine}.`,
+        dueAtLabel
+          ? `Nous gardons comme jalon opérationnel le ${dueAtLabel}.`
+          : "Nous sommes en train de confirmer le timing logistique le plus fiable.",
+        requestedActionLine ??
+          "Merci de nous confirmer les informations de livraison, packing ou export encore manquantes.",
+        commonFooter,
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+      disclaimer:
+        "Brouillon logistique. Vérifie bien les informations transport, packing et éventuels documents export avant envoi.",
       suggestedRecipients: recipients,
       subject: ensureReplySubject(input.subject),
       type: input.replyType,
