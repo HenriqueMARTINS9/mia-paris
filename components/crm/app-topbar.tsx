@@ -33,14 +33,6 @@ export function AppTopbar({ currentUser }: Readonly<AppTopbarProps>) {
             <div className="flex items-center justify-between gap-3 md:hidden">
               <div className="flex min-w-0 items-center gap-3">
                 <MobileNavigationMenu />
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                    MIA PARIS
-                  </p>
-                  <p className="truncate text-sm font-semibold tracking-tight text-foreground">
-                    CRM textile B2B
-                  </p>
-                </div>
               </div>
 
               <div className="flex items-center gap-2">
@@ -65,15 +57,6 @@ export function AppTopbar({ currentUser }: Readonly<AppTopbarProps>) {
 
             <div className="hidden md:flex md:items-center md:justify-between md:gap-4">
               <div className="flex min-w-0 flex-1 items-center gap-4">
-                <div className="min-w-0 shrink-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                    MIA PARIS
-                  </p>
-                  <p className="truncate text-sm font-semibold tracking-tight text-foreground">
-                    CRM textile B2B
-                  </p>
-                </div>
-
                 <div className="relative min-w-0 max-w-3xl flex-1">
                   <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
