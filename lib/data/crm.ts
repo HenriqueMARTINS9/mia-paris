@@ -2,23 +2,14 @@ import "server-only";
 
 import { unstable_noStore as noStore } from "next/cache";
 
+import { fallbackCrmSummary } from "@/lib/data/crm-summary";
 import { createSupabaseServerClient, hasSupabaseEnv } from "@/lib/supabase/server";
-import type { CrmSummary } from "@/types/crm";
-
-const fallbackSummary: CrmSummary = {
-  actionItems: 0,
-  openTasks: 0,
-  criticalDeadlines: 0,
-  pendingValidations: 0,
-  inboundEmails: 0,
-  activeProductions: 0,
-};
 
 export async function getCrmSummary() {
   noStore();
 
   if (!hasSupabaseEnv) {
-    return fallbackSummary;
+    return fallbackCrmSummary;
   }
 
   try {
@@ -47,17 +38,17 @@ export async function getCrmSummary() {
       ]);
 
     return {
-      actionItems: actionItemsResult.count ?? fallbackSummary.actionItems,
-      openTasks: openTasksResult.count ?? fallbackSummary.openTasks,
+      actionItems: actionItemsResult.count ?? fallbackCrmSummary.actionItems,
+      openTasks: openTasksResult.count ?? fallbackCrmSummary.openTasks,
       criticalDeadlines:
-        criticalDeadlinesResult.count ?? fallbackSummary.criticalDeadlines,
-      inboundEmails: inboundEmailsResult.count ?? fallbackSummary.inboundEmails,
+        criticalDeadlinesResult.count ?? fallbackCrmSummary.criticalDeadlines,
+      inboundEmails: inboundEmailsResult.count ?? fallbackCrmSummary.inboundEmails,
       pendingValidations:
-        pendingValidationsResult.count ?? fallbackSummary.pendingValidations,
+        pendingValidationsResult.count ?? fallbackCrmSummary.pendingValidations,
       activeProductions:
-        activeProductionsResult.count ?? fallbackSummary.activeProductions,
+        activeProductionsResult.count ?? fallbackCrmSummary.activeProductions,
     };
   } catch {
-    return fallbackSummary;
+    return fallbackCrmSummary;
   }
 }

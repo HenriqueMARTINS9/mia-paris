@@ -10,17 +10,12 @@ import {
 } from "@/features/auth/authorization";
 import { LogoutButton } from "@/features/auth/components/logout-button";
 import type { CurrentUserContext } from "@/features/auth/types";
-import type { CrmSummary } from "@/types/crm";
 
 interface AppTopbarProps {
   currentUser: CurrentUserContext;
-  summary: CrmSummary;
 }
 
-export function AppTopbar({
-  currentUser,
-  summary,
-}: Readonly<AppTopbarProps>) {
+export function AppTopbar({ currentUser }: Readonly<AppTopbarProps>) {
   const displayName =
     currentUser.appUser?.full_name ??
     currentUser.authUser.user_metadata.full_name ??
@@ -37,7 +32,7 @@ export function AppTopbar({
           <div className="flex flex-col gap-2.5 sm:gap-3">
             <div className="flex items-center justify-between gap-3 md:hidden">
               <div className="flex min-w-0 items-center gap-3">
-                <MobileNavigationMenu summary={summary} />
+                <MobileNavigationMenu />
                 <div className="min-w-0">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
                     MIA PARIS

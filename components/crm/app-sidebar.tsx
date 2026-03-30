@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Building2, Dot, Menu } from "lucide-react";
 
+import { useCrmSummary } from "@/components/crm/crm-summary-provider";
 import { useAuthorization } from "@/features/auth/components/auth-role-provider";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -18,13 +19,10 @@ import { primaryNavigation, secondaryNavigation } from "@/components/crm/nav-con
 import { cn } from "@/lib/utils";
 import type { CrmSummary } from "@/types/crm";
 
-interface AppSidebarProps {
-  summary: CrmSummary;
-}
-
-export function AppSidebar({ summary }: Readonly<AppSidebarProps>) {
+export function AppSidebar() {
   const pathname = usePathname();
   const { can } = useAuthorization();
+  const { summary, isLoading } = useCrmSummary();
   const visiblePrimaryNavigation = primaryNavigation.filter(
     (item) => !item.requiredPermission || can(item.requiredPermission),
   );
@@ -75,6 +73,7 @@ export function AppSidebar({ summary }: Readonly<AppSidebarProps>) {
                   item={item}
                   pathname={pathname}
                   summary={summary}
+                  isLoading={isLoading}
                 />
               ))}
             </nav>
@@ -89,6 +88,7 @@ export function AppSidebar({ summary }: Readonly<AppSidebarProps>) {
                   item={item}
                   pathname={pathname}
                   summary={summary}
+                  isLoading={isLoading}
                 />
               ))}
             </nav>
@@ -103,14 +103,18 @@ function SidebarLink({
   item,
   pathname,
   summary,
+  isLoading,
 }: Readonly<{
   item: (typeof primaryNavigation)[number] | (typeof secondaryNavigation)[number];
   pathname: string;
   summary: CrmSummary;
+  isLoading: boolean;
 }>) {
   const Icon = item.icon;
   const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
   const metric = item.summaryKey !== undefined ? summary[item.summaryKey] : null;
+  const metricLabel =
+    item.summaryKey !== undefined && isLoading ? "..." : metric?.toString() ?? null;
 
   return (
     <Link
@@ -137,14 +141,14 @@ function SidebarLink({
       <div className="hidden min-w-0 flex-1 lg:block">
         <div className="flex items-center justify-between gap-3">
           <span className="truncate font-medium">{item.label}</span>
-          {metric !== null ? (
+          {metricLabel !== null ? (
             <span
               className={cn(
                 "rounded-full px-2 py-0.5 text-[11px] font-semibold",
                 isActive ? "bg-white/16 text-white" : "bg-white/8 text-white/70",
               )}
             >
-              {metric}
+              {metricLabel}
             </span>
           ) : null}
         </div>
@@ -155,14 +159,14 @@ function SidebarLink({
         <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/45">
           {item.shortLabel}
         </span>
-        {metric !== null ? (
+        {metricLabel !== null ? (
           <span
             className={cn(
               "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
               isActive ? "bg-white/16 text-white" : "bg-white/8 text-white/65",
             )}
           >
-            {metric}
+            {metricLabel}
           </span>
         ) : (
           <Dot className="h-3 w-3 text-white/30" />
@@ -172,12 +176,11 @@ function SidebarLink({
   );
 }
 
-export function MobileNavigationMenu({
-  summary,
-}: Readonly<{ summary: CrmSummary }>) {
+export function MobileNavigationMenu() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { can } = useAuthorization();
+  const { summary, isLoading } = useCrmSummary();
   const visiblePrimaryNavigation = primaryNavigation.filter(
     (item) => !item.requiredPermission || can(item.requiredPermission),
   );
@@ -229,6 +232,7 @@ export function MobileNavigationMenu({
                     item={item}
                     pathname={pathname}
                     summary={summary}
+                    isLoading={isLoading}
                     onNavigate={() => setMobileMenuOpen(false)}
                   />
                 ))}
@@ -246,6 +250,7 @@ export function MobileNavigationMenu({
                         item={item}
                         pathname={pathname}
                         summary={summary}
+                        isLoading={isLoading}
                         onNavigate={() => setMobileMenuOpen(false)}
                       />
                     ))}
@@ -265,15 +270,19 @@ function SheetSidebarLink({
   onNavigate,
   pathname,
   summary,
+  isLoading,
 }: Readonly<{
   item: (typeof primaryNavigation)[number] | (typeof secondaryNavigation)[number];
   onNavigate: () => void;
   pathname: string;
   summary: CrmSummary;
+  isLoading: boolean;
 }>) {
   const Icon = item.icon;
   const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
   const metric = item.summaryKey !== undefined ? summary[item.summaryKey] : null;
+  const metricLabel =
+    item.summaryKey !== undefined && isLoading ? "..." : metric?.toString() ?? null;
 
   return (
     <Link
@@ -300,14 +309,14 @@ function SheetSidebarLink({
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-3">
           <span className="truncate font-medium">{item.label}</span>
-          {metric !== null ? (
+          {metricLabel !== null ? (
             <span
               className={cn(
                 "rounded-full px-2 py-0.5 text-[11px] font-semibold",
                 isActive ? "bg-white/16 text-white" : "bg-white/8 text-white/70",
               )}
             >
-              {metric}
+              {metricLabel}
             </span>
           ) : null}
         </div>
