@@ -5,16 +5,11 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuthorization } from "@/features/auth/components/auth-role-provider";
 import { createRequestFromEmailAction } from "@/features/emails/actions/create-request-from-email";
-import { ClientDepartmentModelSelectors } from "@/features/emails/components/client-department-model-selectors";
-import { PrioritySelect } from "@/features/emails/components/priority-select";
+import { EmailQualificationFields } from "@/features/emails/components/email-qualification-fields";
 import { QualificationActionsBar } from "@/features/emails/components/qualification-actions-bar";
-import { QualificationFieldGroup } from "@/features/emails/components/qualification-field-group";
-import { RequestTypeSelect } from "@/features/emails/components/request-type-select";
 import { SuggestedFieldsCard } from "@/features/emails/components/suggested-fields-card";
 import type {
   EmailListItem,
@@ -32,6 +27,7 @@ export function EmailQualificationPanel({
   qualificationOptionsError?: string | null;
 }>) {
   const router = useRouter();
+  const { can } = useAuthorization();
   const [isCreatePending, startCreateTransition] = useTransition();
   const [currentLinkedRequestId, setCurrentLinkedRequestId] = useState<string | null>(
     email.linkedRequestId,
@@ -69,13 +65,14 @@ export function EmailQualificationPanel({
     email.classification.source === "stored"
       ? "Qualification existante"
       : "Préremplissage métier V1";
+  const canCreateRequest = can("emails.qualify") && can("requests.create");
 
   return (
     <div className="space-y-4">
       <SuggestedFieldsCard fields={email.classification.suggestedFields} />
 
       <Card>
-        <CardHeader className="space-y-3">
+        <CardHeader className="space-y-3 p-4 sm:p-6">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">{qualificationSourceLabel}</Badge>
             {email.attachments.length > 0 ? (
@@ -90,150 +87,22 @@ export function EmailQualificationPanel({
               <Badge variant="outline">Prêt à transformer</Badge>
             )}
           </div>
-          <CardTitle className="text-base">
+          <CardTitle className="text-sm leading-6 sm:text-base">
             Corriger les champs avant création de la demande
           </CardTitle>
         </CardHeader>
 
-        <CardContent className="grid gap-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <QualificationFieldGroup label="Titre demande">
-              <Input
-                value={formState.title}
-                onChange={(event) => patchDraft({ title: event.target.value })}
-                placeholder="Objet métier de la demande"
-              />
-            </QualificationFieldGroup>
-
-            <QualificationFieldGroup label="Responsable">
-              <Select
-                value={formState.assignedUserId ?? ""}
-                onChange={(event) => {
-                  const nextAssigneeId = event.target.value || null;
-                  const selectedAssignee = qualificationOptions.assignees.find(
-                    (assignee) => assignee.id === nextAssigneeId,
-                  );
-
-                  patchDraft({
-                    assignedUserId: nextAssigneeId,
-                    assignedUserName: selectedAssignee?.fullName ?? null,
-                  });
-                }}
-              >
-                <option value="">
-                  {qualificationOptions.assignees.length > 0
-                    ? "Aucun responsable"
-                    : "Aucun utilisateur disponible"}
-                </option>
-                {qualificationOptions.assignees.map((assignee) => (
-                  <option key={assignee.id} value={assignee.id}>
-                    {assignee.fullName}
-                  </option>
-                ))}
-              </Select>
-            </QualificationFieldGroup>
-
-            <ClientDepartmentModelSelectors
-              draft={formState}
-              onChange={patchDraft}
-              options={qualificationOptions}
-            />
-
-            <QualificationFieldGroup label="Type de demande">
-              <RequestTypeSelect
-                value={formState.requestType}
-                onChange={(requestType) => patchDraft({ requestType })}
-              />
-            </QualificationFieldGroup>
-
-            <QualificationFieldGroup label="Priorité">
-              <PrioritySelect
-                value={formState.priority}
-                onChange={(priority) => patchDraft({ priority })}
-              />
-            </QualificationFieldGroup>
-
-            <QualificationFieldGroup label="Due date">
-              <Input
-                type="date"
-                value={formState.dueAt ?? ""}
-                onChange={(event) =>
-                  patchDraft({
-                    dueAt: event.target.value || null,
-                  })
-                }
-              />
-            </QualificationFieldGroup>
-
-            <QualificationFieldGroup label="Confiance règle / IA (0 à 1)">
-              <Input
-                type="number"
-                min="0"
-                max="1"
-                step="0.01"
-                value={formState.aiConfidence ?? ""}
-                onChange={(event) => {
-                  const parsed = Number(event.target.value);
-
-                  patchDraft({
-                    aiConfidence:
-                      event.target.value.length === 0 || Number.isNaN(parsed)
-                        ? null
-                        : parsed,
-                  });
-                }}
-              />
-            </QualificationFieldGroup>
-
-            <QualificationFieldGroup label="Validation humaine">
-              <Select
-                value={formState.requiresHumanValidation ? "yes" : "no"}
-                onChange={(event) =>
-                  patchDraft({
-                    requiresHumanValidation: event.target.value === "yes",
-                  })
-                }
-              >
-                <option value="yes">Oui</option>
-                <option value="no">Non</option>
-              </Select>
-            </QualificationFieldGroup>
-          </div>
-
-          <QualificationFieldGroup label="Résumé métier">
-            <Textarea
-              value={formState.summary ?? ""}
-              onChange={(event) =>
-                patchDraft({
-                  summary: event.target.value || null,
-                })
-              }
-              className="min-h-[120px]"
-            />
-          </QualificationFieldGroup>
-
-          <QualificationFieldGroup label="Action demandée">
-            <Textarea
-              value={formState.requestedAction ?? ""}
-              onChange={(event) =>
-                patchDraft({
-                  requestedAction: event.target.value || null,
-                })
-              }
-              className="min-h-[96px]"
-            />
-          </QualificationFieldGroup>
-
-          {qualificationOptionsError ? (
-            <p className="text-sm text-muted-foreground">
-              {qualificationOptionsError}
-            </p>
-          ) : null}
-        </CardContent>
+        <EmailQualificationFields
+          draft={formState}
+          onChange={patchDraft}
+          options={qualificationOptions}
+          optionsError={qualificationOptionsError}
+        />
       </Card>
 
       <QualificationActionsBar
         canCreate={
+          canCreateRequest &&
           Boolean(formState.requestType) &&
           formState.title.trim().length > 0 &&
           !currentLinkedRequestId

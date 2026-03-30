@@ -61,17 +61,20 @@
 
 html {
   scroll-behavior: smooth;
+  background: #f6f3ec;
 }
 
 body {
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(208, 155, 88, 0.18), transparent 32%),
-    radial-gradient(circle at top right, rgba(20, 79, 74, 0.14), transparent 28%),
-    linear-gradient(180deg, #f7f3eb 0%, #f1ece3 50%, #eeeadf 100%);
+    radial-gradient(circle at top left, rgba(202, 142, 85, 0.12), transparent 30%),
+    linear-gradient(180deg, #f6f3ec 0%, #f1ede5 100%);
   color: var(--foreground);
   font-family: var(--font-manrope), sans-serif;
   text-rendering: optimizeLegibility;
+  background-attachment: fixed;
+  -webkit-tap-highlight-color: transparent;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 a,
@@ -92,20 +95,40 @@ select {
 }
 
 .glass-panel {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 253, 249, 0.92) 0%,
-    rgba(251, 247, 239, 0.78) 100%
-  );
-  backdrop-filter: blur(14px);
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(10px);
   box-shadow:
-    0 18px 45px rgba(20, 31, 41, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    0 16px 36px rgba(18, 27, 34, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(23, 33, 43, 0.12);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .page-grid {
   display: grid;
   gap: 1rem;
+}
+
+.safe-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-pt {
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 @media (min-width: 1280px) {

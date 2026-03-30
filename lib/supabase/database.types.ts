@@ -8,11 +8,15 @@ import type {
   EmailAttachmentRecord,
   EmailRecord,
   EmailThreadRecord,
+  GmailSyncRunRecord,
   InboxRecord,
   ModelRecord,
+  NotificationPreferenceRecord,
   OrderRecord,
   ProductDepartmentRecord,
   ProductionRecord,
+  PushSubscriptionRecord,
+  ReplyDraftRecord,
   RequestOverview,
   RequestRecord,
   TaskOpen,
@@ -78,6 +82,12 @@ export interface Database {
         Update: Partial<InboxRecord>;
         Relationships: [];
       };
+      gmail_sync_runs: {
+        Row: GmailSyncRunRecord;
+        Insert: Partial<GmailSyncRunRecord>;
+        Update: Partial<GmailSyncRunRecord>;
+        Relationships: [];
+      };
       contacts: {
         Row: ContactRecord;
         Insert: Partial<ContactRecord>;
@@ -112,6 +122,24 @@ export interface Database {
         Row: EmailAttachmentRecord;
         Insert: Partial<EmailAttachmentRecord>;
         Update: Partial<EmailAttachmentRecord>;
+        Relationships: [];
+      };
+      push_subscriptions: {
+        Row: PushSubscriptionRecord;
+        Insert: Partial<PushSubscriptionRecord>;
+        Update: Partial<PushSubscriptionRecord>;
+        Relationships: [];
+      };
+      notification_preferences: {
+        Row: NotificationPreferenceRecord;
+        Insert: Partial<NotificationPreferenceRecord>;
+        Update: Partial<NotificationPreferenceRecord>;
+        Relationships: [];
+      };
+      reply_drafts: {
+        Row: ReplyDraftRecord;
+        Insert: Partial<ReplyDraftRecord>;
+        Update: Partial<ReplyDraftRecord>;
         Relationships: [];
       };
       validations: {

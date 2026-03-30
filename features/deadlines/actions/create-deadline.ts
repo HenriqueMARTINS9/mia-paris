@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { authorizeServerAction } from "@/features/auth/server-authorization";
+import { notifyUrgentDeadline } from "@/features/notifications/lib/operational-notifications";
 import { mapUiPriorityToDatabasePriority } from "@/features/deadlines/metadata";
 import type { DeadlinePriority } from "@/features/deadlines/types";
 import type { RequestMutationResult } from "@/features/requests/types";
@@ -17,6 +19,16 @@ interface CreateDeadlineInput {
 export async function createDeadlineAction(
   input: CreateDeadlineInput,
 ): Promise<RequestMutationResult> {
+  const authorization = await authorizeServerAction("deadlines.create");
+
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      field: "deadline_at",
+      message: authorization.message,
+    };
+  }
+
   if (input.label.trim().length < 3) {
     return {
       ok: false,
@@ -70,10 +82,17 @@ export async function createDeadlineAction(
   }
 
   revalidatePath("/deadlines");
+  revalidatePath("/aujourdhui");
   if (input.requestId) {
     revalidatePath(`/requests/${input.requestId}`);
   }
   revalidatePath("/", "layout");
+
+  await notifyUrgentDeadline({
+    deadlineAt: payload.deadline_at as string,
+    label: input.label.trim(),
+    requestId: input.requestId,
+  });
 
   return {
     ok: true,

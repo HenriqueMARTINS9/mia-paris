@@ -6,7 +6,7 @@ import type {
   CreateDocumentFromAttachmentPayload,
   DocumentActionResult,
 } from "@/features/documents/types";
-import { getCurrentUserContext } from "@/features/auth/queries";
+import { authorizeServerAction } from "@/features/auth/server-authorization";
 import { insertActivityLogViaRest } from "@/lib/activity-logs";
 import {
   isMissingSupabaseColumnError,
@@ -28,6 +28,15 @@ import type {
 export async function createDocumentFromAttachmentAction(
   input: CreateDocumentFromAttachmentPayload,
 ): Promise<DocumentActionResult> {
+  const authorization = await authorizeServerAction("documents.create");
+
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      message: authorization.message,
+    };
+  }
+
   if (!input.attachmentId) {
     return {
       ok: false,
@@ -57,9 +66,8 @@ export async function createDocumentFromAttachmentAction(
     };
   }
 
-  const [currentUser, emailResult, requestResult, modelResult, orderResult, productionResult] =
+  const [emailResult, requestResult, modelResult, orderResult, productionResult] =
     await Promise.all([
-      getCurrentUserContext(),
       loadMaybeSingle<EmailRecord>("emails", readString(attachmentResult.data, ["email_id"])),
       loadMaybeSingle<RequestRecord>("requests", input.requestId),
       loadMaybeSingle<ModelRecord>("models", input.modelId),
@@ -120,7 +128,7 @@ export async function createDocumentFromAttachmentAction(
     storage_path: storagePath,
     title,
     updated_at: new Date().toISOString(),
-    uploaded_by_user_id: currentUser?.appUser?.id ?? null,
+    uploaded_by_user_id: authorization.currentUser.appUser?.id ?? null,
     version: 1,
   } satisfies Record<string, unknown>;
 
@@ -137,6 +145,8 @@ export async function createDocumentFromAttachmentAction(
 
   await insertActivityLogViaRest({
     action: "document_created_from_email_attachment",
+    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorType: "user",
     description: `Document métier créé depuis la pièce jointe ${attachmentResult.data.id}.`,
     entityId: documentId,
     entityType: "document",

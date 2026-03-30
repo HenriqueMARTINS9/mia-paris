@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useAuthorization } from "@/features/auth/components/auth-role-provider";
 import {
   productionRiskMeta,
   productionRiskOptions,
@@ -29,6 +30,7 @@ export function ProductionEditForm({
   production,
 }: Readonly<{ production: ProductionDetailItem }>) {
   const router = useRouter();
+  const { can } = useAuthorization();
   const [statusValue, setStatusValue] = useState(production.status);
   const [riskValue, setRiskValue] = useState(production.risk);
   const [plannedStartValue, setPlannedStartValue] = useState(
@@ -64,6 +66,10 @@ export function ProductionEditForm({
 
       toast.error(result.message);
     };
+  }
+
+  if (!can("productions.update")) {
+    return null;
   }
 
   return (

@@ -7,7 +7,7 @@ export function OpenCreatedRequestLink({
   requestId,
 }: Readonly<{ requestId: string }>) {
   return (
-    <Button asChild variant="outline">
+    <Button asChild variant="outline" className="w-full sm:w-auto">
       <Link href={`/requests/${requestId}`}>
         Ouvrir la demande
         <ArrowUpRight className="h-4 w-4" />

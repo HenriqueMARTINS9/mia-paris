@@ -6,6 +6,7 @@ import { AlertTriangle, ArrowDownToLine, CalendarClock, Flame, PlusSquare } from
 import { EmptyState } from "@/components/crm/empty-state";
 import { ErrorState } from "@/components/crm/error-state";
 import { MetricCard } from "@/components/crm/metric-card";
+import { MobileFilterSheet } from "@/components/crm/mobile-filter-sheet";
 import { PageHeader } from "@/components/crm/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { DeadlineDetailPanel } from "@/features/deadlines/components/deadline-detail-panel";
 import { DeadlineFilters } from "@/features/deadlines/components/deadline-filters";
+import { MobileDeadlineCard } from "@/features/deadlines/components/mobile-deadline-card";
 import { DeadlinesTable } from "@/features/deadlines/components/deadlines-table";
 import { CreateDeadlineForm } from "@/features/deadlines/components/create-deadline-form";
 import { DeadlineStatusBadge } from "@/features/deadlines/components/deadline-badges";
@@ -129,7 +131,7 @@ export function DeadlinesPage({
     <div className="flex flex-col gap-6">
       {header}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <MetricCard
           label="Sous 24h"
           value={String(under24hCount)}
@@ -159,17 +161,38 @@ export function DeadlinesPage({
         />
       </div>
 
-      <DeadlineFilters
-        search={search}
-        onSearchChange={setSearch}
-        selectedClient={selectedClient}
-        onClientChange={setSelectedClient}
-        selectedStatus={selectedStatus}
-        onStatusChange={setSelectedStatus}
-        selectedPriority={selectedPriority}
-        onPriorityChange={setSelectedPriority}
-        clients={clients}
-      />
+      <div className="md:hidden">
+        <MobileFilterSheet
+          title="Filtrer les deadlines"
+          description="Affiner les urgences par client, statut, priorité et recherche."
+        >
+          <DeadlineFilters
+            search={search}
+            onSearchChange={setSearch}
+            selectedClient={selectedClient}
+            onClientChange={setSelectedClient}
+            selectedStatus={selectedStatus}
+            onStatusChange={setSelectedStatus}
+            selectedPriority={selectedPriority}
+            onPriorityChange={setSelectedPriority}
+            clients={clients}
+          />
+        </MobileFilterSheet>
+      </div>
+
+      <div className="hidden md:block">
+        <DeadlineFilters
+          search={search}
+          onSearchChange={setSearch}
+          selectedClient={selectedClient}
+          onClientChange={setSelectedClient}
+          selectedStatus={selectedStatus}
+          onStatusChange={setSelectedStatus}
+          selectedPriority={selectedPriority}
+          onPriorityChange={setSelectedPriority}
+          clients={clients}
+        />
+      </div>
 
       {deadlines.length === 0 ? (
         <>
@@ -187,15 +210,40 @@ export function DeadlinesPage({
       ) : (
         <>
           <div className="flex min-w-0 flex-col gap-4">
-            <Card>
-              <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <Badge variant="outline">Tension du jour</Badge>
-                  <CardTitle className="mt-3">Deadlines critiques</CardTitle>
+            <div className="grid gap-3 md:hidden">
+              {filteredDeadlines.map((deadline) => (
+                <MobileDeadlineCard
+                  key={deadline.id}
+                  deadline={deadline}
+                  onOpen={() => handleSelectDeadline(deadline.id)}
+                />
+              ))}
+            </div>
+
+            <Card className="hidden md:block">
+              <CardHeader className="gap-4 border-b border-black/[0.06] pb-5">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                  <div>
+                    <Badge variant="outline" className="bg-[#fbf8f2]">
+                      Tension du jour
+                    </Badge>
+                    <CardTitle className="mt-3">Deadlines critiques</CardTitle>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                      Lecture opérationnelle des jalons sensibles pour savoir immédiatement ce qui menace le flux client ou la prod.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline" className="bg-white">
+                      {filteredDeadlines.length} visibles
+                    </Badge>
+                    <Badge variant="outline" className="bg-white">
+                      {overdueCount} en retard
+                    </Badge>
+                    <Badge variant="outline" className="bg-white">
+                      {criticalCount} critiques
+                    </Badge>
+                  </div>
                 </div>
-                <p className="max-w-xl text-sm leading-6 text-muted-foreground">
-                  Vue branchée sur `v_deadlines_critical`, enrichie par la table `deadlines` pour piloter les arbitrages.
-                </p>
               </CardHeader>
               <CardContent className="px-0 pb-0">
                 <DeadlinesTable
@@ -206,31 +254,24 @@ export function DeadlinesPage({
               </CardContent>
             </Card>
 
-            <Card>
-              <CardContent className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="text-sm font-semibold">Répartition des deadlines</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Lecture immédiate du niveau de risque et de traitement.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {(["open", "in_progress", "done"] as const).map((status) => {
-                    const count = filteredDeadlines.filter((deadline) => deadline.status === status).length;
+            <div className="hidden gap-3 rounded-[1.5rem] border border-black/[0.06] bg-[#fbf8f2]/95 p-4 md:grid md:grid-cols-3">
+              {(["open", "in_progress", "done"] as const).map((status) => {
+                const count = filteredDeadlines.filter((deadline) => deadline.status === status).length;
 
-                    return (
-                      <div key={status} className="inline-flex items-center gap-2">
-                        <DeadlineStatusBadge
-                          status={status}
-                          className="normal-case tracking-normal"
-                        />
-                        <span className="text-sm text-muted-foreground">{count}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
+                return (
+                  <div
+                    key={status}
+                    className="rounded-[1.1rem] border border-black/[0.06] bg-white p-4"
+                  >
+                    <DeadlineStatusBadge
+                      status={status}
+                      className="normal-case tracking-normal"
+                    />
+                    <p className="mt-3 text-2xl font-semibold tracking-tight">{count}</p>
+                  </div>
+                );
+              })}
+            </div>
 
             <CreateDeadlineForm
               sectionId="create-deadline-form"

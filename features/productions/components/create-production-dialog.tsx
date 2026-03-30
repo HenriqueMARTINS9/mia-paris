@@ -17,6 +17,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import { useAuthorization } from "@/features/auth/components/auth-role-provider";
 import { createProductionAction } from "@/features/productions/actions/create-production";
 import {
   productionRiskMeta,
@@ -43,6 +44,7 @@ export function CreateProductionDialog({
   optionsError = null,
 }: Readonly<CreateProductionDialogProps>) {
   const router = useRouter();
+  const { can } = useAuthorization();
   const [open, setOpen] = useState(false);
   const [requestId, setRequestId] = useState("");
   const [clientId, setClientId] = useState("");
@@ -113,6 +115,10 @@ export function CreateProductionDialog({
 
       toast.error(result.message);
     });
+  }
+
+  if (!can("productions.create")) {
+    return null;
   }
 
   return (

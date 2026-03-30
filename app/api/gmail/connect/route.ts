@@ -5,6 +5,7 @@ import {
   getCurrentUserContext,
   normalizeRedirectPath,
 } from "@/features/auth/queries";
+import { isExplicitAdminRole } from "@/features/auth/authorization";
 import { hasGoogleGmailEnv } from "@/lib/google/env";
 import { buildGoogleOAuthUrl } from "@/lib/google/oauth";
 import {
@@ -15,8 +16,14 @@ import {
 export async function GET(request: NextRequest) {
   const currentUser = await getCurrentUserContext();
 
-  if (!currentUser?.appUser) {
+  if (!currentUser?.authUser) {
     return NextResponse.redirect(new URL("/login", request.nextUrl.origin));
+  }
+
+  if (!isExplicitAdminRole(currentUser.appUser?.role ?? null)) {
+    const forbiddenUrl = new URL("/emails", request.nextUrl.origin);
+    forbiddenUrl.searchParams.set("gmail", "forbidden");
+    return NextResponse.redirect(forbiddenUrl);
   }
 
   if (!hasGoogleGmailEnv) {
@@ -37,7 +44,8 @@ export async function GET(request: NextRequest) {
   response.cookies.set(
     GMAIL_OAUTH_STATE_COOKIE,
     serializeGmailOAuthState({
-      appUserId: currentUser.appUser?.id ?? "",
+      appUserId: currentUser.appUser?.id ?? undefined,
+      authUserId: currentUser.authUser.id,
       redirectTo,
       state,
     }),

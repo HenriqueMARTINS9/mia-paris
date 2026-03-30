@@ -4,18 +4,17 @@ import { unstable_noStore as noStore } from "next/cache";
 
 import { getDeadlinesPageData } from "@/features/deadlines/queries";
 import { getEmailsPageData } from "@/features/emails/queries";
+import { getGmailSyncSummaries } from "@/features/emails/lib/gmail-sync-history";
 import { getProductionsPageData } from "@/features/productions/queries";
 import { getRequestsOverviewPageData } from "@/features/requests/queries";
 import { getTasksPageData } from "@/features/tasks/queries";
-import type { DashboardPageData, GmailSyncSummary } from "@/features/dashboard/types";
+import type { DashboardPageData } from "@/features/dashboard/types";
 import {
   isMissingSupabaseResourceError,
   supabaseRestSelectList,
 } from "@/lib/supabase/rest";
 import { createSupabaseServerClient, hasSupabaseEnv } from "@/lib/supabase/server";
 import {
-  readNumber,
-  readObject,
   readString,
 } from "@/lib/record-helpers";
 import type { ActivityLogRecord, RequestOverview, ValidationRecord } from "@/types/crm";
@@ -110,21 +109,10 @@ export async function getDashboardPageData(): Promise<DashboardPageData> {
       matchesAction(log, "request_creation_failed_from_email"),
     ).length;
 
-    const latestSyncResult = emailsData.gmailInbox.inboxId
-      ? await supabaseRestSelectList<ActivityLogRecord>("activity_logs", {
-          entity_id: `eq.${emailsData.gmailInbox.inboxId}`,
-          entity_type: "eq.gmail_sync",
-          order: "created_at.desc.nullslast",
-          select: "*",
-        })
-      : null;
-
-    const latestSyncs = latestSyncResult ? getSafeActivityLogs(latestSyncResult).map(mapSyncLog) : [];
-    const syncError =
-      latestSyncResult?.error &&
-      !isMissingSupabaseResourceError(latestSyncResult.rawError)
-        ? latestSyncResult.error
-        : null;
+    const gmailSyncSummaryResult = await getGmailSyncSummaries({
+      inboxId: emailsData.gmailInbox.inboxId,
+      limit: 6,
+    });
 
     const now = new Date();
     const next24h = now.getTime() + 24 * 60 * 60 * 1000;
@@ -194,10 +182,10 @@ export async function getDashboardPageData(): Promise<DashboardPageData> {
             new Date(right.receivedAt).getTime() - new Date(left.receivedAt).getTime(),
         )
         .slice(0, 6),
-      latestSyncs,
+      latestSyncs: gmailSyncSummaryResult.runs,
       priorityRequests,
       productionsAtRisk,
-      syncError,
+      syncError: gmailSyncSummaryResult.error,
       tasksUrgent,
     };
   } catch (error) {
@@ -237,32 +225,6 @@ function isValidationPending(validation: ValidationRecord) {
 function matchesAction(log: ActivityLogRecord, expected: string) {
   const action = readString(log, ["action", "action_type"]);
   return action === expected;
-}
-
-function mapSyncLog(log: ActivityLogRecord): GmailSyncSummary {
-  const payload =
-    readObject(log, ["payload", "metadata"]) ??
-    readObject(readObject(log, ["payload"]), ["payload", "metadata"]);
-
-  return {
-    connectedInboxEmail:
-      readString(payload, ["connectedInboxEmail", "connected_inbox_email"]) ??
-      null,
-    createdAt: readString(log, ["created_at"]) ?? new Date().toISOString(),
-    errorMessage:
-      readString(payload, ["errorMessage", "message"]) ??
-      (matchesAction(log, "gmail_sync_failed")
-        ? readString(log, ["description"])
-        : null),
-    id: log.id,
-    ignoredMessages:
-      readNumber(payload, ["ignoredMessages", "ignored_messages"]) ?? 0,
-    importedMessages:
-      readNumber(payload, ["importedMessages", "imported_messages"]) ?? 0,
-    importedThreads:
-      readNumber(payload, ["importedThreads", "imported_threads"]) ?? 0,
-    ok: !matchesAction(log, "gmail_sync_failed"),
-  };
 }
 
 function riskWeight(value: string) {

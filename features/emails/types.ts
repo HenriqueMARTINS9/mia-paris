@@ -110,6 +110,8 @@ export interface GmailInboxStatus {
   lastSyncedAt: string | null;
 }
 
+export type GmailSyncMode = "initial" | "incremental";
+
 export interface EmailsPageData {
   documentOptions: DocumentFormOptions;
   documentOptionsError: string | null;
@@ -140,11 +142,16 @@ export interface RequestAutoTaskRule {
 
 export interface GmailSyncResult {
   connectedInboxEmail: string | null;
+  errorCount?: number;
   ignoredMessages: number;
   importedMessages: number;
   importedThreads: number;
   message: string;
   ok: boolean;
+  queryUsed?: string | null;
+  runId?: string | null;
+  syncMode?: GmailSyncMode;
+  syncedAt?: string | null;
 }
 
 export interface EmailMutationResult {

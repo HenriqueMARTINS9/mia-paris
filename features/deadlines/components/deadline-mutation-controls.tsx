@@ -6,6 +6,7 @@ import { CheckCheck, Loader2, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { useAuthorization } from "@/features/auth/components/auth-role-provider";
 import {
   markDeadlineAsDoneAction,
   updateDeadlinePriorityAction,
@@ -23,10 +24,15 @@ export function DeadlineMutationControls({
   deadline,
 }: Readonly<DeadlineMutationControlsProps>) {
   const router = useRouter();
+  const { can } = useAuthorization();
   const [priorityValue, setPriorityValue] = useState(deadline.priority);
 
   const [isPriorityPending, startPriorityTransition] = useTransition();
   const [isDonePending, startDoneTransition] = useTransition();
+
+  if (!can("deadlines.update")) {
+    return null;
+  }
 
   function handlePrioritySave() {
     startPriorityTransition(async () => {
@@ -64,7 +70,7 @@ export function DeadlineMutationControls({
   }
 
   return (
-    <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
+    <div className="rounded-3xl border border-white/70 bg-white/60 p-3.5 sm:p-4">
       <div className="grid gap-4">
         <ActionRow
           label="Priorité"
@@ -87,6 +93,7 @@ export function DeadlineMutationControls({
           action={
             <Button
               size="sm"
+              className="w-full sm:w-auto"
               onClick={handlePrioritySave}
               disabled={isPriorityPending || priorityValue === deadline.priority}
             >
@@ -119,6 +126,7 @@ export function DeadlineMutationControls({
             <Button
               size="sm"
               variant="secondary"
+              className="w-full sm:w-auto"
               onClick={handleMarkAsDone}
               disabled={isDonePending || deadline.status === "done"}
             >
@@ -150,15 +158,15 @@ interface ActionRowProps {
 
 function ActionRow({ label, description, control, action }: Readonly<ActionRowProps>) {
   return (
-    <div className="grid gap-3 rounded-2xl border border-white/70 bg-white/65 p-3 lg:grid-cols-[120px_minmax(0,1fr)_auto] lg:items-center">
+    <div className="grid gap-3 rounded-2xl border border-white/70 bg-white/65 p-3 sm:p-3.5 lg:grid-cols-[120px_minmax(0,1fr)_auto] lg:items-center">
       <div>
         <p className="text-sm font-semibold">{label}</p>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
           {description}
         </p>
       </div>
-      {control}
-      <div className="flex justify-end">{action}</div>
+      <div className="min-w-0">{control}</div>
+      <div className="grid w-full gap-2 lg:w-auto lg:justify-end">{action}</div>
     </div>
   );
 }

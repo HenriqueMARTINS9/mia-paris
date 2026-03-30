@@ -6,6 +6,7 @@ import { AlertTriangle, ArrowDownToLine, CalendarClock, FolderKanban, PlusSquare
 import { EmptyState } from "@/components/crm/empty-state";
 import { ErrorState } from "@/components/crm/error-state";
 import { MetricCard } from "@/components/crm/metric-card";
+import { MobileFilterSheet } from "@/components/crm/mobile-filter-sheet";
 import { PageHeader } from "@/components/crm/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -15,6 +16,7 @@ import { RequestPriorityBadge } from "@/components/crm/request-badges";
 import { CreateRequestTaskForm } from "@/features/tasks/components/create-request-task-form";
 import { TaskDetailPanel } from "@/features/tasks/components/task-detail-panel";
 import { TaskFilters } from "@/features/tasks/components/task-filters";
+import { MobileTaskCard } from "@/features/tasks/components/mobile-task-card";
 import { TaskStatusBadge } from "@/features/tasks/components/task-badges";
 import { TasksTable } from "@/features/tasks/components/tasks-table";
 import type { TasksPageData } from "@/features/tasks/types";
@@ -132,7 +134,7 @@ export function TasksPage({
     <div className="flex flex-col gap-6">
       {header}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <MetricCard
           label="Ouvertes"
           value={String(filteredTasks.length)}
@@ -161,17 +163,38 @@ export function TasksPage({
         />
       </div>
 
-      <TaskFilters
-        search={search}
-        onSearchChange={setSearch}
-        selectedClient={selectedClient}
-        onClientChange={setSelectedClient}
-        selectedStatus={selectedStatus}
-        onStatusChange={setSelectedStatus}
-        selectedPriority={selectedPriority}
-        onPriorityChange={setSelectedPriority}
-        clients={clients}
-      />
+      <div className="md:hidden">
+        <MobileFilterSheet
+          title="Filtrer les tâches"
+          description="Affiner le backlog par client, statut, priorité et recherche."
+        >
+          <TaskFilters
+            search={search}
+            onSearchChange={setSearch}
+            selectedClient={selectedClient}
+            onClientChange={setSelectedClient}
+            selectedStatus={selectedStatus}
+            onStatusChange={setSelectedStatus}
+            selectedPriority={selectedPriority}
+            onPriorityChange={setSelectedPriority}
+            clients={clients}
+          />
+        </MobileFilterSheet>
+      </div>
+
+      <div className="hidden md:block">
+        <TaskFilters
+          search={search}
+          onSearchChange={setSearch}
+          selectedClient={selectedClient}
+          onClientChange={setSelectedClient}
+          selectedStatus={selectedStatus}
+          onStatusChange={setSelectedStatus}
+          selectedPriority={selectedPriority}
+          onPriorityChange={setSelectedPriority}
+          clients={clients}
+        />
+      </div>
 
       {tasks.length === 0 ? (
         <>
@@ -192,15 +215,42 @@ export function TasksPage({
       ) : (
         <>
           <div className="flex min-w-0 flex-col gap-4">
-            <Card>
-              <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <Badge variant="outline">File active</Badge>
-                  <CardTitle className="mt-3">Tâches ouvertes</CardTitle>
+            <div className="grid gap-3 md:hidden">
+              {filteredTasks.map((task) => (
+                <MobileTaskCard
+                  key={task.id}
+                  task={task}
+                  assignees={assignees}
+                  assigneesError={assigneesError}
+                  onOpen={() => handleSelectTask(task.id)}
+                />
+              ))}
+            </div>
+
+            <Card className="hidden md:block">
+              <CardHeader className="gap-4 border-b border-black/[0.06] pb-5">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                  <div>
+                    <Badge variant="outline" className="bg-[#fbf8f2]">
+                      File active
+                    </Badge>
+                    <CardTitle className="mt-3">Tâches ouvertes</CardTitle>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                      Vue d’exécution par responsable, niveau de priorité et échéance, pensée pour piloter vite sans quitter le backlog.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline" className="bg-white">
+                      {filteredTasks.length} visibles
+                    </Badge>
+                    <Badge variant="outline" className="bg-white">
+                      {overdueCount} en retard
+                    </Badge>
+                    <Badge variant="outline" className="bg-white">
+                      {unassignedCount} sans owner
+                    </Badge>
+                  </div>
                 </div>
-                <p className="max-w-xl text-sm leading-6 text-muted-foreground">
-                  Lecture dense par owner, priorité et échéance, branchée sur `v_tasks_open` et la table `tasks`.
-                </p>
               </CardHeader>
               <CardContent className="px-0 pb-0">
                 <TasksTable
@@ -211,15 +261,12 @@ export function TasksPage({
               </CardContent>
             </Card>
 
-            <Card>
-              <CardContent className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="text-sm font-semibold">Répartition des tâches</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Vision immédiate du flux d&apos;exécution ouvert.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
+            <div className="hidden gap-3 rounded-[1.5rem] border border-black/[0.06] bg-[#fbf8f2]/95 p-4 md:grid lg:grid-cols-2">
+              <div className="rounded-[1.1rem] border border-black/[0.06] bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Répartition des statuts
+                </p>
+                <div className="mt-3 flex flex-wrap gap-3">
                   {(["todo", "in_progress", "blocked", "done"] as const).map((status) => {
                     const count = filteredTasks.filter((task) => task.status === status).length;
 
@@ -233,6 +280,13 @@ export function TasksPage({
                       </div>
                     );
                   })}
+                </div>
+              </div>
+              <div className="rounded-[1.1rem] border border-black/[0.06] bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Répartition des priorités
+                </p>
+                <div className="mt-3 flex flex-wrap gap-3">
                   {(["critical", "high", "normal"] as const).map((priority) => {
                     const count = filteredTasks.filter((task) => task.priority === priority).length;
 
@@ -244,8 +298,8 @@ export function TasksPage({
                     );
                   })}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             <CreateRequestTaskForm
               sectionId="create-task-form"

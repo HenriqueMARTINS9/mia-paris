@@ -14,6 +14,7 @@ import { EmailActionsBar } from "@/features/emails/components/email-actions-bar"
 import { EmailAttachmentsCard } from "@/features/emails/components/email-attachments-card";
 import { EmailQualificationPanel } from "@/features/emails/components/email-qualification-panel";
 import { ProcessingStatusBadge } from "@/features/emails/components/processing-status-badge";
+import { EmailReplyCard } from "@/features/replies/components/email-reply-card";
 import type {
   EmailListItem,
   EmailQualificationOptions,
@@ -62,7 +63,7 @@ export function EmailPreviewPanel({
 
   return (
     <Card className={cn(mode === "desktop" && "sticky top-24")}>
-      <CardHeader className="space-y-4">
+      <CardHeader className="space-y-4 p-4 sm:p-6">
         <div className="flex flex-wrap items-center gap-2">
           <ProcessingStatusBadge status={email.status} />
           {email.detectedType ? (
@@ -79,8 +80,10 @@ export function EmailPreviewPanel({
           ) : null}
         </div>
         <div>
-          <CardTitle className="text-[1.35rem]">{email.subject}</CardTitle>
-          <CardDescription className="mt-2">
+          <CardTitle className="break-words text-xl sm:text-[1.35rem]">
+            {email.subject}
+          </CardTitle>
+          <CardDescription className="mt-2 break-words">
             {email.fromName} · {email.fromEmail} · {formatDateTime(email.receivedAt)}
           </CardDescription>
         </div>
@@ -92,13 +95,13 @@ export function EmailPreviewPanel({
         />
       </CardHeader>
 
-      <CardContent className="space-y-5">
+      <CardContent className="space-y-5 p-4 pt-0 sm:p-6 sm:pt-0">
         <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
           <div className="flex items-center gap-2">
             <MessageSquareText className="h-4 w-4 text-muted-foreground" />
             <p className="font-semibold">Aperçu email</p>
           </div>
-          <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-foreground/80">
+          <p className="mt-4 whitespace-pre-wrap break-words text-sm leading-6 text-foreground/80">
             {email.bodyText ?? email.previewText}
           </p>
         </div>
@@ -122,6 +125,7 @@ export function EmailPreviewPanel({
         </div>
 
         <ClassificationSummaryCard email={email} />
+        <EmailReplyCard email={email} />
         <EmailQualificationPanel
           key={`${email.id}:${email.linkedRequestId ?? "none"}`}
           email={email}

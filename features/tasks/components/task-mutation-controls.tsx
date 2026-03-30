@@ -6,6 +6,7 @@ import { CalendarClock, Loader2, Save, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { useAuthorization } from "@/features/auth/components/auth-role-provider";
 import { requestPriorityMeta } from "@/features/requests/metadata";
 import type { RequestAssigneeOption } from "@/features/requests/types";
 import { taskStatusMeta, taskStatusOptions } from "@/features/tasks/metadata";
@@ -32,6 +33,7 @@ export function TaskMutationControls({
   assigneesError = null,
 }: Readonly<TaskMutationControlsProps>) {
   const router = useRouter();
+  const { can } = useAuthorization();
   const [statusValue, setStatusValue] = useState(task.status);
   const [priorityValue, setPriorityValue] = useState(task.priority);
   const [assigneeValue, setAssigneeValue] = useState(task.assignedUserId ?? "");
@@ -41,6 +43,10 @@ export function TaskMutationControls({
   const [isPriorityPending, startPriorityTransition] = useTransition();
   const [isAssignmentPending, startAssignmentTransition] = useTransition();
   const [isDueDatePending, startDueDateTransition] = useTransition();
+
+  if (!can("tasks.update")) {
+    return null;
+  }
 
   function handleStatusSave() {
     startStatusTransition(async () => {
@@ -115,7 +121,7 @@ export function TaskMutationControls({
   }
 
   return (
-    <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
+    <div className="rounded-3xl border border-white/70 bg-white/60 p-3.5 sm:p-4">
       <div className="grid gap-4">
         <ActionRow
           label="Statut"
@@ -239,15 +245,15 @@ interface ActionRowProps {
 
 function ActionRow({ label, description, control, action }: Readonly<ActionRowProps>) {
   return (
-    <div className="grid gap-3 rounded-2xl border border-white/70 bg-white/65 p-3 lg:grid-cols-[120px_minmax(0,1fr)_auto] lg:items-center">
+    <div className="grid gap-3 rounded-2xl border border-white/70 bg-white/65 p-3 sm:p-3.5 lg:grid-cols-[120px_minmax(0,1fr)_auto] lg:items-center">
       <div>
         <p className="text-sm font-semibold">{label}</p>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
           {description}
         </p>
       </div>
-      {control}
-      <div className="flex justify-end">{action}</div>
+      <div className="min-w-0">{control}</div>
+      <div className="grid w-full gap-2 lg:w-auto lg:justify-end">{action}</div>
     </div>
   );
 }
@@ -270,7 +276,13 @@ function ActionButton({
   icon: Icon = Save,
 }: Readonly<ActionButtonProps>) {
   return (
-    <Button size="sm" variant={variant} onClick={onClick} disabled={disabled}>
+    <Button
+      size="sm"
+      variant={variant}
+      onClick={onClick}
+      disabled={disabled}
+      className="w-full sm:w-auto"
+    >
       {isPending ? (
         <>
           <Loader2 className="h-4 w-4 animate-spin" />

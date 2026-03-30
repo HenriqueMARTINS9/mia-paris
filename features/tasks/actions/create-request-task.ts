@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { authorizeServerAction } from "@/features/auth/server-authorization";
+import { notifyCriticalTask } from "@/features/notifications/lib/operational-notifications";
 import type { RequestPriority, RequestMutationResult } from "@/features/requests/types";
 import { mapUiPriorityToDatabasePriority } from "@/features/requests/metadata";
 import { supabaseRestInsert } from "@/lib/supabase/rest";
@@ -18,6 +20,16 @@ interface CreateRequestTaskInput {
 export async function createTaskAction(
   input: CreateRequestTaskInput,
 ): Promise<RequestMutationResult> {
+  const authorization = await authorizeServerAction("tasks.create");
+
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      field: "task",
+      message: authorization.message,
+    };
+  }
+
   if (input.title.trim().length < 3) {
     return {
       ok: false,
@@ -71,10 +83,19 @@ export async function createTaskAction(
   }
 
   revalidatePath("/taches");
+  revalidatePath("/aujourdhui");
   if (input.requestId) {
     revalidatePath(`/requests/${input.requestId}`);
   }
   revalidatePath("/", "layout");
+
+  if (input.priority === "critical") {
+    await notifyCriticalTask({
+      dueAt: input.dueAt ? new Date(`${input.dueAt}T09:00:00`).toISOString() : null,
+      requestId: input.requestId,
+      title: input.title.trim(),
+    });
+  }
 
   return {
     ok: true,

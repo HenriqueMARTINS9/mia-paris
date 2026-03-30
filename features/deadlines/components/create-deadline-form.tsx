@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { createDeadlineAction } from "@/features/deadlines/actions/create-deadline";
+import { useAuthorization } from "@/features/auth/components/auth-role-provider";
 import type { DeadlinePriority } from "@/features/deadlines/types";
 import { requestPriorityMeta } from "@/features/requests/metadata";
 import type { RequestLinkOption } from "@/features/requests/types";
@@ -31,6 +32,7 @@ export function CreateDeadlineForm({
   sectionId,
 }: Readonly<CreateDeadlineFormProps>) {
   const router = useRouter();
+  const { can } = useAuthorization();
   const [label, setLabel] = useState("");
   const [priority, setPriority] = useState<DeadlinePriority>("critical");
   const [requestId, setRequestId] = useState(defaultRequestId ?? "");
@@ -60,6 +62,10 @@ export function CreateDeadlineForm({
 
       toast.error(result.message);
     });
+  }
+
+  if (!can("deadlines.create")) {
+    return null;
   }
 
   return (

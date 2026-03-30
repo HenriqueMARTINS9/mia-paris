@@ -14,7 +14,11 @@ export function CreateRequestFromEmailButton({
   onClick,
 }: Readonly<CreateRequestFromEmailButtonProps>) {
   return (
-    <Button onClick={onClick} disabled={disabled || isPending}>
+    <Button
+      onClick={onClick}
+      disabled={disabled || isPending}
+      className="w-full sm:w-auto"
+    >
       {isPending ? (
         <>
           <Loader2 className="h-4 w-4 animate-spin" />

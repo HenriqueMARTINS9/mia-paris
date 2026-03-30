@@ -28,7 +28,7 @@ export function QualificationActionsBar({
 
   return (
     <Card>
-      <CardContent className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
+      <CardContent className="flex flex-col gap-4 p-4 sm:p-5 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">Préremplissage métier V1</Badge>
@@ -45,7 +45,7 @@ export function QualificationActionsBar({
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="grid w-full gap-2 md:w-auto md:flex md:flex-wrap">
           {linkedRequestId ? <OpenCreatedRequestLink requestId={linkedRequestId} /> : null}
           <CreateRequestFromEmailButton
             disabled={!canCreate}

@@ -17,6 +17,7 @@ import {
 import { createDocumentFromAttachmentAction } from "@/features/documents/actions/create-document-from-attachment";
 import { DocumentTypeSelect } from "@/features/documents/components/document-type-select";
 import { RelatedEntityPicker } from "@/features/documents/components/related-entity-picker";
+import { useAuthorization } from "@/features/auth/components/auth-role-provider";
 import type {
   DocumentFormOptions,
   DocumentType,
@@ -40,6 +41,7 @@ export function EmailAttachmentToDocumentDialog({
   optionsError = null,
 }: Readonly<EmailAttachmentToDocumentDialogProps>) {
   const router = useRouter();
+  const { can } = useAuthorization();
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [documentType, setDocumentType] = useState<DocumentType>("other");
@@ -72,6 +74,10 @@ export function EmailAttachmentToDocumentDialog({
 
       toast.error(result.message);
     });
+  }
+
+  if (!can("documents.create")) {
+    return null;
   }
 
   return (

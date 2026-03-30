@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { authorizeServerAction } from "@/features/auth/server-authorization";
+import { notifyCriticalTask } from "@/features/notifications/lib/operational-notifications";
 import {
   mapUiPriorityToDatabasePriority,
   mapUiTaskStatusToDatabaseStatus,
@@ -10,6 +12,7 @@ import {
 } from "@/features/tasks/metadata";
 import type { TaskPriority, TaskStatus } from "@/features/tasks/types";
 import type { RequestMutationResult } from "@/features/requests/types";
+import { readString } from "@/lib/record-helpers";
 import { supabaseRestPatch } from "@/lib/supabase/rest";
 
 interface UpdateTaskStatusInput {
@@ -65,6 +68,17 @@ export async function updateTaskPriorityAction(
     },
     {
       field: "priority",
+      onSuccess:
+        input.priority === "critical"
+          ? async (record) => {
+              await notifyCriticalTask({
+                dueAt: readString(record, ["due_at"]) ?? null,
+                requestId:
+                  readString(record, ["request_id"]) ?? input.requestId ?? null,
+                title: readString(record, ["title"]) ?? "Tâche critique",
+              });
+            }
+          : undefined,
       requestId: input.requestId ?? null,
       successMessage: `Priorité tâche mise à jour: ${requestPriorityMeta[input.priority].label}.`,
       taskId: input.taskId,
@@ -121,6 +135,7 @@ async function updateTaskRecord(
   values: Record<string, unknown>,
   options: {
     field: RequestMutationResult["field"];
+    onSuccess?: (record: Record<string, unknown>) => Promise<void>;
     requestId: string | null;
     successMessage: string;
     taskId: string;
@@ -134,12 +149,22 @@ async function updateTaskRecord(
     };
   }
 
+  const authorization = await authorizeServerAction("tasks.update");
+
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      field: options.field,
+      message: authorization.message,
+    };
+  }
+
   const result = await supabaseRestPatch<Array<Record<string, unknown>>>(
     "tasks",
     values,
     {
       id: `eq.${taskId}`,
-      select: "id,request_id",
+      select: "id,request_id,title,due_at",
     },
   );
 
@@ -160,7 +185,12 @@ async function updateTaskRecord(
     };
   }
 
+  if (options.onSuccess) {
+    await options.onSuccess(result.data[0] ?? {});
+  }
+
   revalidatePath("/taches");
+  revalidatePath("/aujourdhui");
   revalidatePath(`/taches/${options.taskId}`);
   if (options.requestId) {
     revalidatePath(`/requests/${options.requestId}`);

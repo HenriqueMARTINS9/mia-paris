@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { insertActivityLogViaRest } from "@/lib/activity-logs";
+import { authorizeServerAction } from "@/features/auth/server-authorization";
+import { notifyBlockedProduction } from "@/features/notifications/lib/operational-notifications";
 import {
   mapUiProductionRiskToDatabaseValues,
   mapUiProductionStatusToDatabaseValues,
@@ -18,6 +20,7 @@ import {
   isMissingSupabaseColumnError,
   supabaseRestPatch,
 } from "@/lib/supabase/rest";
+import { readString } from "@/lib/record-helpers";
 
 interface UpdateProductionStatusInput {
   productionId: string;
@@ -55,6 +58,19 @@ export async function updateProductionStatusAction(
       mapUiProductionStatusToDatabaseValues(input.status),
     ),
     productionId: input.productionId,
+    onSuccess:
+      input.status === "blocked"
+        ? async (record) => {
+            await notifyBlockedProduction({
+              blockingReason:
+                readString(record, ["blocking_reason", "blocked_reason"]) ?? null,
+              productionId: input.productionId,
+              title:
+                readString(record, ["order_number", "title", "id"]) ??
+                "Production bloquée",
+            });
+          }
+        : undefined,
     successMessage: `Statut production mis à jour: ${productionStatusMeta[input.status].label}.`,
   });
 }
@@ -109,6 +125,18 @@ export async function updateProductionBlockingReasonAction(
 ): Promise<ProductionMutationResult> {
   return patchFirstMatchingPayload({
     field: "blocking_reason",
+    onSuccess:
+      input.blockingReason?.trim()
+        ? async (record) => {
+            await notifyBlockedProduction({
+              blockingReason: input.blockingReason?.trim() ?? null,
+              productionId: input.productionId,
+              title:
+                readString(record, ["order_number", "title", "id"]) ??
+                "Production bloquée",
+            });
+          }
+        : undefined,
     payloads: buildSingleFieldPayloads(
       [
         "blocking_reason",
@@ -153,10 +181,21 @@ function buildSingleFieldPayloads(columns: string[], values: Array<string | null
 
 async function patchFirstMatchingPayload(options: {
   field: ProductionMutationResult["field"];
+  onSuccess?: (record: Record<string, unknown>) => Promise<void>;
   payloads: Array<Record<string, unknown>>;
   productionId: string;
   successMessage: string;
 }): Promise<ProductionMutationResult> {
+  const authorization = await authorizeServerAction("productions.update");
+
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      field: options.field,
+      message: authorization.message,
+    };
+  }
+
   if (!options.productionId) {
     return {
       ok: false,
@@ -176,7 +215,7 @@ async function patchFirstMatchingPayload(options: {
       },
       {
         id: `eq.${options.productionId}`,
-        select: "id,request_id",
+        select: "id,request_id,order_number,title,blocking_reason,blocked_reason",
       },
     );
 
@@ -185,6 +224,8 @@ async function patchFirstMatchingPayload(options: {
 
       await insertActivityLogViaRest({
         action: `production_${options.field}_updated`,
+        actorId: authorization.currentUser.appUser?.id ?? null,
+        actorType: "user",
         description: options.successMessage,
         entityId: options.productionId,
         entityType: "production",
@@ -192,7 +233,12 @@ async function patchFirstMatchingPayload(options: {
         requestId,
       });
 
+      if (options.onSuccess) {
+        await options.onSuccess(result.data[0] ?? {});
+      }
+
       revalidatePath("/productions");
+      revalidatePath("/aujourdhui");
       if (requestId) {
         revalidatePath(`/requests/${requestId}`);
       }

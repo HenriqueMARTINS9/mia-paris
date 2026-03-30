@@ -23,7 +23,7 @@ function LogoutSubmitButton() {
       variant="outline"
       size="sm"
       disabled={pending}
-      className="rounded-2xl"
+      className="rounded-lg border-black/8 bg-white shadow-none"
     >
       {pending ? (
         <>

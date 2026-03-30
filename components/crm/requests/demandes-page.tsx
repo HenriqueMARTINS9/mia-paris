@@ -12,6 +12,7 @@ import {
 import { EmptyState } from "@/components/crm/empty-state";
 import { ErrorState } from "@/components/crm/error-state";
 import { MetricCard } from "@/components/crm/metric-card";
+import { MobileFilterSheet } from "@/components/crm/mobile-filter-sheet";
 import { PageHeader } from "@/components/crm/page-header";
 import { RequestDetailPanel } from "@/components/crm/requests/request-detail-panel";
 import { RequestFilters } from "@/components/crm/requests/request-filters";
@@ -27,6 +28,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { requestStatusMeta } from "@/features/requests/metadata";
+import { MobileRequestCard } from "@/features/requests/components/mobile-request-card";
 import type {
   RequestAssigneeOption,
   RequestOverviewListItem,
@@ -178,7 +180,7 @@ export function DemandesPage({
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <MetricCard
           label="À qualifier"
           value={String(qualificationCount)}
@@ -207,29 +209,76 @@ export function DemandesPage({
         />
       </div>
 
-      <RequestFilters
-        search={search}
-        onSearchChange={setSearch}
-        selectedClient={selectedClient}
-        onClientChange={setSelectedClient}
-        selectedStatus={selectedStatus}
-        onStatusChange={setSelectedStatus}
-        selectedPriority={selectedPriority}
-        onPriorityChange={setSelectedPriority}
-        clients={clients}
-      />
+      <div className="md:hidden">
+        <MobileFilterSheet
+          title="Filtrer les demandes"
+          description="Affiner rapidement les dossiers par client, statut, priorité et recherche métier."
+        >
+          <RequestFilters
+            search={search}
+            onSearchChange={setSearch}
+            selectedClient={selectedClient}
+            onClientChange={setSelectedClient}
+            selectedStatus={selectedStatus}
+            onStatusChange={setSelectedStatus}
+            selectedPriority={selectedPriority}
+            onPriorityChange={setSelectedPriority}
+            clients={clients}
+          />
+        </MobileFilterSheet>
+      </div>
+
+      <div className="hidden md:block">
+        <RequestFilters
+          search={search}
+          onSearchChange={setSearch}
+          selectedClient={selectedClient}
+          onClientChange={setSelectedClient}
+          selectedStatus={selectedStatus}
+          onStatusChange={setSelectedStatus}
+          selectedPriority={selectedPriority}
+          onPriorityChange={setSelectedPriority}
+          clients={clients}
+        />
+      </div>
 
       <div className="flex min-w-0 flex-col gap-4">
-        <Card>
-          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <Badge variant="outline">Vue opérationnelle</Badge>
-              <CardTitle className="mt-3">Demandes entrantes et en cours</CardTitle>
+        <div className="grid gap-3 md:hidden">
+          {filteredRequests.map((request) => (
+            <MobileRequestCard
+              key={request.id}
+              request={request}
+              assignees={assignees}
+              assigneesError={assigneesError}
+              onOpen={() => handleSelectRequest(request.id)}
+            />
+          ))}
+        </div>
+
+        <Card className="hidden md:block">
+          <CardHeader className="gap-4 border-b border-black/[0.06] pb-5">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+              <div>
+                <Badge variant="outline" className="bg-[#fbf8f2]">
+                  Vue opérationnelle
+                </Badge>
+                <CardTitle className="mt-3">Demandes entrantes et en cours</CardTitle>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                  Vue compacte pour absorber le flux client, arbitrer les priorités et faire avancer le pipeline sans perdre le contexte dossier.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline" className="bg-white">
+                  {filteredRequests.length} visibles
+                </Badge>
+                <Badge variant="outline" className="bg-white">
+                  {criticalCount} urgentes
+                </Badge>
+                <Badge variant="outline" className="bg-white">
+                  {dueSoonCount} sous 48h
+                </Badge>
+              </div>
             </div>
-            <p className="max-w-xl text-sm leading-6 text-muted-foreground">
-              Chaque ligne est maintenant issue de Supabase et conserve la
-              lecture dense du front existant.
-            </p>
           </CardHeader>
           <CardContent className="px-0 pb-0">
             <RequestsTable
@@ -240,43 +289,34 @@ export function DemandesPage({
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-semibold">Répartition du pipeline</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Les statuts UI sont dérivés proprement des statuts bruts de la
-                vue pour ne pas casser l&apos;expérience actuelle.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {(
-                [
-                  "new",
-                  "qualification",
-                  "costing",
-                  "awaiting_validation",
-                  "approved",
-                  "in_production",
-                ] as const
-              ).map((status) => {
-                const count = filteredRequests.filter(
-                  (request) => request.status === status,
-                ).length;
+        <div className="hidden gap-3 rounded-[1.5rem] border border-black/[0.06] bg-[#fbf8f2]/95 p-4 md:grid md:grid-cols-2 xl:grid-cols-3">
+          {(
+            [
+              "new",
+              "qualification",
+              "costing",
+              "awaiting_validation",
+              "approved",
+              "in_production",
+            ] as const
+          ).map((status) => {
+            const count = filteredRequests.filter(
+              (request) => request.status === status,
+            ).length;
 
-                return (
-                  <Badge
-                    key={status}
-                    variant="secondary"
-                    className="normal-case tracking-normal"
-                  >
-                    {requestStatusMeta[status].label} · {count}
-                  </Badge>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+            return (
+              <div
+                key={status}
+                className="rounded-[1.1rem] border border-black/[0.06] bg-white px-4 py-3"
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  {requestStatusMeta[status].label}
+                </p>
+                <p className="mt-2 text-2xl font-semibold tracking-tight">{count}</p>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <Sheet

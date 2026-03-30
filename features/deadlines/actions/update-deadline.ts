@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { authorizeServerAction } from "@/features/auth/server-authorization";
+import { notifyUrgentDeadline } from "@/features/notifications/lib/operational-notifications";
 import {
   deadlineStatusMeta,
   mapUiDeadlineStatusToDatabaseStatus,
@@ -10,6 +12,7 @@ import {
 } from "@/features/deadlines/metadata";
 import type { DeadlinePriority, DeadlineStatus } from "@/features/deadlines/types";
 import type { RequestMutationResult } from "@/features/requests/types";
+import { readString } from "@/lib/record-helpers";
 import { supabaseRestPatch } from "@/lib/supabase/rest";
 
 interface UpdateDeadlinePriorityInput {
@@ -59,6 +62,17 @@ export async function updateDeadlineStatusAction(
     {
       deadlineId: input.deadlineId,
       field: "status",
+      onSuccess:
+        input.status !== "done"
+          ? async (record) => {
+              await notifyUrgentDeadline({
+                deadlineAt: readString(record, ["deadline_at"]) ?? null,
+                label: readString(record, ["label"]) ?? "Deadline urgente",
+                requestId:
+                  readString(record, ["request_id"]) ?? input.requestId ?? null,
+              });
+            }
+          : undefined,
       requestId: input.requestId ?? null,
       successMessage: `Statut deadline mis à jour: ${deadlineStatusMeta[input.status].label}.`,
     },
@@ -81,6 +95,7 @@ async function updateDeadlineRecord(
   options: {
     deadlineId: string;
     field: RequestMutationResult["field"];
+    onSuccess?: (record: Record<string, unknown>) => Promise<void>;
     requestId: string | null;
     successMessage: string;
   },
@@ -93,12 +108,22 @@ async function updateDeadlineRecord(
     };
   }
 
+  const authorization = await authorizeServerAction("deadlines.update");
+
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      field: options.field,
+      message: authorization.message,
+    };
+  }
+
   const result = await supabaseRestPatch<Array<Record<string, unknown>>>(
     "deadlines",
     values,
     {
       id: `eq.${deadlineId}`,
-      select: "id,request_id",
+      select: "id,request_id,label,deadline_at",
     },
   );
 
@@ -119,7 +144,12 @@ async function updateDeadlineRecord(
     };
   }
 
+  if (options.onSuccess) {
+    await options.onSuccess(result.data[0] ?? {});
+  }
+
   revalidatePath("/deadlines");
+  revalidatePath("/aujourdhui");
   if (options.requestId) {
     revalidatePath(`/requests/${options.requestId}`);
   }

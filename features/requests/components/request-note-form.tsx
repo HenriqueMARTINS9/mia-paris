@@ -5,6 +5,7 @@ import { Loader2, NotebookPen } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { useAuthorization } from "@/features/auth/components/auth-role-provider";
 import type { RequestNoteField } from "@/features/requests/detail-types";
 import { appendRequestNoteAction } from "@/features/requests/actions/update-request";
 import { Button } from "@/components/ui/button";
@@ -22,8 +23,13 @@ export function RequestNoteForm({
   requestId,
 }: Readonly<RequestNoteFormProps>) {
   const router = useRouter();
+  const { can } = useAuthorization();
   const [note, setNote] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  if (!can("requests.update")) {
+    return null;
+  }
 
   function handleSubmit() {
     startTransition(async () => {

@@ -25,7 +25,7 @@ export function GmailSyncStatusCard({
 
   return (
     <Card>
-      <CardHeader className="space-y-4">
+      <CardHeader className="space-y-4 border-b border-black/[0.06] pb-5">
         <div className="flex items-center gap-2">
           <RefreshCcw className="h-4 w-4 text-muted-foreground" />
           <CardTitle>Dernières sync Gmail</CardTitle>
@@ -50,7 +50,7 @@ export function GmailSyncStatusCard({
         </div>
 
         {latestSync ? (
-          <div className="rounded-3xl border border-white/70 bg-white/65 p-4">
+          <div className="rounded-[1.35rem] border border-black/[0.06] bg-[#fbf8f2]/88 p-4">
             <div className="flex flex-wrap items-center gap-2">
               {latestSync.ok ? (
                 <CheckCircle2 className="h-4 w-4 text-[var(--success)]" />
@@ -64,6 +64,7 @@ export function GmailSyncStatusCard({
             <p className="mt-2 text-sm text-muted-foreground">
               {formatDateTime(latestSync.createdAt)}
               {latestSync.connectedInboxEmail ? ` · ${latestSync.connectedInboxEmail}` : ""}
+              {latestSync.syncMode ? ` · ${latestSync.syncMode}` : ""}
             </p>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <MiniMetric label="Threads" value={String(latestSync.importedThreads)} />
@@ -86,29 +87,10 @@ export function GmailSyncStatusCard({
           <p className="text-sm text-muted-foreground">{syncError}</p>
         ) : null}
 
-        {latestSyncs.length > 1 ? (
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Historique récent
-            </p>
-            {latestSyncs.slice(1, 4).map((sync) => (
-              <div
-                key={sync.id}
-                className="flex items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/70 px-4 py-3 text-sm"
-              >
-                <div className="min-w-0">
-                  <p className="font-medium">
-                    {sync.ok ? "Sync réussie" : "Sync en erreur"}
-                  </p>
-                  <p className="text-muted-foreground">{formatDateTime(sync.createdAt)}</p>
-                </div>
-                <div className="text-right text-muted-foreground">
-                  <p>{sync.importedMessages} emails</p>
-                  <p>{sync.ignoredMessages} ignorés</p>
-                </div>
-              </div>
-            ))}
-          </div>
+        {latestSync?.queryUsed ? (
+          <p className="text-xs text-muted-foreground">
+            Query Gmail utilisée: {latestSync.queryUsed}
+          </p>
         ) : null}
       </CardContent>
     </Card>
@@ -132,7 +114,7 @@ function StatBox({
         : "bg-white/70 text-foreground";
 
   return (
-    <div className={`rounded-2xl border border-white/70 px-4 py-4 ${toneClass}`}>
+    <div className={`rounded-[1.15rem] border border-black/[0.06] px-4 py-4 ${toneClass}`}>
       <p className="text-xs font-semibold uppercase tracking-[0.18em]">{label}</p>
       <p className="mt-3 text-3xl font-semibold tracking-tight">{value}</p>
     </div>
@@ -144,7 +126,7 @@ function MiniMetric({
   value,
 }: Readonly<{ label: string; value: string }>) {
   return (
-    <div className="rounded-2xl border border-white/70 bg-white/70 px-3 py-3 text-sm">
+    <div className="rounded-[1.15rem] border border-black/[0.06] bg-white px-3 py-3 text-sm">
       <p className="text-muted-foreground">{label}</p>
       <p className="mt-1 font-semibold">{value}</p>
     </div>

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { authorizeServerAction } from "@/features/auth/server-authorization";
 import { mapUiEmailStatusToDatabaseValues } from "@/features/emails/metadata";
 import type {
   EmailMutationResult,
@@ -196,6 +197,16 @@ async function patchEmailWithPayloads(options: {
   payloads: Array<Record<string, unknown>>;
   successMessage: string;
 }): Promise<EmailMutationResult> {
+  const authorization = await authorizeServerAction("emails.qualify");
+
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      field: options.field,
+      message: authorization.message,
+    };
+  }
+
   if (!options.emailId) {
     return {
       ok: false,

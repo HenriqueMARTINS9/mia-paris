@@ -14,7 +14,13 @@ export function LinkToExistingRequestAction({
   onClick,
 }: Readonly<LinkToExistingRequestActionProps>) {
   return (
-    <Button variant="outline" size="sm" onClick={onClick} disabled={disabled || isPending}>
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={onClick}
+      disabled={disabled || isPending}
+      className="w-full sm:w-auto"
+    >
       {isPending ? (
         <>
           <Loader2 className="h-4 w-4 animate-spin" />

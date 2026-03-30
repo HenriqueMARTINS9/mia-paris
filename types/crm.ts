@@ -6,6 +6,13 @@ export type JsonValue =
   | { [key: string]: JsonValue }
   | JsonValue[];
 
+export type AppUserRole =
+  | "admin"
+  | "development"
+  | "production"
+  | "logistics"
+  | "sales";
+
 export interface RequestOverview {
   id: string;
   title: string;
@@ -56,6 +63,7 @@ export interface UserRecord {
   auth_user_id: string | null;
   full_name: string | null;
   email: string | null;
+  role?: string | null;
   [key: string]: JsonValue | undefined;
 }
 
@@ -194,6 +202,26 @@ export interface InboxRecord {
   [key: string]: JsonValue | undefined;
 }
 
+export interface GmailSyncRunRecord {
+  id: string;
+  inbox_id?: string | null;
+  triggered_by_user_id?: string | null;
+  sync_mode?: string | null;
+  query_used?: string | null;
+  imported_threads?: number | null;
+  imported_messages?: number | null;
+  ignored_messages?: number | null;
+  error_count?: number | null;
+  ok?: boolean | null;
+  message?: string | null;
+  error_message?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  metadata?: JsonValue;
+  created_at?: string | null;
+  [key: string]: JsonValue | undefined;
+}
+
 export interface EmailRecord {
   id: string;
   inbox_id?: string | null;
@@ -287,6 +315,49 @@ export interface DocumentRecord {
   version?: number | null;
   uploaded_by_user_id?: string | null;
   metadata?: JsonValue;
+  created_at?: string | null;
+  updated_at?: string | null;
+  [key: string]: JsonValue | undefined;
+}
+
+export interface PushSubscriptionRecord {
+  id: string;
+  user_id?: string | null;
+  endpoint?: string | null;
+  p256dh_key?: string | null;
+  auth_key?: string | null;
+  user_agent?: string | null;
+  enabled?: boolean | null;
+  last_error?: string | null;
+  last_used_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  [key: string]: JsonValue | undefined;
+}
+
+export interface NotificationPreferenceRecord {
+  id: string;
+  user_id?: string | null;
+  push_enabled?: boolean | null;
+  email_new_unprocessed?: boolean | null;
+  deadline_24h?: boolean | null;
+  task_critical?: boolean | null;
+  production_blocked?: boolean | null;
+  gmail_sync_failed?: boolean | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  [key: string]: JsonValue | undefined;
+}
+
+export interface ReplyDraftRecord {
+  id: string;
+  user_id?: string | null;
+  source_type?: string | null;
+  source_id?: string | null;
+  reply_type?: string | null;
+  subject?: string | null;
+  body?: string | null;
+  context?: JsonValue;
   created_at?: string | null;
   updated_at?: string | null;
   [key: string]: JsonValue | undefined;

@@ -12,8 +12,11 @@ import {
 } from "lucide-react";
 
 import { CreateRequestTaskForm } from "@/features/tasks/components/create-request-task-form";
+import { CreateTaskDialog } from "@/features/tasks/components/create-task-dialog";
 import { RequestMutationControls } from "@/features/requests/components/request-mutation-controls";
 import { RequestNoteForm } from "@/features/requests/components/request-note-form";
+import { RequestReplyCard } from "@/features/replies/components/request-reply-card";
+import { CreateDeadlineDialog } from "@/features/deadlines/components/create-deadline-dialog";
 import type { RequestDetailPageData } from "@/features/requests/detail-types";
 import {
   ProductionStageBadge,
@@ -67,18 +70,26 @@ export function RequestDetailPage({ data }: Readonly<RequestDetailPageProps>) {
                 Retour Demandes
               </Link>
             </Button>
-            <Button asChild variant="outline">
-              <Link href={`/taches?requestId=${request.id}#create-task-form`}>
-                <FolderKanban className="h-4 w-4" />
-                Nouvelle tâche
-              </Link>
-            </Button>
-            <Button asChild>
-              <Link href={`/deadlines?requestId=${request.id}#create-deadline-form`}>
-                <Clock3 className="h-4 w-4" />
-                Nouvelle deadline
-              </Link>
-            </Button>
+            <CreateTaskDialog
+              requestId={request.id}
+              assignees={data.assignees}
+              assigneesError={data.assigneesError}
+              defaultAssignedUserId={request.assignedUserId}
+              defaultDueAt={request.dueAt}
+              triggerLabel="Nouvelle tâche"
+            />
+            <CreateDeadlineDialog
+              defaultDeadlineAt={request.dueAt}
+              defaultRequestId={request.id}
+              requestOptions={[
+                {
+                  clientName: request.clientName,
+                  id: request.id,
+                  label: `${request.reference} · ${request.title}`,
+                },
+              ]}
+              triggerLabel="Nouvelle deadline"
+            />
           </>
         }
       />
@@ -94,19 +105,21 @@ export function RequestDetailPage({ data }: Readonly<RequestDetailPageProps>) {
         </Card>
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_420px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_400px]">
         <div className="min-w-0 space-y-6">
           <Card>
-            <CardHeader className="space-y-4">
+            <CardHeader className="space-y-5 border-b border-black/[0.06] pb-5">
               <div className="flex flex-wrap items-center gap-2">
                 <RequestStatusBadge status={request.status} />
                 <RequestPriorityBadge priority={request.priority} />
                 <ProductionStageBadge stage={request.productionStage} />
-                <Badge variant="outline">{request.requestTypeLabel}</Badge>
+                <Badge variant="outline" className="bg-[#fbf8f2]">
+                  {request.requestTypeLabel}
+                </Badge>
               </div>
               <div>
                 <CardTitle className="text-[1.5rem]">{request.title}</CardTitle>
-                <CardDescription className="mt-2">
+                <CardDescription className="mt-3 max-w-3xl">
                   {request.requestSummary}
                 </CardDescription>
               </div>
@@ -185,7 +198,7 @@ export function RequestDetailPage({ data }: Readonly<RequestDetailPageProps>) {
               {data.tasks.map((task) => (
                 <div
                   key={task.id}
-                  className="rounded-2xl border border-white/70 bg-white/70 p-4"
+                  className="rounded-[1.2rem] border border-black/[0.06] bg-[#fbf8f2]/85 p-4"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold">{task.title}</p>
@@ -213,7 +226,7 @@ export function RequestDetailPage({ data }: Readonly<RequestDetailPageProps>) {
               {data.deadlines.map((deadline) => (
                 <div
                   key={deadline.id}
-                  className="rounded-2xl border border-white/70 bg-white/70 p-4"
+                  className="rounded-[1.2rem] border border-black/[0.06] bg-[#fbf8f2]/85 p-4"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold">{deadline.label}</p>
@@ -244,7 +257,7 @@ export function RequestDetailPage({ data }: Readonly<RequestDetailPageProps>) {
               {data.validations.map((validation) => (
                 <div
                   key={validation.id}
-                  className="rounded-2xl border border-white/70 bg-white/70 p-4"
+                  className="rounded-[1.2rem] border border-black/[0.06] bg-[#fbf8f2]/85 p-4"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold">{validation.label}</p>
@@ -274,7 +287,7 @@ export function RequestDetailPage({ data }: Readonly<RequestDetailPageProps>) {
               {data.documents.map((document) => (
                 <div
                   key={document.id}
-                  className="rounded-2xl border border-white/70 bg-white/70 p-4"
+                  className="rounded-[1.2rem] border border-black/[0.06] bg-[#fbf8f2]/85 p-4"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold">{document.name}</p>
@@ -319,7 +332,7 @@ export function RequestDetailPage({ data }: Readonly<RequestDetailPageProps>) {
                 data.history.map((event) => (
                   <div
                     key={event.id}
-                    className="flex items-start gap-3 rounded-2xl border border-white/70 bg-white/70 px-4 py-4"
+                    className="flex items-start gap-3 rounded-[1.2rem] border border-black/[0.06] bg-[#fbf8f2]/85 px-4 py-4"
                   >
                     <div
                       className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-[11px] font-semibold uppercase tracking-[0.14em] ${activityTone[event.category]}`}
@@ -349,9 +362,9 @@ export function RequestDetailPage({ data }: Readonly<RequestDetailPageProps>) {
           </Card>
         </div>
 
-        <div className="space-y-6 xl:sticky xl:top-24 xl:self-start">
+        <div className="space-y-6 xl:sticky xl:top-28 xl:self-start">
           <Card>
-            <CardHeader className="space-y-4">
+            <CardHeader className="space-y-4 border-b border-black/[0.06] pb-5">
               <div className="flex flex-wrap items-center gap-2">
                 <RequestStatusBadge status={request.status} />
                 <RequestPriorityBadge priority={request.priority} />
@@ -380,6 +393,8 @@ export function RequestDetailPage({ data }: Readonly<RequestDetailPageProps>) {
             noteField={request.noteField}
           />
 
+          <RequestReplyCard request={request} />
+
           <CreateRequestTaskForm
             key={`${request.id}:${request.assignedUserId ?? "none"}:${request.dueAt}`}
             requestId={request.id}
@@ -402,7 +417,7 @@ interface DetailStatCardProps {
 
 function DetailStatCard({ label, meta, value }: Readonly<DetailStatCardProps>) {
   return (
-    <div className="rounded-2xl border border-white/70 bg-white/60 p-4">
+    <div className="rounded-[1.2rem] border border-black/[0.06] bg-[#fbf8f2]/90 p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
         {label}
       </p>
@@ -421,7 +436,7 @@ interface SectionCardProps {
 function SectionCard({ content, icon: Icon, title }: Readonly<SectionCardProps>) {
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="border-b border-black/[0.06] pb-4">
         <div className="flex items-center gap-2">
           <Icon className="h-4 w-4 text-muted-foreground" />
           <CardTitle>{title}</CardTitle>
@@ -452,7 +467,7 @@ function RelatedSection({
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="border-b border-black/[0.06] pb-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Icon className="h-4 w-4 text-muted-foreground" />
@@ -479,7 +494,7 @@ interface MetaRowProps {
 
 function MetaRow({ label, value }: Readonly<MetaRowProps>) {
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className="flex items-center justify-between gap-3 border-b border-black/[0.05] pb-2 last:border-b-0 last:pb-0">
       <span className="text-muted-foreground">{label}</span>
       <span className="text-right font-medium">{value}</span>
     </div>

@@ -1,8 +1,13 @@
 import "server-only";
 
 import { getCurrentUserContext } from "@/features/auth/queries";
+import { recordGmailSyncRun } from "@/features/emails/lib/gmail-sync-history";
 import { parseGmailMessage } from "@/features/emails/lib/gmail-parser";
-import type { GmailSyncResult } from "@/features/emails/types";
+import type { GmailSyncMode, GmailSyncResult } from "@/features/emails/types";
+import {
+  notifyGmailSyncFailure,
+  notifyNewUnprocessedEmails,
+} from "@/features/notifications/lib/operational-notifications";
 import { insertActivityLogViaAdmin } from "@/lib/activity-logs";
 import { getGoogleGmailEnv } from "@/lib/google/env";
 import { getGmailMessage, listGmailMessages } from "@/lib/google/gmail";
@@ -17,14 +22,17 @@ export async function syncLatestGmailMessagesForCurrentUser(
 ): Promise<GmailSyncResult> {
   const currentUser = await getCurrentUserContext();
 
-  if (!currentUser?.appUser) {
+  if (!currentUser?.authUser) {
     return {
       connectedInboxEmail: null,
       ignoredMessages: 0,
       importedMessages: 0,
       importedThreads: 0,
-      message: "Session utilisateur introuvable pour synchroniser Gmail.",
+      message: "Session Supabase introuvable pour synchroniser Gmail.",
       ok: false,
+      queryUsed: null,
+      syncMode: "incremental",
+      syncedAt: null,
     };
   }
 
@@ -37,32 +45,30 @@ export async function syncLatestGmailMessagesForCurrentUser(
       message:
         "SUPABASE_SERVICE_ROLE_KEY est requis pour stocker les emails Gmail synchronisés.",
       ok: false,
+      queryUsed: null,
+      syncMode: "incremental",
+      syncedAt: null,
     };
   }
 
   const admin = createSupabaseAdminClient();
-  const inboxResult = await admin
-    .from("inboxes")
-    .select("*")
-    .eq("user_id", currentUser.appUser.id)
-    .eq("provider", "google")
-    .eq("is_active", true)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const sharedInboxResult = await getSharedActiveGoogleInbox(admin);
 
-  if (inboxResult.error) {
+  if (sharedInboxResult.error) {
     return {
       connectedInboxEmail: null,
       ignoredMessages: 0,
       importedMessages: 0,
       importedThreads: 0,
-      message: `Impossible de charger la boîte Gmail connectée: ${inboxResult.error.message}`,
+      message: `Impossible de charger la boîte Gmail partagée: ${sharedInboxResult.error}`,
       ok: false,
+      queryUsed: null,
+      syncMode: "incremental",
+      syncedAt: null,
     };
   }
 
-  const inbox = (inboxResult.data as InboxRecord | null) ?? null;
+  const inbox = sharedInboxResult.inbox;
 
   if (!inbox) {
     return {
@@ -70,10 +76,18 @@ export async function syncLatestGmailMessagesForCurrentUser(
       ignoredMessages: 0,
       importedMessages: 0,
       importedThreads: 0,
-      message: "Aucun compte Gmail connecté pour cet utilisateur.",
+      message: "Aucune boîte Gmail partagée n'est connectée dans l'application.",
       ok: false,
+      queryUsed: null,
+      syncMode: "incremental",
+      syncedAt: null,
     };
   }
+
+  const syncMode = resolveSyncMode({
+    lastSyncedAt: inbox.last_synced_at ?? null,
+    syncCursor: inbox.sync_cursor ?? null,
+  });
 
   try {
     const syncResult = await syncInbox({
@@ -90,10 +104,32 @@ export async function syncLatestGmailMessagesForCurrentUser(
     });
 
     await recordGmailSyncEvent({
-      actorId: currentUser.appUser.id,
+      actorId: currentUser.appUser?.id ?? null,
       inbox,
       result: syncResult,
       success: true,
+    });
+
+    await recordGmailSyncRun({
+      errorCount: syncResult.errorCount ?? 0,
+      errorMessage: syncResult.ok ? null : syncResult.message,
+      ignoredMessages: syncResult.ignoredMessages,
+      importedMessages: syncResult.importedMessages,
+      importedThreads: syncResult.importedThreads,
+      inboxId: inbox.id,
+      message: syncResult.message,
+      metadata: {
+        connectedInboxEmail: syncResult.connectedInboxEmail,
+      },
+      ok: syncResult.ok,
+      queryUsed: syncResult.queryUsed ?? null,
+      syncMode: syncResult.syncMode ?? syncMode,
+      triggeredByUserId: currentUser.appUser?.id ?? null,
+    });
+
+    await notifyNewUnprocessedEmails({
+      count: syncResult.importedMessages,
+      inboxEmail: syncResult.connectedInboxEmail,
     });
 
     return syncResult;
@@ -114,32 +150,61 @@ export async function syncLatestGmailMessagesForCurrentUser(
       .eq("id", inbox.id);
 
     await recordGmailSyncEvent({
-      actorId: currentUser.appUser.id,
+      actorId: currentUser.appUser?.id ?? null,
       inbox,
       result: {
         connectedInboxEmail: inbox.email_address ?? null,
+        errorCount: 1,
         ignoredMessages: 0,
         importedMessages: 0,
         importedThreads: 0,
         message,
         ok: false,
+        queryUsed: null,
+        syncMode,
+        syncedAt: new Date().toISOString(),
       },
       success: false,
     });
 
+    await recordGmailSyncRun({
+      errorCount: 1,
+      errorMessage: message,
+      ignoredMessages: 0,
+      importedMessages: 0,
+      importedThreads: 0,
+      inboxId: inbox.id,
+      message,
+      metadata: {
+        connectedInboxEmail: inbox.email_address ?? null,
+      },
+      ok: false,
+      queryUsed: null,
+      syncMode,
+      triggeredByUserId: currentUser.appUser?.id ?? null,
+    });
+
+    await notifyGmailSyncFailure({
+      message,
+    });
+
     return {
       connectedInboxEmail: inbox.email_address ?? null,
+      errorCount: 1,
       ignoredMessages: 0,
       importedMessages: 0,
       importedThreads: 0,
       message,
       ok: false,
+      queryUsed: null,
+      syncMode,
+      syncedAt: new Date().toISOString(),
     };
   }
 }
 
 async function recordGmailSyncEvent(input: {
-  actorId: string;
+  actorId: string | null;
   inbox: InboxRecord;
   result: GmailSyncResult;
   success: boolean;
@@ -158,6 +223,9 @@ async function recordGmailSyncEvent(input: {
       importedThreads: input.result.importedThreads,
       message: input.result.message,
       ok: input.result.ok,
+      queryUsed: input.result.queryUsed ?? null,
+      syncMode: input.result.syncMode ?? null,
+      syncedAt: input.result.syncedAt ?? null,
     },
     requestId: null,
   });
@@ -166,7 +234,7 @@ async function recordGmailSyncEvent(input: {
 export async function getCurrentUserGmailInboxStatus() {
   const currentUser = await getCurrentUserContext();
 
-  if (!currentUser?.appUser) {
+  if (!currentUser?.authUser) {
     return {
       connected: false,
       emailAddress: null,
@@ -188,23 +256,14 @@ export async function getCurrentUserGmailInboxStatus() {
   }
 
   const admin = createSupabaseAdminClient();
-  const result = await admin
-    .from("inboxes")
-    .select("id,email_address,last_synced_at,last_error")
-    .eq("user_id", currentUser.appUser.id)
-    .eq("provider", "google")
-    .eq("is_active", true)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const inbox = (result.data as InboxRecord | null) ?? null;
+  const result = await getSharedActiveGoogleInbox(admin);
+  const inbox = result.inbox;
 
   if (result.error || !inbox) {
     return {
       connected: false,
       emailAddress: null,
-      error: result.error?.message ?? null,
+      error: result.error,
       inboxId: null,
       lastSyncedAt: null,
     };
@@ -219,6 +278,22 @@ export async function getCurrentUserGmailInboxStatus() {
   };
 }
 
+async function getSharedActiveGoogleInbox(admin: ReturnType<typeof createSupabaseAdminClient>) {
+  const result = await admin
+    .from("inboxes")
+    .select("*")
+    .eq("provider", "google")
+    .eq("is_active", true)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return {
+    error: result.error?.message ?? null,
+    inbox: (result.data as InboxRecord | null) ?? null,
+  };
+}
+
 async function syncInbox(input: {
   inbox: InboxRecord;
   limit: number;
@@ -227,11 +302,15 @@ async function syncInbox(input: {
   const accessToken = await ensureActiveAccessToken(input.inbox);
   const env = getGoogleGmailEnv();
   const maxResults = Math.max(1, Math.min(input.limit || env.googleGmailInitialSyncLimit, 100));
-  const syncQuery = buildSyncQuery(input.inbox.last_synced_at ?? null);
+  const syncState = buildSyncState({
+    lastSyncedAt: input.inbox.last_synced_at ?? null,
+    syncCursor: input.inbox.sync_cursor ?? null,
+  });
+  const syncTimestamp = new Date().toISOString();
   const listResult = await listGmailMessages({
     accessToken,
     maxResults,
-    query: syncQuery,
+    query: syncState.query,
   });
   const messageRefs = listResult.messages ?? [];
 
@@ -241,19 +320,23 @@ async function syncInbox(input: {
       .update(
         {
           last_error: null,
-          last_synced_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          last_synced_at: syncTimestamp,
+          updated_at: syncTimestamp,
         } as Database["public"]["Tables"]["inboxes"]["Update"] as never,
       )
       .eq("id", input.inbox.id);
 
     return {
       connectedInboxEmail: input.inbox.email_address ?? null,
+      errorCount: 0,
       ignoredMessages: 0,
       importedMessages: 0,
       importedThreads: 0,
       message: "Aucun nouvel email Gmail à importer.",
       ok: true,
+      queryUsed: syncState.query,
+      syncMode: syncState.mode,
+      syncedAt: syncTimestamp,
     };
   }
 
@@ -426,12 +509,12 @@ async function syncInbox(input: {
   await admin
     .from("inboxes")
     .update(
-      {
-        last_error: null,
-        last_synced_at: new Date().toISOString(),
-        sync_cursor: maxReceivedAt > 0 ? String(maxReceivedAt) : input.inbox.sync_cursor,
-        updated_at: new Date().toISOString(),
-      } as Database["public"]["Tables"]["inboxes"]["Update"] as never,
+        {
+          last_error: null,
+          last_synced_at: syncTimestamp,
+          sync_cursor: maxReceivedAt > 0 ? String(maxReceivedAt) : input.inbox.sync_cursor,
+          updated_at: syncTimestamp,
+        } as Database["public"]["Tables"]["inboxes"]["Update"] as never,
     )
     .eq("id", input.inbox.id);
 
@@ -445,11 +528,15 @@ async function syncInbox(input: {
 
   return {
     connectedInboxEmail: input.inbox.email_address ?? null,
+    errorCount: 0,
     ignoredMessages,
     importedMessages,
     importedThreads,
     message: `Synchronisation Gmail terminée: ${importedThreads} thread(s), ${importedMessages} email(s) importé(s), ${ignoredMessages} déjà présent(s).`,
     ok: true,
+    queryUsed: syncState.query,
+    syncMode: syncState.mode,
+    syncedAt: syncTimestamp,
   };
 }
 
@@ -496,7 +583,27 @@ async function ensureActiveAccessToken(inbox: InboxRecord) {
   return refreshedToken.access_token;
 }
 
-function buildSyncQuery(lastSyncedAt: string | null) {
+function buildSyncState(input: {
+  lastSyncedAt: string | null;
+  syncCursor: string | null;
+}) {
+  return {
+    mode: resolveSyncMode(input),
+    query: buildSyncQuery(input),
+  };
+}
+
+function resolveSyncMode(input: {
+  lastSyncedAt: string | null;
+  syncCursor: string | null;
+}): GmailSyncMode {
+  return input.lastSyncedAt || input.syncCursor ? "incremental" : "initial";
+}
+
+function buildSyncQuery(input: {
+  lastSyncedAt: string | null;
+  syncCursor: string | null;
+}) {
   const env = getGoogleGmailEnv();
   const queryParts = [] as string[];
 
@@ -504,11 +611,21 @@ function buildSyncQuery(lastSyncedAt: string | null) {
     queryParts.push(env.googleGmailSyncQuery.trim());
   }
 
-  if (lastSyncedAt) {
-    const afterEpoch = Math.max(
-      0,
-      Math.floor((new Date(lastSyncedAt).getTime() - 3_600_000) / 1000),
-    );
+  const syncCursorEpoch = input.syncCursor ? Number(input.syncCursor) : null;
+  const lastSyncedEpoch = input.lastSyncedAt
+    ? new Date(input.lastSyncedAt).getTime()
+    : null;
+  const referenceEpoch = Math.max(
+    0,
+    syncCursorEpoch && Number.isFinite(syncCursorEpoch)
+      ? syncCursorEpoch
+      : lastSyncedEpoch && Number.isFinite(lastSyncedEpoch)
+        ? lastSyncedEpoch
+        : 0,
+  );
+
+  if (referenceEpoch > 0) {
+    const afterEpoch = Math.max(0, Math.floor((referenceEpoch - 3_600_000) / 1000));
     queryParts.push(`after:${afterEpoch}`);
   }
 

@@ -57,7 +57,7 @@ export function TaskDetailPanel({
 
   return (
     <Card className={cn(mode === "desktop" && "sticky top-24")}>
-      <CardHeader className="space-y-4">
+      <CardHeader className="space-y-4 p-4 sm:p-6">
         <div className="flex flex-wrap items-center gap-2">
           <TaskStatusBadge status={task.status} />
           <RequestPriorityBadge priority={task.priority} />
@@ -65,18 +65,20 @@ export function TaskDetailPanel({
         </div>
 
         <div>
-          <CardTitle className="text-[1.35rem]">{task.title}</CardTitle>
-          <CardDescription className="mt-2">
+          <CardTitle className="break-words text-xl sm:text-[1.35rem]">
+            {task.title}
+          </CardTitle>
+          <CardDescription className="mt-2 break-words">
             {task.requestTitle}
           </CardDescription>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button asChild size="sm" variant="outline">
+        <div className="grid gap-2 sm:flex sm:flex-wrap">
+          <Button asChild size="sm" variant="outline" className="w-full sm:w-auto">
             <Link href={`/taches/${task.id}`}>Ouvrir la fiche tâche</Link>
           </Button>
           {task.requestId ? (
-            <Button asChild size="sm" variant="outline">
+            <Button asChild size="sm" variant="outline" className="w-full sm:w-auto">
               <Link href={`/requests/${task.requestId}`}>Voir la demande</Link>
             </Button>
           ) : null}
@@ -90,7 +92,7 @@ export function TaskDetailPanel({
         />
       </CardHeader>
 
-      <CardContent className="space-y-5">
+      <CardContent className="space-y-5 p-4 pt-0 sm:p-6 sm:pt-0">
         <div className="grid gap-3 sm:grid-cols-2">
           <InfoCard
             icon={Package2}
@@ -155,7 +157,7 @@ function InfoCard({ icon: Icon, title, lines }: Readonly<InfoCardProps>) {
       </div>
       <div className="mt-4 space-y-2">
         {lines.map((line) => (
-          <p key={line} className="text-sm text-foreground/80">
+          <p key={line} className="break-words text-sm text-foreground/80">
             {line}
           </p>
         ))}
@@ -171,9 +173,9 @@ interface MetaRowProps {
 
 function MetaRow({ label, value }: Readonly<MetaRowProps>) {
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
       <span className="text-muted-foreground">{label}</span>
-      <span className="text-right font-medium">{value}</span>
+      <span className="break-words font-medium sm:text-right">{value}</span>
     </div>
   );
 }

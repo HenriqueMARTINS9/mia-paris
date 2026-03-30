@@ -93,15 +93,28 @@ async function getCurrentAppUserWithClient(
   supabase: SupabaseClient<Database>,
   authUserId: string,
 ): Promise<UserRecord | null> {
-  const { data, error } = await supabase
-    .from("users")
-    .select("id,auth_user_id,full_name,email")
-    .eq("auth_user_id", authUserId)
-    .maybeSingle();
+  const selectVariants = [
+    "id,auth_user_id,full_name,email,role",
+    "id,auth_user_id,full_name,email",
+  ] as const;
 
-  if (error) {
+  for (const select of selectVariants) {
+    const { data, error } = await supabase
+      .from("users")
+      .select(select)
+      .eq("auth_user_id", authUserId)
+      .maybeSingle();
+
+    if (!error) {
+      return data;
+    }
+
     if (isMissingAuthUserIdColumnError(error)) {
       return null;
+    }
+
+    if (isMissingRoleColumnError(error) && select.includes("role")) {
+      continue;
     }
 
     throw new Error(
@@ -109,7 +122,7 @@ async function getCurrentAppUserWithClient(
     );
   }
 
-  return data;
+  return null;
 }
 
 function isMissingAuthUserIdColumnError(error: {
@@ -120,4 +133,8 @@ function isMissingAuthUserIdColumnError(error: {
     error.code === "42703" ||
     error.message.toLowerCase().includes("auth_user_id")
   );
+}
+
+function isMissingRoleColumnError(error: { code?: string; message: string }) {
+  return error.code === "42703" || error.message.toLowerCase().includes("role");
 }

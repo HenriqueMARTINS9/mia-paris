@@ -45,20 +45,22 @@ export function DeadlineDetailPanel({
 
   return (
     <Card className={cn(mode === "desktop" && "sticky top-24")}>
-      <CardHeader className="space-y-4">
+      <CardHeader className="space-y-4 p-4 sm:p-6">
         <div className="flex flex-wrap items-center gap-2">
           <DeadlineStatusBadge status={deadline.status} />
           <RequestPriorityBadge priority={deadline.priority} />
         </div>
         <div>
-          <CardTitle className="text-[1.35rem]">{deadline.label}</CardTitle>
-          <CardDescription className="mt-2">
+          <CardTitle className="break-words text-xl sm:text-[1.35rem]">
+            {deadline.label}
+          </CardTitle>
+          <CardDescription className="mt-2 break-words">
             {deadline.requestTitle}
           </CardDescription>
         </div>
         {deadline.requestId ? (
-          <div className="flex flex-wrap gap-2">
-            <Button asChild size="sm" variant="outline">
+          <div className="grid gap-2 sm:flex sm:flex-wrap">
+            <Button asChild size="sm" variant="outline" className="w-full sm:w-auto">
               <Link href={`/requests/${deadline.requestId}`}>Voir la demande</Link>
             </Button>
           </div>
@@ -69,7 +71,7 @@ export function DeadlineDetailPanel({
         />
       </CardHeader>
 
-      <CardContent className="space-y-5">
+      <CardContent className="space-y-5 p-4 pt-0 sm:p-6 sm:pt-0">
         <div className="grid gap-3 sm:grid-cols-2">
           <InfoCard
             icon={CalendarClock}
@@ -120,7 +122,7 @@ function InfoCard({ icon: Icon, title, lines }: Readonly<InfoCardProps>) {
       </div>
       <div className="mt-4 space-y-2">
         {lines.map((line) => (
-          <p key={line} className="text-sm text-foreground/80">
+          <p key={line} className="break-words text-sm text-foreground/80">
             {line}
           </p>
         ))}
@@ -136,9 +138,9 @@ interface MetaRowProps {
 
 function MetaRow({ label, value }: Readonly<MetaRowProps>) {
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
       <span className="text-muted-foreground">{label}</span>
-      <span className="text-right font-medium">{value}</span>
+      <span className="break-words font-medium sm:text-right">{value}</span>
     </div>
   );
 }

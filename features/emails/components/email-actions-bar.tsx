@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { useAuthorization } from "@/features/auth/components/auth-role-provider";
 import {
   attachEmailToRequestAction,
   ignoreEmailForNowAction,
@@ -31,6 +32,7 @@ export function EmailActionsBar({
   requestOptionsError = null,
 }: Readonly<EmailActionsBarProps>) {
   const router = useRouter();
+  const { can } = useAuthorization();
   const [linkedRequestValue, setLinkedRequestValue] = useState(
     email.linkedRequestId ?? "",
   );
@@ -109,11 +111,11 @@ export function EmailActionsBar({
   }
 
   return (
-    <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
+    <div className="rounded-3xl border border-white/70 bg-white/60 p-3.5 sm:p-4">
       <div className="grid gap-4">
-        <div className="grid gap-3 rounded-2xl border border-white/70 bg-white/65 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
+        <div className="grid gap-3 rounded-2xl border border-white/70 bg-white/65 p-3.5 sm:p-4">
+          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <p className="text-sm font-semibold">Statut de traitement</p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
                 L’email peut rester en attente, passer à revoir, être marqué traité ou être absorbé dans une demande CRM.
@@ -122,66 +124,71 @@ export function EmailActionsBar({
             <ProcessingStatusBadge status={email.status} />
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleMarkReview}
-              disabled={isReviewPending}
-            >
-              {isReviewPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  En cours
-                </>
-              ) : (
-                <>
-                  <TriangleAlert className="h-4 w-4" />
-                  Marquer à revoir
-                </>
-              )}
-            </Button>
+          {can("emails.qualify") ? (
+            <div className="grid gap-2 sm:flex sm:flex-wrap">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full sm:w-auto"
+                onClick={handleMarkReview}
+                disabled={isReviewPending}
+              >
+                {isReviewPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    En cours
+                  </>
+                ) : (
+                  <>
+                    <TriangleAlert className="h-4 w-4" />
+                    Marquer à revoir
+                  </>
+                )}
+              </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleIgnore}
-              disabled={isIgnorePending}
-            >
-              {isIgnorePending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  En cours
-                </>
-              ) : (
-                <>
-                  <Clock3 className="h-4 w-4" />
-                  Ignorer pour l’instant
-                </>
-              )}
-            </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full sm:w-auto"
+                onClick={handleIgnore}
+                disabled={isIgnorePending}
+              >
+                {isIgnorePending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    En cours
+                  </>
+                ) : (
+                  <>
+                    <Clock3 className="h-4 w-4" />
+                    Ignorer pour l’instant
+                  </>
+                )}
+              </Button>
 
-            <Button
-              size="sm"
-              onClick={handleMarkProcessed}
-              disabled={isProcessedPending}
-            >
-              {isProcessedPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  En cours
-                </>
-              ) : (
-                <>
-                  <CheckCheck className="h-4 w-4" />
-                  Marquer traité
-                </>
-              )}
-            </Button>
-          </div>
+              <Button
+                size="sm"
+                className="w-full sm:w-auto"
+                onClick={handleMarkProcessed}
+                disabled={isProcessedPending}
+              >
+                {isProcessedPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    En cours
+                  </>
+                ) : (
+                  <>
+                    <CheckCheck className="h-4 w-4" />
+                    Marquer traité
+                  </>
+                )}
+              </Button>
+            </div>
+          ) : null}
         </div>
 
-        <div className="grid gap-3 rounded-2xl border border-white/70 bg-white/65 p-4">
+        <div className="grid gap-3 rounded-2xl border border-white/70 bg-white/65 p-3.5 sm:p-4">
           <div>
             <p className="text-sm font-semibold">Rattacher à une demande existante</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
@@ -190,30 +197,38 @@ export function EmailActionsBar({
             </p>
           </div>
 
-          <ExistingRequestMatcher
-            requestOptions={requestOptions}
-            selectedValue={linkedRequestValue}
-            onSelectValue={setLinkedRequestValue}
-            disabled={isAttachPending}
-            error={requestOptionsError}
-          />
-
-          <div className="flex justify-end">
-            <div className="flex flex-wrap gap-2">
-              {currentLinkedRequestId ? (
-                <OpenCreatedRequestLink requestId={currentLinkedRequestId} />
-              ) : null}
-              <LinkToExistingRequestAction
-                onClick={handleAttachRequest}
-                isPending={isAttachPending}
-                disabled={
-                  requestOptions.length === 0 ||
-                  !linkedRequestValue ||
-                  linkedRequestValue === (currentLinkedRequestId ?? "")
-                }
+          {can("emails.qualify") ? (
+            <>
+              <ExistingRequestMatcher
+                requestOptions={requestOptions}
+                selectedValue={linkedRequestValue}
+                onSelectValue={setLinkedRequestValue}
+                disabled={isAttachPending}
+                error={requestOptionsError}
               />
+
+              <div className="grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
+                <div className="grid gap-2 sm:flex sm:flex-wrap">
+                  {currentLinkedRequestId ? (
+                    <OpenCreatedRequestLink requestId={currentLinkedRequestId} />
+                  ) : null}
+                  <LinkToExistingRequestAction
+                    onClick={handleAttachRequest}
+                    isPending={isAttachPending}
+                    disabled={
+                      requestOptions.length === 0 ||
+                      !linkedRequestValue ||
+                      linkedRequestValue === (currentLinkedRequestId ?? "")
+                    }
+                  />
+                </div>
+              </div>
+            </>
+          ) : currentLinkedRequestId ? (
+            <div className="grid gap-2 sm:flex sm:justify-end">
+              <OpenCreatedRequestLink requestId={currentLinkedRequestId} />
             </div>
-          </div>
+          ) : null}
         </div>
       </div>
     </div>

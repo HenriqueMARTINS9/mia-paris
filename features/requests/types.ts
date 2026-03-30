@@ -91,6 +91,21 @@ export interface RequestLinkOption {
   clientName: string;
 }
 
+export interface RequestFormOption {
+  id: string;
+  label: string;
+  secondary: string | null;
+  clientId?: string | null;
+}
+
+export interface RequestFormOptions {
+  assignees: RequestAssigneeOption[];
+  clients: RequestFormOption[];
+  contacts: RequestFormOption[];
+  models: RequestFormOption[];
+  productDepartments: RequestFormOption[];
+}
+
 export type RequestMutationField =
   | "status"
   | "priority"
@@ -104,4 +119,19 @@ export interface RequestMutationResult {
   ok: boolean;
   field: RequestMutationField;
   message: string;
+}
+
+export interface CreateRequestInput {
+  assignedUserId: string | null;
+  clientId: string | null;
+  contactId: string | null;
+  dueAt: string | null;
+  modelId: string | null;
+  priority: RequestPriority;
+  productDepartmentId: string | null;
+  requestType: string;
+  requestedAction: string | null;
+  status: RequestStatus;
+  summary: string | null;
+  title: string;
 }

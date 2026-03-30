@@ -18,27 +18,34 @@ export function PageHeader({
   actions,
 }: Readonly<PageHeaderProps>) {
   return (
-    <section className="glass-panel rounded-[1.75rem] border border-white/70 px-5 py-5 sm:px-6 lg:px-7">
-      <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+    <section className="rounded-[1.35rem] border border-black/[0.06] bg-white/82 px-4 py-4 shadow-[0_18px_44px_rgba(18,27,34,0.05)] backdrop-blur-xl sm:px-6 sm:py-5 lg:px-7">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0 max-w-3xl">
           {eyebrow ? (
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+            <Badge
+              variant="outline"
+              className="mb-3 border-black/[0.06] bg-[#fbf8f2] text-[11px] text-muted-foreground"
+            >
               {eyebrow}
-            </p>
+            </Badge>
           ) : null}
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl xl:text-[2.1rem]">
+            <h1 className="text-[1.65rem] font-semibold tracking-tight text-foreground sm:text-3xl xl:text-[2.15rem]">
               {title}
             </h1>
-            {badge ? <Badge>{badge}</Badge> : null}
+            {badge ? (
+              <Badge className="border-primary/10 bg-primary/[0.08] text-primary">
+                {badge}
+              </Badge>
+            ) : null}
           </div>
-          <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-[15px]">
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-[15px] sm:leading-7">
             {description}
           </p>
         </div>
 
         {actions ? (
-          <div className="flex w-full flex-wrap gap-2 xl:w-auto xl:max-w-[42%] xl:justify-end">
+          <div className="grid w-full gap-2 sm:flex sm:flex-wrap lg:w-auto lg:max-w-[45%] lg:justify-end [&>*]:w-full sm:[&>*]:w-auto">
             {actions}
           </div>
         ) : null}

@@ -1,5 +1,6 @@
 import { AlertTriangle, Factory } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ProductionStatusBadge,
@@ -13,10 +14,15 @@ export function BlockedProductionsPanel({
 }: Readonly<{ productions: ProductionListItem[] }>) {
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Factory className="h-4 w-4 text-muted-foreground" />
-          <CardTitle>Productions à risque</CardTitle>
+      <CardHeader className="border-b border-black/[0.06] pb-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Factory className="h-4 w-4 text-muted-foreground" />
+            <CardTitle>Productions à risque</CardTitle>
+          </div>
+          <Badge variant="outline" className="bg-[#fbf8f2]">
+            {productions.length}
+          </Badge>
         </div>
         <CardDescription>
           Commandes bloquées ou sensibles à arbitrer côté atelier.
@@ -27,9 +33,9 @@ export function BlockedProductionsPanel({
           productions.map((production) => (
             <div
               key={production.id}
-              className="rounded-2xl border border-white/70 bg-white/70 p-4"
+              className="rounded-[1.2rem] border border-black/[0.06] bg-[#fbf8f2]/85 p-4"
             >
-              <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold">{production.orderNumber}</p>
@@ -46,16 +52,16 @@ export function BlockedProductionsPanel({
                     {production.blockingReason ?? "Risque élevé sans blocage explicite."}
                   </p>
                 </div>
-                <div className="text-right text-sm text-muted-foreground">
-                  <div className="inline-flex items-center gap-1 text-destructive">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                  <span className="inline-flex items-center gap-1 text-destructive">
                     <AlertTriangle className="h-4 w-4" />
                     {production.isBlocked ? "Bloquée" : "Sous surveillance"}
-                  </div>
-                  <p className="mt-2">
+                  </span>
+                  <span>
                     {production.plannedEndAt
                       ? formatDateTime(production.plannedEndAt)
                       : "Fin non planifiée"}
-                  </p>
+                  </span>
                 </div>
               </div>
             </div>

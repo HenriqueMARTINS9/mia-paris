@@ -23,6 +23,7 @@ import {
   ProductionStatusBadge,
   RiskBadge,
 } from "@/features/productions/components/production-badges";
+import { CreateOrderDialog } from "@/features/orders/components/create-order-dialog";
 import { CreateProductionDialog } from "@/features/productions/components/create-production-dialog";
 import { ProductionDetailPanel } from "@/features/productions/components/production-detail-panel";
 import { ProductionFilters } from "@/features/productions/components/production-filters";
@@ -106,6 +107,10 @@ export function ProductionsPage({
       description="Pilotage textile B2B des commandes lancées : statut atelier, risque, planning prévisionnel et points bloquants."
       actions={
         <>
+          <CreateOrderDialog
+            options={formOptions}
+            optionsError={formOptionsError}
+          />
           <Button variant="outline">
             <ArrowDownToLine className="h-4 w-4" />
             Exporter
@@ -160,14 +165,37 @@ export function ProductionsPage({
 
       <div className="flex min-w-0 flex-col gap-4">
         <Card>
-          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <Badge variant="outline">Suivi atelier</Badge>
-              <CardTitle className="mt-3">Productions actives et à risque</CardTitle>
+          <CardHeader className="gap-4 border-b border-black/[0.06] pb-5">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+              <div>
+                <Badge variant="outline" className="bg-[#fbf8f2]">
+                  Suivi atelier
+                </Badge>
+                <CardTitle className="mt-3">Productions actives et à risque</CardTitle>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                  Vue terrain des commandes en production avec les dates utiles, le niveau de risque et les blocages à lever en priorité.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline" className="bg-white">
+                  {filteredProductions.length} suivis
+                </Badge>
+                <Badge variant="outline" className="bg-white">
+                  {
+                    filteredProductions.filter((production) => production.isBlocked)
+                      .length
+                  } bloqués
+                </Badge>
+                <Badge variant="outline" className="bg-white">
+                  {
+                    filteredProductions.filter(
+                      (production) =>
+                        production.risk === "critical" || production.risk === "high",
+                    ).length
+                  } à risque
+                </Badge>
+              </div>
             </div>
-            <p className="max-w-xl text-sm leading-6 text-muted-foreground">
-              Vue métier des commandes en production, avec mise en avant immédiate des blocages et du niveau de risque.
-            </p>
           </CardHeader>
           <CardContent className="px-0 pb-0">
             <ProductionsTable
@@ -181,15 +209,12 @@ export function ProductionsPage({
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-semibold">Lecture opérationnelle</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Une production bloquée ou à risque élevé remonte automatiquement en tête de file.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
+        <div className="grid gap-3 rounded-[1.5rem] border border-black/[0.06] bg-[#fbf8f2]/95 p-4 lg:grid-cols-2">
+          <div className="rounded-[1.1rem] border border-black/[0.06] bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Statuts de production
+            </p>
+            <div className="mt-3 flex flex-wrap gap-3">
               {(["blocked", "in_progress", "planned", "completed"] as const).map(
                 (status) => {
                   const count = filteredProductions.filter(
@@ -204,6 +229,13 @@ export function ProductionsPage({
                   );
                 },
               )}
+            </div>
+          </div>
+          <div className="rounded-[1.1rem] border border-black/[0.06] bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Niveaux de risque
+            </p>
+            <div className="mt-3 flex flex-wrap gap-3">
               {(["critical", "high", "normal", "low"] as const).map((risk) => {
                 const count = filteredProductions.filter(
                   (production) => production.risk === risk,
@@ -217,8 +249,8 @@ export function ProductionsPage({
                 );
               })}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {formOptionsError ? (
           <Card>

@@ -8,7 +8,8 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { syncGmailInboxAction } from "@/features/emails/actions/sync-gmail";
+import { useAuthorization } from "@/features/auth/components/auth-role-provider";
+import { incrementalGmailSyncAction } from "@/features/emails/actions/sync-gmail";
 import type { GmailInboxStatus } from "@/features/emails/types";
 import { formatDateTime } from "@/lib/utils";
 
@@ -17,10 +18,11 @@ export function GmailSyncControls({
 }: Readonly<{ gmailInbox: GmailInboxStatus }>) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const { can, isAdminExplicit } = useAuthorization();
 
   function handleSync() {
     startTransition(async () => {
-      const result = await syncGmailInboxAction(50);
+      const result = await incrementalGmailSyncAction(50);
 
       if (result.ok) {
         toast.success(result.message);
@@ -33,39 +35,57 @@ export function GmailSyncControls({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="grid w-full gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
       {gmailInbox.connected ? (
-        <Badge variant="outline">
-          Gmail connecté
+        <Badge
+          variant="outline"
+          className="whitespace-normal break-words px-3 py-1.5 text-left leading-5 sm:text-center"
+        >
+          Gmail partage connecte
           {gmailInbox.emailAddress ? ` · ${gmailInbox.emailAddress}` : ""}
           {gmailInbox.lastSyncedAt
             ? ` · sync ${formatDateTime(gmailInbox.lastSyncedAt)}`
             : ""}
         </Badge>
       ) : (
-        <Badge variant="outline">Gmail non connecté</Badge>
+        <Badge
+          variant="outline"
+          className="whitespace-normal break-words px-3 py-1.5 text-left leading-5 sm:text-center"
+        >
+          Boite Gmail partagee non connectee
+        </Badge>
       )}
 
-      <Button asChild variant="outline">
-        <Link href="/api/gmail/connect?redirectTo=/emails">
-          <Settings2 className="h-4 w-4" />
-          {gmailInbox.connected ? "Reconnecter Gmail" : "Connecter Gmail"}
-        </Link>
-      </Button>
+      {isAdminExplicit || can("emails.sync") ? (
+        <>
+          {isAdminExplicit ? (
+            <Button asChild variant="outline" className="w-full sm:w-auto">
+              <Link href="/api/gmail/connect?redirectTo=/emails">
+                <Settings2 className="h-4 w-4" />
+                {gmailInbox.connected
+                  ? "Reconnecter la boite Gmail partagee"
+                  : "Connecter la boite Gmail partagee"}
+              </Link>
+            </Button>
+          ) : null}
 
-      <Button onClick={handleSync} disabled={isPending}>
-        {isPending ? (
-          <>
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Synchronisation
-          </>
-        ) : (
-          <>
-            <RefreshCcw className="h-4 w-4" />
-            Synchroniser Gmail
-          </>
-        )}
-      </Button>
+          {can("emails.sync") ? (
+            <Button onClick={handleSync} disabled={isPending} className="w-full sm:w-auto">
+              {isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Synchronisation
+                </>
+              ) : (
+                <>
+                  <RefreshCcw className="h-4 w-4" />
+                  Relancer la sync
+                </>
+              )}
+            </Button>
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }

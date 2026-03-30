@@ -1,13 +1,21 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowUpRight, Building2, CircleAlert } from "lucide-react";
+import { Building2, Dot, Menu } from "lucide-react";
 
+import { useAuthorization } from "@/features/auth/components/auth-role-provider";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { primaryNavigation, secondaryNavigation } from "@/components/crm/nav-config";
+import { cn } from "@/lib/utils";
 import type { CrmSummary } from "@/types/crm";
 
 interface AppSidebarProps {
@@ -16,171 +24,295 @@ interface AppSidebarProps {
 
 export function AppSidebar({ summary }: Readonly<AppSidebarProps>) {
   const pathname = usePathname();
+  const { can } = useAuthorization();
+  const visiblePrimaryNavigation = primaryNavigation.filter(
+    (item) => !item.requiredPermission || can(item.requiredPermission),
+  );
+  const visibleSecondaryNavigation = secondaryNavigation.filter(
+    (item) => !item.requiredPermission || can(item.requiredPermission),
+  );
 
   return (
-    <aside className="hidden min-h-screen border-r border-white/60 bg-[var(--sidebar)] md:flex md:flex-col">
-      <div className="flex h-full flex-col gap-6 px-4 py-5 xl:px-5">
-        <div className="glass-panel rounded-[1.5rem] border border-white/70 px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-[0_12px_28px_rgba(20,79,74,0.22)]">
-              <Building2 className="h-5 w-5" />
-            </div>
-            <div className="hidden min-w-0 xl:block">
-              <p className="text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
-                MIA PARIS
-              </p>
-              <h1 className="truncate text-base font-semibold">
-                CRM textile B2B
-              </h1>
-            </div>
-          </div>
-
-          <div className="mt-4 hidden xl:flex xl:flex-col xl:gap-3">
-            <Badge className="w-fit border-primary/[0.15] bg-primary/[0.08] text-primary">
-              PE26 live
-            </Badge>
-            <p className="text-sm leading-6 text-muted-foreground">
-              Demandes, validations, production et email entrant dans un seul
-              cockpit métier.
-            </p>
-          </div>
-        </div>
-
-        <nav className="flex flex-1 flex-col gap-2">
-          {primaryNavigation.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              pathname === item.href || pathname.startsWith(`${item.href}/`);
-            const metric =
-              item.summaryKey !== undefined ? summary[item.summaryKey] : null;
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "group flex items-center gap-3 rounded-2xl border px-3 py-3 text-sm",
-                  isActive
-                    ? "border-primary/15 bg-primary/[0.08] text-primary shadow-[0_12px_30px_rgba(20,79,74,0.08)]"
-                    : "border-transparent text-foreground/80 hover:border-white/70 hover:bg-white/50 hover:text-foreground",
-                )}
-              >
-                <div
-                  className={cn(
-                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl",
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-white/75 text-muted-foreground group-hover:text-foreground",
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                </div>
-
-                <div className="hidden min-w-0 flex-1 xl:block">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="truncate font-semibold">{item.label}</span>
-                    {metric !== null ? (
-                      <span className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
-                        {metric}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {item.description}
-                  </p>
-                </div>
-
-                <div className="xl:hidden">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    {item.shortLabel}
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
-
-          <div className="my-3 hidden xl:block px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Automatisation
-          </div>
-
-          {secondaryNavigation.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              pathname === item.href || pathname.startsWith(`${item.href}/`);
-            const metric =
-              item.summaryKey !== undefined ? summary[item.summaryKey] : null;
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "group flex items-center gap-3 rounded-2xl border px-3 py-3 text-sm",
-                  isActive
-                    ? "border-primary/15 bg-primary/[0.08] text-primary"
-                    : "border-transparent text-foreground/80 hover:border-white/70 hover:bg-white/50 hover:text-foreground",
-                )}
-              >
-                <div
-                  className={cn(
-                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl",
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-white/75 text-muted-foreground group-hover:text-foreground",
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                </div>
-
-                <div className="hidden min-w-0 flex-1 xl:block">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="truncate font-semibold">{item.label}</span>
-                    {metric !== null ? (
-                      <span className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
-                        {metric}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {item.description}
-                  </p>
-                </div>
-
-                <div className="xl:hidden">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    {item.shortLabel}
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="glass-panel rounded-[1.5rem] border border-white/70 p-4">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-2xl bg-[rgba(202,142,85,0.14)] text-[var(--accent)]">
-              <CircleAlert className="h-4 w-4" />
-            </div>
-            <div className="hidden xl:block">
-              <p className="text-sm font-semibold">Urgences du jour</p>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                {summary.criticalDeadlines} jalons critiques à traiter avant
-                relance client ou production.
-              </p>
-            </div>
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-4 w-full justify-between xl:justify-center"
+    <aside className="hidden md:block">
+      <div className="sticky top-0 h-screen p-4 lg:p-5">
+        <div className="flex h-full flex-col overflow-hidden rounded-[1.8rem] bg-[#17212b] text-white shadow-[0_28px_60px_rgba(15,22,29,0.28)]">
+          <Link
+            href="/dashboard"
+            className="border-b border-white/10 px-4 py-5 lg:px-5"
           >
-            <span className="hidden xl:inline">Ouvrir la vue urgences</span>
-            <span className="xl:hidden">Urgences</span>
-            <ArrowUpRight className="h-4 w-4" />
-          </Button>
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#17212b] shadow-[0_12px_28px_rgba(0,0,0,0.18)]">
+                <Building2 className="h-5 w-5" />
+              </div>
+              <div className="hidden min-w-0 lg:block">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/55">
+                  MIA PARIS
+                </p>
+                <h1 className="truncate text-base font-semibold text-white">
+                  CRM textile B2B
+                </h1>
+              </div>
+            </div>
+
+            <div className="mt-4 hidden lg:flex lg:flex-wrap lg:items-center lg:gap-2">
+              <Badge className="border-white/10 bg-white/10 text-white">
+                Workspace live
+              </Badge>
+              <Badge className="border-[#ca8e55]/25 bg-[#ca8e55]/16 text-[#f1c08e]">
+                Quotidien
+              </Badge>
+            </div>
+          </Link>
+
+          <div className="flex-1 overflow-y-auto px-2 py-4 lg:px-3">
+            <div className="mb-3 hidden px-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40 lg:block">
+              Pilotage
+            </div>
+            <nav className="space-y-1.5">
+              {visiblePrimaryNavigation.map((item) => (
+                <SidebarLink
+                  key={item.href}
+                  item={item}
+                  pathname={pathname}
+                  summary={summary}
+                />
+              ))}
+            </nav>
+
+            <div className="mb-3 mt-6 hidden px-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40 lg:block">
+              Automatisation
+            </div>
+            <nav className="space-y-1.5">
+              {visibleSecondaryNavigation.map((item) => (
+                <SidebarLink
+                  key={item.href}
+                  item={item}
+                  pathname={pathname}
+                  summary={summary}
+                />
+              ))}
+            </nav>
+          </div>
         </div>
       </div>
     </aside>
+  );
+}
+
+function SidebarLink({
+  item,
+  pathname,
+  summary,
+}: Readonly<{
+  item: (typeof primaryNavigation)[number] | (typeof secondaryNavigation)[number];
+  pathname: string;
+  summary: CrmSummary;
+}>) {
+  const Icon = item.icon;
+  const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+  const metric = item.summaryKey !== undefined ? summary[item.summaryKey] : null;
+
+  return (
+    <Link
+      href={item.href}
+      title={item.label}
+      className={cn(
+        "group flex items-center gap-3 rounded-[1.15rem] px-3 py-3 text-sm",
+        isActive
+          ? "bg-white/12 text-white"
+          : "text-white/70 hover:bg-white/7 hover:text-white",
+      )}
+    >
+      <div
+        className={cn(
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl transition-colors",
+          isActive
+            ? "bg-white text-[#17212b]"
+            : "bg-white/8 text-white/70 group-hover:bg-white/12 group-hover:text-white",
+        )}
+      >
+        <Icon className="h-4 w-4" />
+      </div>
+
+      <div className="hidden min-w-0 flex-1 lg:block">
+        <div className="flex items-center justify-between gap-3">
+          <span className="truncate font-medium">{item.label}</span>
+          {metric !== null ? (
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                isActive ? "bg-white/16 text-white" : "bg-white/8 text-white/70",
+              )}
+            >
+              {metric}
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-1 truncate text-xs text-white/42">{item.description}</p>
+      </div>
+
+      <div className="flex flex-col items-center gap-1 lg:hidden">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/45">
+          {item.shortLabel}
+        </span>
+        {metric !== null ? (
+          <span
+            className={cn(
+              "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+              isActive ? "bg-white/16 text-white" : "bg-white/8 text-white/65",
+            )}
+          >
+            {metric}
+          </span>
+        ) : (
+          <Dot className="h-3 w-3 text-white/30" />
+        )}
+      </div>
+    </Link>
+  );
+}
+
+export function MobileNavigationMenu({
+  summary,
+}: Readonly<{ summary: CrmSummary }>) {
+  const pathname = usePathname();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { can } = useAuthorization();
+  const visiblePrimaryNavigation = primaryNavigation.filter(
+    (item) => !item.requiredPermission || can(item.requiredPermission),
+  );
+  const visibleSecondaryNavigation = secondaryNavigation.filter(
+    (item) => !item.requiredPermission || can(item.requiredPermission),
+  );
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setMobileMenuOpen(true)}
+        className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-black/8 bg-white text-foreground shadow-[0_10px_28px_rgba(18,27,34,0.08)] transition hover:bg-[#f8f4ed] md:hidden"
+        aria-label="Ouvrir le menu"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
+      <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+        <SheetContent className="left-0 right-auto h-full w-[86vw] max-w-sm border-l-0 border-r border-white/10 bg-[#17212b] p-0 text-white">
+          <div className="flex h-full flex-col overflow-hidden">
+            <SheetHeader className="border-b border-white/10 px-5 py-5 text-left">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#17212b] shadow-[0_12px_28px_rgba(0,0,0,0.18)]">
+                  <Building2 className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/55">
+                    MIA PARIS
+                  </p>
+                  <SheetTitle className="truncate text-left text-base text-white">
+                    Menu
+                  </SheetTitle>
+                </div>
+              </div>
+              <SheetDescription className="text-left text-white/65">
+                Navigation principale du CRM et accès rapide aux modules métier.
+              </SheetDescription>
+            </SheetHeader>
+
+            <div className="flex-1 overflow-y-auto px-4 py-5">
+              <div className="mb-3 px-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">
+                Pilotage
+              </div>
+              <nav className="space-y-2">
+                {visiblePrimaryNavigation.map((item) => (
+                  <SheetSidebarLink
+                    key={item.href}
+                    item={item}
+                    pathname={pathname}
+                    summary={summary}
+                    onNavigate={() => setMobileMenuOpen(false)}
+                  />
+                ))}
+              </nav>
+
+              {visibleSecondaryNavigation.length > 0 ? (
+                <>
+                  <div className="mb-3 mt-6 px-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">
+                    Automatisation
+                  </div>
+                  <nav className="space-y-2">
+                    {visibleSecondaryNavigation.map((item) => (
+                      <SheetSidebarLink
+                        key={item.href}
+                        item={item}
+                        pathname={pathname}
+                        summary={summary}
+                        onNavigate={() => setMobileMenuOpen(false)}
+                      />
+                    ))}
+                  </nav>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
+
+function SheetSidebarLink({
+  item,
+  onNavigate,
+  pathname,
+  summary,
+}: Readonly<{
+  item: (typeof primaryNavigation)[number] | (typeof secondaryNavigation)[number];
+  onNavigate: () => void;
+  pathname: string;
+  summary: CrmSummary;
+}>) {
+  const Icon = item.icon;
+  const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+  const metric = item.summaryKey !== undefined ? summary[item.summaryKey] : null;
+
+  return (
+    <Link
+      href={item.href}
+      onClick={onNavigate}
+      className={cn(
+        "group flex items-center gap-3 rounded-[1.15rem] px-3 py-3 text-sm",
+        isActive
+          ? "bg-white/12 text-white"
+          : "text-white/70 hover:bg-white/7 hover:text-white",
+      )}
+    >
+      <div
+        className={cn(
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl transition-colors",
+          isActive
+            ? "bg-white text-[#17212b]"
+            : "bg-white/8 text-white/70 group-hover:bg-white/12 group-hover:text-white",
+        )}
+      >
+        <Icon className="h-4 w-4" />
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-3">
+          <span className="truncate font-medium">{item.label}</span>
+          {metric !== null ? (
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                isActive ? "bg-white/16 text-white" : "bg-white/8 text-white/70",
+              )}
+            >
+              {metric}
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-1 truncate text-xs text-white/42">{item.description}</p>
+      </div>
+    </Link>
   );
 }

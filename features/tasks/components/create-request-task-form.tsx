@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { createTaskAction } from "@/features/tasks/actions/create-request-task";
+import { useAuthorization } from "@/features/auth/components/auth-role-provider";
 import type {
   RequestAssigneeOption,
   RequestLinkOption,
@@ -49,6 +50,7 @@ export function CreateRequestTaskForm({
   sectionId,
 }: Readonly<CreateRequestTaskFormProps>) {
   const router = useRouter();
+  const { can } = useAuthorization();
   const fixedRequestId = requestId;
   const [title, setTitle] = useState("");
   const [taskType, setTaskType] =
@@ -84,6 +86,10 @@ export function CreateRequestTaskForm({
 
       toast.error(result.message);
     });
+  }
+
+  if (!can("tasks.create")) {
+    return null;
   }
 
   return (

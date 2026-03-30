@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AlertTriangle, ArrowUpRight } from "lucide-react";
 
 import { RequestPriorityBadge } from "@/components/crm/request-badges";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { TaskStatusBadge } from "@/features/tasks/components/task-badges";
 import type { TaskListItem } from "@/features/tasks/types";
@@ -12,10 +13,15 @@ export function OverdueTasksPanel({
 }: Readonly<{ tasks: TaskListItem[] }>) {
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-destructive" />
-          <CardTitle>Tâches urgentes</CardTitle>
+      <CardHeader className="border-b border-black/[0.06] pb-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-destructive" />
+            <CardTitle>Tâches urgentes</CardTitle>
+          </div>
+          <Badge variant="outline" className="bg-[#fbf8f2]">
+            {tasks.length}
+          </Badge>
         </div>
         <CardDescription>
           Retards à résorber ou actions à lancer dans les prochaines heures.
@@ -26,9 +32,9 @@ export function OverdueTasksPanel({
           tasks.map((task) => (
             <div
               key={task.id}
-              className="rounded-2xl border border-white/70 bg-white/70 p-4"
+              className="rounded-[1.2rem] border border-black/[0.06] bg-[#fbf8f2]/85 p-4"
             >
-              <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold">{task.title}</p>
@@ -43,12 +49,12 @@ export function OverdueTasksPanel({
                   </p>
                   <p className="mt-1 text-sm text-foreground/80">{task.owner}</p>
                 </div>
-                <div className="text-right text-sm text-muted-foreground">
-                  <p>{task.dueAt ? formatDateTime(task.dueAt) : "Sans date"}</p>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                  <span>{task.dueAt ? formatDateTime(task.dueAt) : "Sans date"}</span>
                   {task.requestId ? (
                     <Link
                       href={`/requests/${task.requestId}`}
-                      className="mt-2 inline-flex items-center gap-1 font-medium text-primary hover:text-primary/80"
+                      className="inline-flex items-center gap-1 font-medium text-primary hover:text-primary/80"
                     >
                       Demande
                       <ArrowUpRight className="h-4 w-4" />

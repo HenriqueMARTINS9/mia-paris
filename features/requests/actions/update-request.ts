@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import type { RequestNoteField } from "@/features/requests/detail-types";
+import { authorizeServerAction } from "@/features/auth/server-authorization";
 import {
   mapUiPriorityToDatabasePriority,
   mapUiStatusToDatabaseStatus,
@@ -158,6 +159,16 @@ export async function markRequestAsProcessedAction(
 export async function appendRequestNoteAction(
   input: AppendRequestNoteInput,
 ): Promise<RequestMutationResult> {
+  const authorization = await authorizeServerAction("requests.update");
+
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      field: "note",
+      message: authorization.message,
+    };
+  }
+
   if (!input.requestId) {
     return {
       ok: false,
@@ -272,6 +283,16 @@ async function updateRequestRecord(
   },
 ): Promise<RequestMutationResult> {
   try {
+    const authorization = await authorizeServerAction("requests.update");
+
+    if (!authorization.ok) {
+      return {
+        ok: false,
+        field: options.field,
+        message: authorization.message,
+      };
+    }
+
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },

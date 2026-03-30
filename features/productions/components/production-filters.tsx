@@ -50,8 +50,8 @@ export function ProductionFilters({
 }: Readonly<ProductionFiltersProps>) {
   return (
     <Card>
-      <CardContent className="flex flex-col gap-4 p-5">
-        <div className="relative max-w-xl">
+      <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
+        <div className="relative max-w-none xl:max-w-xl">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
@@ -69,22 +69,24 @@ export function ProductionFilters({
                 Atelier
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {statusOptions.map((status) => (
-                <button
-                  key={status}
-                  type="button"
-                  onClick={() => onStatusChange(status)}
-                  className={cn(
-                    "rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em]",
-                    selectedStatus === status
-                      ? "border-primary/[0.15] bg-primary/10 text-primary"
-                      : "border-white/70 bg-white/60 text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {status === "all" ? "Tous" : productionStatusMeta[status].label}
-                </button>
-              ))}
+            <div className="-mx-1 overflow-x-auto px-1 pb-1">
+              <div className="flex w-max gap-2">
+                {statusOptions.map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => onStatusChange(status)}
+                    className={cn(
+                      "whitespace-nowrap rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em]",
+                      selectedStatus === status
+                        ? "border-primary/[0.15] bg-primary/10 text-primary"
+                        : "border-white/70 bg-white/60 text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {status === "all" ? "Tous" : productionStatusMeta[status].label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -95,22 +97,24 @@ export function ProductionFilters({
                 Arbitrage
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {riskOptions.map((risk) => (
-                <button
-                  key={risk}
-                  type="button"
-                  onClick={() => onRiskChange(risk)}
-                  className={cn(
-                    "rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em]",
-                    selectedRisk === risk
-                      ? "border-primary/[0.15] bg-primary/10 text-primary"
-                      : "border-white/70 bg-white/60 text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {risk === "all" ? "Tous" : productionRiskMeta[risk].label}
-                </button>
-              ))}
+            <div className="-mx-1 overflow-x-auto px-1 pb-1">
+              <div className="flex w-max gap-2">
+                {riskOptions.map((risk) => (
+                  <button
+                    key={risk}
+                    type="button"
+                    onClick={() => onRiskChange(risk)}
+                    className={cn(
+                      "whitespace-nowrap rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em]",
+                      selectedRisk === risk
+                        ? "border-primary/[0.15] bg-primary/10 text-primary"
+                        : "border-white/70 bg-white/60 text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {risk === "all" ? "Tous" : productionRiskMeta[risk].label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>

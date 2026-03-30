@@ -4,6 +4,7 @@ import {
   getCurrentUserContext,
   normalizeRedirectPath,
 } from "@/features/auth/queries";
+import { isExplicitAdminRole } from "@/features/auth/authorization";
 import { getGmailProfile } from "@/lib/google/gmail";
 import { exchangeGoogleCodeForTokens } from "@/lib/google/oauth";
 import {
@@ -41,10 +42,15 @@ export async function GET(request: NextRequest) {
     !state ||
     !oauthState ||
     oauthState.state !== state ||
-    !currentUser?.appUser ||
-    oauthState.appUserId !== currentUser.appUser.id
+    !currentUser?.authUser ||
+    !isMatchingOAuthUser(oauthState, currentUser)
   ) {
     redirectUrl.searchParams.set("gmail", "oauth_state_error");
+    return redirectWithCleanup(redirectUrl);
+  }
+
+  if (!isExplicitAdminRole(currentUser.appUser?.role ?? null)) {
+    redirectUrl.searchParams.set("gmail", "forbidden");
     return redirectWithCleanup(redirectUrl);
   }
 
@@ -60,54 +66,100 @@ export async function GET(request: NextRequest) {
     ).toISOString();
     const existingInboxResult = await admin
       .from("inboxes")
-      .select("id,refresh_token")
-      .eq("user_id", currentUser.appUser.id)
+      .select("id,refresh_token,user_id")
       .eq("provider", "google")
       .eq("email_address", profile.emailAddress)
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (existingInboxResult.error) {
       throw new Error(existingInboxResult.error.message);
     }
-    const previousRefreshToken =
+    const existingInbox =
       (
         existingInboxResult.data as
-          | { refresh_token?: string | null }
+          | { id: string; refresh_token?: string | null; user_id?: string | null }
           | null
-      )?.refresh_token ?? null;
+      ) ?? null;
+    const previousRefreshToken = existingInbox?.refresh_token ?? null;
+    const inboxOwnerId = currentUser.appUser?.id ?? existingInbox?.user_id ?? null;
 
-    const inboxUpsertPayload = [
-      {
-        access_token: tokens.access_token,
-        display_name: profile.emailAddress,
-        email_address: profile.emailAddress,
-        is_active: true,
-        last_error: null,
-        provider: "google",
-        provider_account_id: profile.emailAddress,
-        refresh_token:
-          tokens.refresh_token ??
-          previousRefreshToken ??
+    if (!inboxOwnerId) {
+      throw new Error(
+        "Aucun profil public.users disponible pour rattacher la boite Gmail partagee.",
+      );
+    }
+
+    const sharedInboxPayload = {
+      access_token: tokens.access_token,
+      display_name: profile.emailAddress,
+      email_address: profile.emailAddress,
+      is_active: true,
+      last_error: null,
+      provider: "google",
+      provider_account_id: profile.emailAddress,
+      refresh_token:
+        tokens.refresh_token ??
+        previousRefreshToken ??
           null,
-        scope: tokens.scope ?? null,
-        token_expires_at: expiresAt,
-        updated_at: now,
-        user_id: currentUser.appUser.id,
-      },
-    ] satisfies Database["public"]["Tables"]["inboxes"]["Insert"][];
+      scope: tokens.scope ?? null,
+      token_expires_at: expiresAt,
+      updated_at: now,
+      user_id: inboxOwnerId,
+    } satisfies Database["public"]["Tables"]["inboxes"]["Insert"];
 
-    const inboxUpsertResult = await admin
+    let sharedInboxId: string | null = null;
+
+    if (existingInbox?.id) {
+      const inboxUpdateResult = await admin
+        .from("inboxes")
+        .update(sharedInboxPayload as Database["public"]["Tables"]["inboxes"]["Update"] as never)
+        .eq("id", existingInbox.id)
+        .select("id")
+        .single();
+
+      if (inboxUpdateResult.error) {
+        throw new Error(inboxUpdateResult.error.message);
+      }
+
+      sharedInboxId = (inboxUpdateResult.data as { id: string } | null)?.id ?? null;
+    } else {
+      const inboxInsertResult = await admin
+        .from("inboxes")
+        .insert(
+          {
+            ...sharedInboxPayload,
+            created_at: now,
+          } as Database["public"]["Tables"]["inboxes"]["Insert"] as never,
+        )
+        .select("id")
+        .single();
+
+      if (inboxInsertResult.error) {
+        throw new Error(inboxInsertResult.error.message);
+      }
+
+      sharedInboxId = (inboxInsertResult.data as { id: string } | null)?.id ?? null;
+    }
+
+    if (!sharedInboxId) {
+      throw new Error("Impossible de retrouver l'identifiant de la boite Gmail partagee.");
+    }
+
+    const deactivateOtherInboxesResult = await admin
       .from("inboxes")
-      .upsert(
-        inboxUpsertPayload as never[],
+      .update(
         {
-          onConflict: "user_id,provider,email_address",
-        },
+          is_active: false,
+          updated_at: now,
+        } as Database["public"]["Tables"]["inboxes"]["Update"] as never,
       )
-      .select("id");
+      .eq("provider", "google")
+      .neq("id", sharedInboxId);
 
-    if (inboxUpsertResult.error) {
-      throw new Error(inboxUpsertResult.error.message);
+    if (deactivateOtherInboxesResult.error) {
+      throw new Error(deactivateOtherInboxesResult.error.message);
     }
 
     redirectUrl.pathname = normalizeRedirectPath(oauthState.redirectTo || "/emails");
@@ -124,4 +176,22 @@ export async function GET(request: NextRequest) {
 
     return redirectWithCleanup(redirectUrl);
   }
+}
+
+function isMatchingOAuthUser(
+  oauthState: {
+    appUserId?: string;
+    authUserId?: string;
+  },
+  currentUser: NonNullable<Awaited<ReturnType<typeof getCurrentUserContext>>>,
+) {
+  if (oauthState.authUserId && oauthState.authUserId === currentUser.authUser.id) {
+    return true;
+  }
+
+  if (oauthState.appUserId && currentUser.appUser?.id) {
+    return oauthState.appUserId === currentUser.appUser.id;
+  }
+
+  return false;
 }

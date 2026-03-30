@@ -1,4 +1,8 @@
-import type { EmailListItem, GmailInboxStatus } from "@/features/emails/types";
+import type {
+  EmailListItem,
+  GmailInboxStatus,
+  GmailSyncMode,
+} from "@/features/emails/types";
 import type { ProductionListItem } from "@/features/productions/types";
 import type { RequestOverviewListItem } from "@/features/requests/types";
 import type { TaskListItem } from "@/features/tasks/types";
@@ -17,12 +21,16 @@ export interface DashboardKpis {
 export interface GmailSyncSummary {
   connectedInboxEmail: string | null;
   createdAt: string;
+  errorCount?: number;
   errorMessage: string | null;
   id: string;
   ignoredMessages: number;
   importedMessages: number;
   importedThreads: number;
+  message?: string | null;
   ok: boolean;
+  queryUsed: string | null;
+  syncMode: GmailSyncMode | null;
 }
 
 export interface DashboardPageData {

@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 
 import { insertActivityLogViaRest } from "@/lib/activity-logs";
+import { authorizeServerAction } from "@/features/auth/server-authorization";
+import { notifyBlockedProduction } from "@/features/notifications/lib/operational-notifications";
 import {
   mapUiProductionRiskToDatabaseValues,
   mapUiProductionStatusToDatabaseValues,
@@ -39,6 +41,16 @@ interface CreateProductionInput {
 export async function createProductionAction(
   input: CreateProductionInput,
 ): Promise<ProductionMutationResult> {
+  const authorization = await authorizeServerAction("productions.create");
+
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      field: "create",
+      message: authorization.message,
+    };
+  }
+
   if (
     !input.orderId &&
     !input.newOrderNumber?.trim() &&
@@ -132,6 +144,8 @@ export async function createProductionAction(
 
   await insertActivityLogViaRest({
     action: "production_created",
+    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorType: "user",
     description: "Production créée manuellement depuis le cockpit.",
     entityId: productionId,
     entityType: "production",
@@ -148,10 +162,19 @@ export async function createProductionAction(
   });
 
   revalidatePath("/productions");
+  revalidatePath("/aujourdhui");
   if (resolvedRequestId) {
     revalidatePath(`/requests/${resolvedRequestId}`);
   }
   revalidatePath("/", "layout");
+
+  if (input.status === "blocked" || Boolean(input.blockingReason?.trim())) {
+    await notifyBlockedProduction({
+      blockingReason: input.blockingReason?.trim() ?? null,
+      productionId,
+      title: input.newOrderNumber?.trim() || "Production bloquée",
+    });
+  }
 
   return {
     ok: true,

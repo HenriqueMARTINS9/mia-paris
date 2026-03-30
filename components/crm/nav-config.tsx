@@ -5,11 +5,13 @@ import {
   LayoutGrid,
   PackageCheck,
   Sparkles,
+  Sun,
   TimerReset,
   ClipboardList,
   ListTodo,
 } from "lucide-react";
 
+import type { AppPermission } from "@/features/auth/authorization";
 import type { CrmSummary } from "@/types/crm";
 
 export interface NavigationItem {
@@ -18,10 +20,18 @@ export interface NavigationItem {
   shortLabel: string;
   description: string;
   icon: LucideIcon;
+  requiredPermission?: AppPermission;
   summaryKey?: keyof CrmSummary;
 }
 
 export const primaryNavigation: NavigationItem[] = [
+  {
+    href: "/aujourdhui",
+    label: "Aujourd’hui",
+    shortLabel: "Now",
+    description: "Cockpit quotidien mobile-first pour arbitrer le jour",
+    icon: Sun,
+  },
   {
     href: "/dashboard",
     label: "Dashboard",
@@ -77,6 +87,7 @@ export const secondaryNavigation: NavigationItem[] = [
     shortLabel: "IA",
     description: "Relecture métier avant création d'objets CRM",
     icon: Sparkles,
+    requiredPermission: "emails.qualify",
     summaryKey: "pendingValidations",
   },
   {

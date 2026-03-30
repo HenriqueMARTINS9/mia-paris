@@ -80,20 +80,22 @@ export function RequestDetailPanel({
 
   return (
     <Card className={cn(mode === "desktop" && "sticky top-24")}>
-      <CardHeader className="space-y-4">
+      <CardHeader className="space-y-4 p-4 sm:p-6">
         <div className="flex flex-wrap items-center gap-2">
           <RequestStatusBadge status={request.status} />
           <RequestPriorityBadge priority={request.priority} />
           <ProductionStageBadge stage={request.productionStage} />
         </div>
         <div>
-          <CardTitle className="text-[1.35rem]">{request.reference}</CardTitle>
-          <CardDescription className="mt-2">
+          <CardTitle className="break-words text-xl sm:text-[1.35rem]">
+            {request.reference}
+          </CardTitle>
+          <CardDescription className="mt-2 break-words">
             {request.sourceSubject}
           </CardDescription>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild size="sm" variant="outline">
+        <div className="grid gap-2 sm:flex sm:flex-wrap">
+          <Button asChild size="sm" variant="outline" className="w-full sm:w-auto">
             <Link href={`/requests/${request.id}`}>Ouvrir le dossier complet</Link>
           </Button>
         </div>
@@ -105,7 +107,7 @@ export function RequestDetailPanel({
         />
       </CardHeader>
 
-      <CardContent className="space-y-5">
+      <CardContent className="space-y-5 p-4 pt-0 sm:p-6 sm:pt-0">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-2xl border border-white/70 bg-white/60 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -161,30 +163,23 @@ export function RequestDetailPanel({
               <p className="font-semibold">Paramètres dossier</p>
             </div>
             <div className="mt-4 space-y-3 text-sm">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">Réf interne</span>
-                <span className="font-medium">
-                  {request.internalRef ?? "Non renseignée"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">Réf client</span>
-                <span className="font-medium">
-                  {request.clientRef ?? "Non renseignée"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">Type</span>
-                <span className="font-medium">{request.requestTypeLabel}</span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">Confiance IA</span>
-                <span className="font-medium">
-                  {request.aiConfidence !== null
+              <DetailMetaRow
+                label="Réf interne"
+                value={request.internalRef ?? "Non renseignée"}
+              />
+              <DetailMetaRow
+                label="Réf client"
+                value={request.clientRef ?? "Non renseignée"}
+              />
+              <DetailMetaRow label="Type" value={request.requestTypeLabel} />
+              <DetailMetaRow
+                label="Confiance IA"
+                value={
+                  request.aiConfidence !== null
                     ? `${Math.round(request.aiConfidence * 100)}%`
-                    : "n/a"}
-                </span>
-              </div>
+                    : "n/a"
+                }
+              />
             </div>
           </div>
 
@@ -199,11 +194,11 @@ export function RequestDetailPanel({
                   key={`${contact.name}-${contact.role}`}
                   className="rounded-2xl border border-white/70 bg-white/70 p-3"
                 >
-                  <p className="font-medium">{contact.name}</p>
+                    <p className="break-words font-medium">{contact.name}</p>
                   <p className="text-sm text-muted-foreground">
                     {contact.role} · {contact.company}
                   </p>
-                  <p className="mt-1 text-sm text-foreground/80">
+                  <p className="mt-1 break-words text-sm text-foreground/80">
                     {contact.email}
                   </p>
                 </div>
@@ -213,7 +208,7 @@ export function RequestDetailPanel({
         </div>
 
         <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="font-semibold">Prochaines actions</p>
             <Badge variant="outline">{request.owner}</Badge>
           </div>
@@ -239,23 +234,26 @@ export function RequestDetailPanel({
             {request.milestones.map((milestone) => (
               <div
                 key={`${milestone.label}-${milestone.date}`}
-                className="flex items-center justify-between gap-4 rounded-2xl border border-white/70 bg-white/70 px-3 py-3"
+                className="flex flex-col gap-3 rounded-2xl border border-white/70 bg-white/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   <div
                     className={cn(
                       "h-3 w-3 rounded-full",
                       milestoneTone[milestone.tone],
                     )}
                   />
-                  <div>
-                    <p className="font-medium">{milestone.label}</p>
+                  <div className="min-w-0">
+                    <p className="break-words font-medium">{milestone.label}</p>
                     <p className="text-sm text-muted-foreground">
                       {formatDateTime(milestone.date)}
                     </p>
                   </div>
                 </div>
-                <Badge variant="outline" className="normal-case tracking-normal">
+                <Badge
+                  variant="outline"
+                  className="w-fit normal-case tracking-normal"
+                >
                   {formatDate(milestone.date)}
                 </Badge>
               </div>
@@ -276,7 +274,7 @@ export function RequestDetailPanel({
                     key={`${document.name}-${document.updatedAt}`}
                     className="rounded-2xl border border-white/70 bg-white/70 px-3 py-3"
                   >
-                    <p className="font-medium">{document.name}</p>
+                    <p className="break-words font-medium">{document.name}</p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {document.type} · mis à jour {formatDate(document.updatedAt)}
                     </p>
@@ -291,9 +289,12 @@ export function RequestDetailPanel({
           </div>
 
           <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="font-semibold">Tags / contexte</p>
-              <Badge variant="secondary" className="normal-case tracking-normal">
+              <Badge
+                variant="secondary"
+                className="w-fit normal-case tracking-normal"
+              >
                 {request.requestTypeLabel}
               </Badge>
             </div>
@@ -330,7 +331,7 @@ export function RequestDetailPanel({
             {request.timeline.map((event) => (
               <div
                 key={event.id}
-                className="flex items-center gap-3 rounded-2xl border border-white/70 bg-white/70 px-3 py-3"
+                className="flex items-start gap-3 rounded-2xl border border-white/70 bg-white/70 px-3 py-3"
               >
                 <div
                   className={cn(
@@ -341,7 +342,7 @@ export function RequestDetailPanel({
                   {event.category.slice(0, 3)}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium">{event.title}</p>
+                  <p className="break-words font-medium">{event.title}</p>
                   <p className="text-sm text-muted-foreground">
                     {formatDateTime(event.date)}
                   </p>
@@ -352,5 +353,19 @@ export function RequestDetailPanel({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+interface DetailMetaRowProps {
+  label: string;
+  value: string;
+}
+
+function DetailMetaRow({ label, value }: Readonly<DetailMetaRowProps>) {
+  return (
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="break-words font-medium sm:text-right">{value}</span>
+    </div>
   );
 }

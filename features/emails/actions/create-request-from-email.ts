@@ -2,12 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 
+import { authorizeServerAction } from "@/features/auth/server-authorization";
 import {
   buildEmailQualificationDraft,
   buildRawSourceExcerpt,
   computeUrgencyScore,
   mergeEmailQualificationDraft,
 } from "@/features/emails/lib/qualification";
+import {
+  notifyCriticalTask,
+  notifyUrgentDeadline,
+} from "@/features/notifications/lib/operational-notifications";
 import type {
   CreateRequestFromEmailPayload,
   EmailMutationResult,
@@ -77,6 +82,16 @@ const requestAutoTaskRules: RequestAutoTaskRule[] = [
 export async function createRequestFromEmailAction(
   input: CreateRequestFromEmailPayload,
 ): Promise<EmailMutationResult> {
+  const authorization = await authorizeServerAction("emails.qualify");
+
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      field: "request_creation",
+      message: authorization.message,
+    };
+  }
+
   if (!input.emailId) {
     return {
       ok: false,
@@ -153,6 +168,7 @@ export async function createRequestFromEmailAction(
   revalidatePath("/taches");
   revalidatePath("/deadlines");
   revalidatePath("/dashboard");
+  revalidatePath("/aujourdhui");
   revalidatePath("/", "layout");
 
   const messages = ["Demande créée depuis l’email."];
@@ -539,6 +555,14 @@ async function createAutoTask(input: {
     requestId: input.requestId,
   });
 
+  if (input.priority === "critical") {
+    await notifyCriticalTask({
+      dueAt: toIsoDate(input.dueAt),
+      requestId: input.requestId,
+      title: input.taskTitle,
+    });
+  }
+
   return {
     ok: true,
     message: "Tâche automatique créée.",
@@ -583,6 +607,12 @@ async function createAutoDeadline(input: {
       deadlineAt: input.deadlineAt,
       label: input.label,
     },
+    requestId: input.requestId,
+  });
+
+  await notifyUrgentDeadline({
+    deadlineAt: toIsoDate(input.deadlineAt),
+    label: input.label,
     requestId: input.requestId,
   });
 
