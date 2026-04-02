@@ -64,7 +64,7 @@ export async function createOrderAction(
 
   await insertActivityLogViaRest({
     action: "order_created_manually",
-    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorId: authorization.actorId,
     actorType: "user",
     description: "Commande créée manuellement depuis le cockpit.",
     entityId: orderId,

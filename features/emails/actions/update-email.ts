@@ -119,7 +119,7 @@ export async function attachEmailToRequestAction(
   if (result.ok) {
     await createActivityLogEntry({
       action: "email_attached_to_existing_request",
-      actorId: authorization.currentUser.appUser?.id ?? null,
+      actorId: authorization.actorId,
       description: `Email ${input.emailId} rattaché à la demande ${input.requestId}.`,
       entityId: input.emailId,
       entityType: "email",
@@ -139,7 +139,7 @@ export async function attachEmailToRequestAction(
 
   await createActivityLogEntry({
     action: "email_attach_to_request_failed",
-    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorId: authorization.actorId,
     description: result.message,
     entityId: input.emailId,
     entityType: "email",

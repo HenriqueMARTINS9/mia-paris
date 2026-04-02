@@ -52,7 +52,7 @@ export async function createDocumentAction(
     status: "draft",
     storage_path: buildManualStoragePath(input.documentType, input.title),
     title: input.title.trim(),
-    uploaded_by_user_id: authorization.currentUser.appUser?.id ?? null,
+    uploaded_by_user_id: authorization.actorId,
     updated_at: new Date().toISOString(),
   };
 
@@ -70,7 +70,7 @@ export async function createDocumentAction(
 
   await insertActivityLogViaRest({
     action: "document_created_manually",
-    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorId: authorization.actorId,
     actorType: "user",
     description: "Document créé manuellement depuis le cockpit.",
     entityId: documentId,

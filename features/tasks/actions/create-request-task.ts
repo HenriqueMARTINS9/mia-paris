@@ -69,7 +69,7 @@ export async function createTaskAction(
   if (result.error) {
     await recordAuditEvent({
       action: "create_task",
-      actorId: authorization.currentUser.appUser?.id ?? null,
+      actorId: authorization.actorId,
       actorType: "user",
       description: `Création de tâche impossible: ${result.error}`,
       entityId: input.requestId ?? null,
@@ -91,7 +91,7 @@ export async function createTaskAction(
   if (!result.data || result.data.length === 0) {
     await recordAuditEvent({
       action: "create_task",
-      actorId: authorization.currentUser.appUser?.id ?? null,
+      actorId: authorization.actorId,
       actorType: "user",
       description:
         "Aucune tâche n'a été créée. Vérifie les policies RLS et la structure de la table tasks.",
@@ -129,7 +129,7 @@ export async function createTaskAction(
 
   await recordAuditEvent({
     action: "create_task",
-    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorId: authorization.actorId,
     actorType: "user",
     description: "Tâche CRM créée.",
     entityId:

@@ -22,6 +22,7 @@ import type {
   AssistantCreateTaskInput,
   AssistantPrepareReplyDraftInput,
 } from "@/features/assistant-actions/types";
+import type { ServerPermissionOverride } from "@/features/auth/server-authorization";
 import { getCurrentUserContext } from "@/features/auth/queries";
 import { recordAuditEvent } from "@/lib/action-runtime";
 
@@ -69,7 +70,15 @@ export interface OpenClawActionExecutionResult<TData = unknown>
   kind: AssistantActionKind;
 }
 
-const openClawReadActionSet = new Set<OpenClawReadActionName>([
+export interface OpenClawExecutionOptions {
+  allowedActions?: ReadonlySet<OpenClawExposedActionName>;
+  auditActorId?: string | null;
+  auditActorType?: string | null;
+  auditSource?: "assistant" | "system" | "ui";
+  authorizationOverride?: ServerPermissionOverride | null;
+}
+
+export const openClawReadActionNames: OpenClawReadActionName[] = [
   "getTodayUrgencies",
   "getUnprocessedEmails",
   "getRequestsWithoutAssignee",
@@ -77,14 +86,20 @@ const openClawReadActionSet = new Set<OpenClawReadActionName>([
   "getHighRiskProductions",
   "searchClientHistory",
   "searchModelHistory",
-]);
+];
 
-const openClawSafeWriteActionSet = new Set<OpenClawSafeWriteActionName>([
+export const openClawSafeWriteActionNames: OpenClawSafeWriteActionName[] = [
   "prepareReplyDraft",
   "createTask",
   "addNoteToRequest",
   "addNoteToProduction",
-]);
+];
+
+const openClawReadActionSet = new Set<OpenClawReadActionName>(openClawReadActionNames);
+
+const openClawSafeWriteActionSet = new Set<OpenClawSafeWriteActionName>(
+  openClawSafeWriteActionNames,
+);
 
 const openClawFutureSensitiveActions: OpenClawFutureSensitiveActionName[] = [
   "createDeadline",
@@ -187,16 +202,35 @@ export function getOpenClawActionDescriptors(): OpenClawActionDescriptor[] {
 
 export async function executeOpenClawAction(
   envelope: OpenClawActionEnvelope,
+  options?: OpenClawExecutionOptions,
 ): Promise<OpenClawActionExecutionResult> {
   const action = envelope.action;
   const input = envelope.input;
-  const currentUser = await getCurrentUserContext();
-
-  const actorId = currentUser?.appUser?.id ?? null;
-  const actorType = actorId ? "user" : "system";
+  const currentUser = options?.authorizationOverride
+    ? options.authorizationOverride.currentUser ?? null
+    : await getCurrentUserContext();
+  const actorId =
+    options?.auditActorId ??
+    options?.authorizationOverride?.actorId ??
+    currentUser?.appUser?.id ??
+    null;
+  const actorType =
+    options?.auditActorType ??
+    options?.authorizationOverride?.actorType ??
+    (actorId ? "user" : "system");
+  const auditSource = options?.auditSource ?? "assistant";
 
   try {
-    const result = await dispatchOpenClawAction(action, input);
+    const result =
+      options?.allowedActions && !options.allowedActions.has(action)
+        ? {
+            code: "forbidden" as const,
+            data: null,
+            message:
+              "Cette action n’est pas encore ouverte à OpenClaw sur la route HTTP externe.",
+            ok: false,
+          }
+        : await dispatchOpenClawAction(action, input, options);
 
     await recordAuditEvent({
       action: "openclaw_action_invoked",
@@ -215,7 +249,7 @@ export async function executeOpenClawAction(
       },
       requestId: getAuditRequestId(action, input),
       scope: `openclaw.${action}`,
-      source: "assistant",
+      source: auditSource,
       status: result.ok ? "success" : "failure",
     });
 
@@ -243,7 +277,7 @@ export async function executeOpenClawAction(
       },
       requestId: getAuditRequestId(action, input),
       scope: `openclaw.${action}`,
-      source: "assistant",
+      source: auditSource,
       status: "failure",
     });
 
@@ -266,25 +300,44 @@ function getActionKind(action: OpenClawExposedActionName): AssistantActionKind {
 async function dispatchOpenClawAction(
   action: OpenClawExposedActionName,
   input: unknown,
+  options?: OpenClawExecutionOptions,
 ): Promise<AssistantActionResult<unknown>> {
   switch (action) {
     case "getTodayUrgencies":
-      return getTodayUrgencies();
+      return getTodayUrgencies({
+        authorizationOverride: options?.authorizationOverride,
+      });
     case "getUnprocessedEmails":
-      return getUnprocessedEmails();
+      return getUnprocessedEmails({
+        authorizationOverride: options?.authorizationOverride,
+      });
     case "getRequestsWithoutAssignee":
-      return getRequestsWithoutAssignee();
+      return getRequestsWithoutAssignee({
+        authorizationOverride: options?.authorizationOverride,
+      });
     case "getBlockedProductions":
-      return getBlockedProductions();
+      return getBlockedProductions({
+        authorizationOverride: options?.authorizationOverride,
+      });
     case "getHighRiskProductions":
-      return getHighRiskProductions();
+      return getHighRiskProductions({
+        authorizationOverride: options?.authorizationOverride,
+      });
     case "searchClientHistory": {
       const parsed = parseClientHistoryInput(input);
-      return parsed.ok ? searchClientHistory(parsed.clientName) : parsed.result;
+      return parsed.ok
+        ? searchClientHistory(parsed.clientName, {
+            authorizationOverride: options?.authorizationOverride,
+          })
+        : parsed.result;
     }
     case "searchModelHistory": {
       const parsed = parseModelHistoryInput(input);
-      return parsed.ok ? searchModelHistory(parsed.modelName) : parsed.result;
+      return parsed.ok
+        ? searchModelHistory(parsed.modelName, {
+            authorizationOverride: options?.authorizationOverride,
+          })
+        : parsed.result;
     }
     case "prepareReplyDraft": {
       const parsed = parsePrepareReplyDraftInput(input);
@@ -292,6 +345,8 @@ async function dispatchOpenClawAction(
         ? prepareReplyDraft({
             ...parsed.value,
             source: "assistant",
+          }, {
+            authorizationOverride: options?.authorizationOverride,
           })
         : parsed.result;
     }
@@ -301,6 +356,8 @@ async function dispatchOpenClawAction(
         ? createTask({
             ...parsed.value,
             source: "assistant",
+          }, {
+            authorizationOverride: options?.authorizationOverride,
           })
         : parsed.result;
     }
@@ -310,6 +367,8 @@ async function dispatchOpenClawAction(
         ? addNoteToRequest({
             ...parsed.value,
             source: "assistant",
+          }, {
+            authorizationOverride: options?.authorizationOverride,
           })
         : parsed.result;
     }
@@ -319,6 +378,8 @@ async function dispatchOpenClawAction(
         ? addNoteToProduction({
             ...parsed.value,
             source: "assistant",
+          }, {
+            authorizationOverride: options?.authorizationOverride,
           })
         : parsed.result;
     }

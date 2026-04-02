@@ -128,7 +128,7 @@ export async function createDocumentFromAttachmentAction(
     storage_path: storagePath,
     title,
     updated_at: new Date().toISOString(),
-    uploaded_by_user_id: authorization.currentUser.appUser?.id ?? null,
+    uploaded_by_user_id: authorization.actorId,
     version: 1,
   } satisfies Record<string, unknown>;
 
@@ -137,7 +137,7 @@ export async function createDocumentFromAttachmentAction(
   if (insertResult.error) {
     await recordAuditEvent({
       action: "create_document_from_attachment",
-      actorId: authorization.currentUser.appUser?.id ?? null,
+      actorId: authorization.actorId,
       actorType: "user",
       description: `Création de document impossible: ${insertResult.error}`,
       entityId: attachmentResult.data.id,
@@ -159,7 +159,7 @@ export async function createDocumentFromAttachmentAction(
 
   await recordAuditEvent({
     action: "create_document_from_attachment",
-    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorId: authorization.actorId,
     actorType: "user",
     description: `Document métier créé depuis la pièce jointe ${attachmentResult.data.id}.`,
     entityId: documentId,

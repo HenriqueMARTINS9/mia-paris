@@ -38,7 +38,7 @@ export async function runAutomationEvaluationAction(): Promise<RunAutomationsRes
   const persistence = await persistAutomationEvaluation({
     alerts: liveEvaluation.alerts,
     mode: "manual",
-    triggeredByUserId: authorization.currentUser.appUser?.id ?? null,
+    triggeredByUserId: authorization.actorId,
     warning: liveEvaluation.warning,
   });
 
@@ -54,7 +54,7 @@ export async function runAutomationEvaluationAction(): Promise<RunAutomationsRes
 
   await insertActivityLogViaRest({
     action: "automation_rules_evaluated",
-    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorId: authorization.actorId,
     actorType: "user",
     description: `${liveEvaluation.alerts.length} alertes ouvertes après évaluation manuelle.`,
     entityId: null,

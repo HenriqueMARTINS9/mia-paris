@@ -299,8 +299,8 @@ Livre:
 - retour structure
 - audit systematique
 - controle par permissions
-- route d'integration `app/api/openclaw/actions`
-- console interne pour simuler les appels
+- route HTTP securisee `app/api/openclaw/route.ts`
+- console interne de simulation via `app/api/openclaw/actions/route.ts`
 
 Actions safe exposees:
 - `getTodayUrgencies`
@@ -314,6 +314,13 @@ Actions safe exposees:
 - `createTask`
 - `addNoteToRequest`
 - `addNoteToProduction`
+
+Contrat HTTP externe actuel:
+- `POST /api/openclaw`
+- header `Authorization: Bearer <OPENCLAW_CRM_TOKEN>`
+- body JSON `{ "action": "...", "payload": { ... } }`
+- perimetre actuel: actions lecture uniquement
+- actions safe d'ecriture deja mappees mais non ouvertes sur la route externe
 
 ### 15. Monitoring, audit et observabilite
 

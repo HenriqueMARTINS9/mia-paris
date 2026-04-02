@@ -37,7 +37,7 @@ export async function generateReplyDraftAction(
 
     await recordAuditEvent({
       action: "generate_reply_draft",
-      actorId: authorization.currentUser.appUser?.id ?? null,
+      actorId: authorization.actorId,
       actorType: "user",
       description: "Brouillon de réponse généré.",
       entityId: `${input.context.sourceType}:${input.context.sourceId}`,

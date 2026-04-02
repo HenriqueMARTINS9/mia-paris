@@ -68,7 +68,7 @@ export async function createDeadlineAction(
   if (result.error) {
     await recordAuditEvent({
       action: "create_deadline",
-      actorId: authorization.currentUser.appUser?.id ?? null,
+      actorId: authorization.actorId,
       actorType: "user",
       description: `Création de deadline impossible: ${result.error}`,
       entityId: input.requestId ?? null,
@@ -90,7 +90,7 @@ export async function createDeadlineAction(
   if (!result.data || result.data.length === 0) {
     await recordAuditEvent({
       action: "create_deadline",
-      actorId: authorization.currentUser.appUser?.id ?? null,
+      actorId: authorization.actorId,
       actorType: "user",
       description:
         "Aucune deadline n'a été créée. Vérifie les policies RLS et la structure de la table deadlines.",
@@ -126,7 +126,7 @@ export async function createDeadlineAction(
 
   await recordAuditEvent({
     action: "create_deadline",
-    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorId: authorization.actorId,
     actorType: "user",
     description: "Deadline créée.",
     entityId:

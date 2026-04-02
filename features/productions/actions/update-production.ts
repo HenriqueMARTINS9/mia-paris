@@ -225,7 +225,7 @@ async function patchFirstMatchingPayload(options: {
 
       await insertActivityLogViaRest({
         action: `production_${options.field}_updated`,
-        actorId: authorization.currentUser.appUser?.id ?? null,
+        actorId: authorization.actorId,
         actorType: "user",
         description: options.successMessage,
         entityId: options.productionId,
@@ -270,7 +270,7 @@ async function patchFirstMatchingPayload(options: {
 
   await recordAuditEvent({
     action: `production_${options.field}_update_failed`,
-    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorId: authorization.actorId,
     actorType: "user",
     description:
       latestError ??

@@ -67,7 +67,7 @@ export async function createValidationAction(
 
   await insertActivityLogViaRest({
     action: "validation_created_manually",
-    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorId: authorization.actorId,
     actorType: "user",
     description: "Validation créée manuellement depuis le cockpit.",
     entityId: validationId,

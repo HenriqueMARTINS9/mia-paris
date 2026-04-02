@@ -127,7 +127,7 @@ export async function createRequestFromEmailAction(
   if (!requestResult.ok || !requestResult.requestId) {
     await createActivityLogEntry({
       action: "request_creation_failed_from_email",
-      actorId: authorization.currentUser.appUser?.id ?? null,
+      actorId: authorization.actorId,
       description: requestResult.message,
       entityId: emailResult.email.id,
       entityType: "email",
@@ -152,7 +152,7 @@ export async function createRequestFromEmailAction(
 
   await createActivityLogEntry({
     action: "request_created_from_email",
-    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorId: authorization.actorId,
     description: `Demande créée depuis l’email ${input.emailId}.`,
     entityId: requestId,
     entityType: "request",

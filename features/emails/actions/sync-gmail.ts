@@ -47,7 +47,7 @@ export async function syncGmailInboxAction(limit?: number): Promise<GmailSyncRes
 
   await recordAuditEvent({
     action: "run_gmail_sync",
-    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorId: authorization.actorId,
     actorType: "user",
     description: result.message,
     entityId: result.connectedInboxEmail,

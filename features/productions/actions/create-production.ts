@@ -144,7 +144,7 @@ export async function createProductionAction(
 
   await insertActivityLogViaRest({
     action: "production_created",
-    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorId: authorization.actorId,
     actorType: "user",
     description: "Production créée manuellement depuis le cockpit.",
     entityId: productionId,

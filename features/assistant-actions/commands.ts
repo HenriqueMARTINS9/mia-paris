@@ -1,7 +1,16 @@
 import "server-only";
 
-import { authorizeServerPermissions } from "@/features/auth/server-authorization";
+import {
+  authorizeServerPermissions,
+  type ServerPermissionOverride,
+} from "@/features/auth/server-authorization";
 import { assistantActionCatalog } from "@/features/assistant-actions/catalog";
+import {
+  getAssistantServiceDeadlines,
+  getAssistantServiceEmails,
+  getAssistantServiceProductions,
+  getAssistantServiceRequestOverviews,
+} from "@/features/assistant-actions/service-queries";
 import type {
   AssistantActionResult,
   AssistantAddProductionNoteInput,
@@ -24,6 +33,7 @@ import {
   validateLookupTerm,
   validateRequiredText,
 } from "@/features/assistant-actions/validators";
+import { getDeadlinesPageData } from "@/features/deadlines/queries";
 import { getEmailsPageData } from "@/features/emails/queries";
 import { getProductionsPageData } from "@/features/productions/queries";
 import { updateProductionNotesAction } from "@/features/productions/actions/update-production";
@@ -36,34 +46,75 @@ import { createDeadlineAction } from "@/features/deadlines/actions/create-deadli
 import { logOperationalError, recordAuditEvent } from "@/lib/action-runtime";
 import { supabaseRestSelectMaybeSingle } from "@/lib/supabase/rest";
 
-export async function getTodayUrgencies(): Promise<
+interface AssistantCommandExecutionOptions {
+  authorizationOverride?: ServerPermissionOverride | null;
+}
+
+export async function getTodayUrgencies(
+  options?: AssistantCommandExecutionOptions,
+): Promise<
   AssistantActionResult<AssistantUrgencyList>
 > {
-  const authorization = await authorizeServerPermissions(["assistant.read"]);
+  const authorization = await authorizeServerPermissions(
+    ["assistant.read"],
+    options?.authorizationOverride,
+  );
 
   if (!authorization.ok) {
     return createAssistantActionFailure("forbidden", authorization.message);
   }
 
-  const data = await getTodayOverviewData();
+  const deadlines = options?.authorizationOverride
+    ? await getAssistantServiceDeadlines()
+    : (await getDeadlinesPageData()).deadlines;
+  const now = Date.now();
+  const next24Hours = now + 24 * 60 * 60 * 1000;
+  const urgencies24h = deadlines
+    .filter((deadline) => {
+      if (!deadline.deadlineAt || deadline.status === "done") {
+        return false;
+      }
+
+      const time = new Date(deadline.deadlineAt).getTime();
+
+      return Number.isFinite(time) && (time <= next24Hours || deadline.isOverdue);
+    })
+    .sort((left, right) => {
+      const leftTime = left.deadlineAt
+        ? new Date(left.deadlineAt).getTime()
+        : Number.MAX_SAFE_INTEGER;
+      const rightTime = right.deadlineAt
+        ? new Date(right.deadlineAt).getTime()
+        : Number.MAX_SAFE_INTEGER;
+
+      return leftTime - rightTime;
+    });
 
   return createAssistantActionSuccess(
-    data.urgencies24h,
-    `${data.urgencies24h.length} urgence(s) remontée(s) pour aujourd’hui.`,
+    urgencies24h,
+    `${urgencies24h.length} urgence(s) remontée(s) pour aujourd’hui.`,
   );
 }
 
-export async function getUnprocessedEmails(): Promise<
+export async function getUnprocessedEmails(
+  options?: AssistantCommandExecutionOptions,
+): Promise<
   AssistantActionResult<AssistantUnprocessedEmailList>
 > {
-  const authorization = await authorizeServerPermissions(["assistant.read"]);
+  const authorization = await authorizeServerPermissions(
+    ["assistant.read"],
+    options?.authorizationOverride,
+  );
 
   if (!authorization.ok) {
     return createAssistantActionFailure("forbidden", authorization.message);
   }
 
-  const data = await getEmailsPageData();
-  const emails = data.emails.filter((email) => email.status !== "processed");
+  const emails = (
+    options?.authorizationOverride
+      ? await getAssistantServiceEmails()
+      : (await getEmailsPageData()).emails
+  ).filter((email) => email.status !== "processed");
 
   return createAssistantActionSuccess(
     emails,
@@ -71,17 +122,25 @@ export async function getUnprocessedEmails(): Promise<
   );
 }
 
-export async function getRequestsWithoutAssignee(): Promise<
+export async function getRequestsWithoutAssignee(
+  options?: AssistantCommandExecutionOptions,
+): Promise<
   AssistantActionResult<AssistantRequestBacklogList>
 > {
-  const authorization = await authorizeServerPermissions(["assistant.read"]);
+  const authorization = await authorizeServerPermissions(
+    ["assistant.read"],
+    options?.authorizationOverride,
+  );
 
   if (!authorization.ok) {
     return createAssistantActionFailure("forbidden", authorization.message);
   }
 
-  const data = await getRequestsOverviewPageData();
-  const requests = data.requests.filter(
+  const requests = (
+    options?.authorizationOverride
+      ? await getAssistantServiceRequestOverviews()
+      : (await getRequestsOverviewPageData()).requests
+  ).filter(
     (request) => request.assignedUserId === null || request.owner === "Non assigné",
   );
 
@@ -91,17 +150,25 @@ export async function getRequestsWithoutAssignee(): Promise<
   );
 }
 
-export async function getBlockedProductions(): Promise<
+export async function getBlockedProductions(
+  options?: AssistantCommandExecutionOptions,
+): Promise<
   AssistantActionResult<AssistantProductionList>
 > {
-  const authorization = await authorizeServerPermissions(["assistant.read"]);
+  const authorization = await authorizeServerPermissions(
+    ["assistant.read"],
+    options?.authorizationOverride,
+  );
 
   if (!authorization.ok) {
     return createAssistantActionFailure("forbidden", authorization.message);
   }
 
-  const data = await getProductionsPageData();
-  const productions = data.productions.filter((production) => production.isBlocked);
+  const productions = (
+    options?.authorizationOverride
+      ? await getAssistantServiceProductions()
+      : (await getProductionsPageData()).productions
+  ).filter((production) => production.isBlocked);
 
   return createAssistantActionSuccess(
     productions,
@@ -109,17 +176,25 @@ export async function getBlockedProductions(): Promise<
   );
 }
 
-export async function getHighRiskProductions(): Promise<
+export async function getHighRiskProductions(
+  options?: AssistantCommandExecutionOptions,
+): Promise<
   AssistantActionResult<AssistantProductionList>
 > {
-  const authorization = await authorizeServerPermissions(["assistant.read"]);
+  const authorization = await authorizeServerPermissions(
+    ["assistant.read"],
+    options?.authorizationOverride,
+  );
 
   if (!authorization.ok) {
     return createAssistantActionFailure("forbidden", authorization.message);
   }
 
-  const data = await getProductionsPageData();
-  const productions = data.productions.filter(
+  const productions = (
+    options?.authorizationOverride
+      ? await getAssistantServiceProductions()
+      : (await getProductionsPageData()).productions
+  ).filter(
     (production) => production.risk === "critical" || production.risk === "high",
   );
 
@@ -131,11 +206,12 @@ export async function getHighRiskProductions(): Promise<
 
 export async function createTask(
   input: AssistantCreateTaskInput,
+  options?: AssistantCommandExecutionOptions,
 ): Promise<AssistantActionResult<Awaited<ReturnType<typeof createTaskAction>>>> {
-  const authorization = await authorizeServerPermissions([
-    "assistant.write.safe",
-    "tasks.create",
-  ]);
+  const authorization = await authorizeServerPermissions(
+    ["assistant.write.safe", "tasks.create"],
+    options?.authorizationOverride,
+  );
 
   if (!authorization.ok) {
     return createAssistantActionFailure("forbidden", authorization.message);
@@ -168,8 +244,8 @@ export async function createTask(
 
   await recordAuditEvent({
     action: "assistant_create_task",
-    actorId: authorization.currentUser.appUser?.id ?? null,
-    actorType: "user",
+    actorId: authorization.actorId,
+    actorType: authorization.actorType,
     description: result.message,
     entityId: input.requestId ?? null,
     entityType: "task",
@@ -193,11 +269,12 @@ export async function createTask(
 
 export async function createDeadline(
   input: AssistantCreateDeadlineInput,
+  options?: AssistantCommandExecutionOptions,
 ): Promise<AssistantActionResult<Awaited<ReturnType<typeof createDeadlineAction>>>> {
-  const authorization = await authorizeServerPermissions([
-    "assistant.manage",
-    "deadlines.create",
-  ]);
+  const authorization = await authorizeServerPermissions(
+    ["assistant.manage", "deadlines.create"],
+    options?.authorizationOverride,
+  );
 
   if (!authorization.ok) {
     return createAssistantActionFailure("forbidden", authorization.message);
@@ -228,8 +305,8 @@ export async function createDeadline(
 
   await recordAuditEvent({
     action: "assistant_create_deadline",
-    actorId: authorization.currentUser.appUser?.id ?? null,
-    actorType: "user",
+    actorId: authorization.actorId,
+    actorType: authorization.actorType,
     description: result.message,
     entityId: input.requestId ?? null,
     entityType: "deadline",
@@ -251,11 +328,12 @@ export async function createDeadline(
 
 export async function addNoteToRequest(
   input: AssistantAddRequestNoteInput,
+  options?: AssistantCommandExecutionOptions,
 ): Promise<AssistantActionResult<Awaited<ReturnType<typeof appendRequestNoteAction>>>> {
-  const authorization = await authorizeServerPermissions([
-    "assistant.write.safe",
-    "requests.update",
-  ]);
+  const authorization = await authorizeServerPermissions(
+    ["assistant.write.safe", "requests.update"],
+    options?.authorizationOverride,
+  );
 
   if (!authorization.ok) {
     return createAssistantActionFailure("forbidden", authorization.message);
@@ -288,8 +366,8 @@ export async function addNoteToRequest(
 
   await recordAuditEvent({
     action: "assistant_add_note_to_request",
-    actorId: authorization.currentUser.appUser?.id ?? null,
-    actorType: "user",
+    actorId: authorization.actorId,
+    actorType: authorization.actorType,
     description: result.message,
     entityId: input.requestId,
     entityType: "request",
@@ -308,11 +386,12 @@ export async function addNoteToRequest(
 
 export async function addNoteToProduction(
   input: AssistantAddProductionNoteInput,
+  options?: AssistantCommandExecutionOptions,
 ): Promise<AssistantActionResult<Awaited<ReturnType<typeof updateProductionNotesAction>>>> {
-  const authorization = await authorizeServerPermissions([
-    "assistant.write.safe",
-    "productions.update",
-  ]);
+  const authorization = await authorizeServerPermissions(
+    ["assistant.write.safe", "productions.update"],
+    options?.authorizationOverride,
+  );
 
   if (!authorization.ok) {
     return createAssistantActionFailure("forbidden", authorization.message);
@@ -338,8 +417,8 @@ export async function addNoteToProduction(
 
   await recordAuditEvent({
     action: "assistant_add_note_to_production",
-    actorId: authorization.currentUser.appUser?.id ?? null,
-    actorType: "user",
+    actorId: authorization.actorId,
+    actorType: authorization.actorType,
     description: result.message,
     entityId: input.productionId,
     entityType: "production",
@@ -358,11 +437,12 @@ export async function addNoteToProduction(
 
 export async function prepareReplyDraft(
   input: AssistantPrepareReplyDraftInput,
+  options?: AssistantCommandExecutionOptions,
 ): Promise<AssistantActionResult<AssistantPrepareReplyDraftResult>> {
-  const authorization = await authorizeServerPermissions([
-    "assistant.write.safe",
-    "reply.generate",
-  ]);
+  const authorization = await authorizeServerPermissions(
+    ["assistant.write.safe", "reply.generate"],
+    options?.authorizationOverride,
+  );
 
   if (!authorization.ok) {
     return createAssistantActionFailure("forbidden", authorization.message);
@@ -386,8 +466,8 @@ export async function prepareReplyDraft(
 
     await recordAuditEvent({
       action: "assistant_prepare_reply_draft",
-      actorId: authorization.currentUser.appUser?.id ?? null,
-      actorType: "user",
+      actorId: authorization.actorId,
+      actorType: authorization.actorType,
       description: "Brouillon assistant préparé.",
       entityId: `${input.context.sourceType}:${input.context.sourceId}`,
       entityType: "reply_draft",
@@ -414,7 +494,7 @@ export async function prepareReplyDraft(
     );
   } catch (error) {
     await logOperationalError({
-      actorId: authorization.currentUser.appUser?.id ?? null,
+      actorId: authorization.actorId,
       entityId: `${input.context.sourceType}:${input.context.sourceId}`,
       entityType: "reply_draft",
       error,
@@ -436,8 +516,12 @@ export async function prepareReplyDraft(
 
 export async function searchClientHistory(
   clientName: string,
+  options?: AssistantCommandExecutionOptions,
 ): Promise<AssistantActionResult<AssistantHistorySearchResult>> {
-  const authorization = await authorizeServerPermissions(["assistant.read"]);
+  const authorization = await authorizeServerPermissions(
+    ["assistant.read"],
+    options?.authorizationOverride,
+  );
 
   if (!authorization.ok) {
     return createAssistantActionFailure("forbidden", authorization.message);
@@ -449,19 +533,25 @@ export async function searchClientHistory(
     return createAssistantActionFailure("validation_error", term.message);
   }
 
-  const [requestsData, emailsData, productionsData] = await Promise.all([
-    getRequestsOverviewPageData(),
-    getEmailsPageData(),
-    getProductionsPageData(),
+  const [requestRows, emailRows, productionRows] = await Promise.all([
+    options?.authorizationOverride
+      ? getAssistantServiceRequestOverviews()
+      : getRequestsOverviewPageData().then((result) => result.requests),
+    options?.authorizationOverride
+      ? getAssistantServiceEmails()
+      : getEmailsPageData().then((result) => result.emails),
+    options?.authorizationOverride
+      ? getAssistantServiceProductions()
+      : getProductionsPageData().then((result) => result.productions),
   ]);
 
-  const requests = requestsData.requests.filter(
+  const requests = requestRows.filter(
     (request) => request.clientName.toLowerCase() === term.value,
   );
-  const emails = emailsData.emails.filter(
+  const emails = emailRows.filter(
     (email) => email.clientName.toLowerCase() === term.value,
   );
-  const productions = productionsData.productions.filter(
+  const productions = productionRows.filter(
     (production) => production.clientName.toLowerCase() === term.value,
   );
 
@@ -498,8 +588,12 @@ export async function searchClientHistory(
 
 export async function searchModelHistory(
   modelName: string,
+  options?: AssistantCommandExecutionOptions,
 ): Promise<AssistantActionResult<AssistantHistorySearchResult>> {
-  const authorization = await authorizeServerPermissions(["assistant.read"]);
+  const authorization = await authorizeServerPermissions(
+    ["assistant.read"],
+    options?.authorizationOverride,
+  );
 
   if (!authorization.ok) {
     return createAssistantActionFailure("forbidden", authorization.message);
@@ -511,15 +605,19 @@ export async function searchModelHistory(
     return createAssistantActionFailure("validation_error", term.message);
   }
 
-  const [requestsData, productionsData] = await Promise.all([
-    getRequestsOverviewPageData(),
-    getProductionsPageData(),
+  const [requestRows, productionRows] = await Promise.all([
+    options?.authorizationOverride
+      ? getAssistantServiceRequestOverviews()
+      : getRequestsOverviewPageData().then((result) => result.requests),
+    options?.authorizationOverride
+      ? getAssistantServiceProductions()
+      : getProductionsPageData().then((result) => result.productions),
   ]);
 
-  const requests = requestsData.requests.filter((request) =>
+  const requests = requestRows.filter((request) =>
     request.title.toLowerCase().includes(term.value),
   );
-  const productions = productionsData.productions.filter((production) =>
+  const productions = productionRows.filter((production) =>
     production.modelName.toLowerCase().includes(term.value),
   );
 

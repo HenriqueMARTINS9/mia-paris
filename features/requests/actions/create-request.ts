@@ -83,7 +83,7 @@ export async function createRequestAction(
 
   await insertActivityLogViaRest({
     action: "request_created_manually",
-    actorId: authorization.currentUser.appUser?.id ?? null,
+    actorId: authorization.actorId,
     actorType: "user",
     description: "Demande créée manuellement depuis le cockpit.",
     entityId: requestId,
