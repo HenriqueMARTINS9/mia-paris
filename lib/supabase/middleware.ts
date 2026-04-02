@@ -4,9 +4,19 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseEnv, hasSupabaseEnv } from "@/lib/supabase/env";
 
 const LOGIN_PATH = "/login";
+const OPENCLAW_API_PATH = "/api/openclaw";
 const DEFAULT_PROTECTED_REDIRECT = "/demandes";
 
 export async function updateSession(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  const search = request.nextUrl.search;
+
+  if (isOpenClawExternalRoute(pathname)) {
+    return NextResponse.next({
+      request,
+    });
+  }
+
   if (!hasSupabaseEnv) {
     return NextResponse.next({
       request,
@@ -52,8 +62,6 @@ export async function updateSession(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const pathname = request.nextUrl.pathname;
-  const search = request.nextUrl.search;
 
   if (!user && pathname !== LOGIN_PATH) {
     const loginUrl = request.nextUrl.clone();
@@ -86,4 +94,8 @@ function getSafeRedirectPath(pathname: string | null) {
   }
 
   return pathname;
+}
+
+function isOpenClawExternalRoute(pathname: string) {
+  return pathname === OPENCLAW_API_PATH || pathname === `${OPENCLAW_API_PATH}/`;
 }
