@@ -12,6 +12,7 @@ export type ReplyDraftType =
   | "logistics_response";
 
 export type ReplyDraftSourceType = "email" | "request";
+export type ReplyDraftWorkflowStatus = "draft" | "ready_to_send";
 
 export interface ReplyDraftContext {
   clientName: string | null;
@@ -45,13 +46,15 @@ export interface ReplyDraft {
 
 export interface SavedReplyDraft {
   body: string;
+  readyAt: string | null;
   replyType: ReplyDraftType;
   subject: string;
   updatedAt: string | null;
+  workflowStatus: ReplyDraftWorkflowStatus;
 }
 
 export interface ReplyDraftHistoryItem {
-  action: "generated" | "saved";
+  action: "generated" | "ready" | "saved";
   bodyPreview: string | null;
   createdAt: string;
   id: string;
@@ -75,9 +78,13 @@ export interface SaveReplyDraftInput {
   context: ReplyDraftContext;
   replyType: ReplyDraftType;
   subject: string;
+  workflowStatus?: ReplyDraftWorkflowStatus;
 }
 
 export interface SaveReplyDraftResult {
   message: string;
   ok: boolean;
+  readyAt?: string | null;
+  updatedAt?: string | null;
+  workflowStatus?: ReplyDraftWorkflowStatus;
 }

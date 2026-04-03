@@ -29,17 +29,25 @@ export async function saveReplyDraftAction(
 
   try {
     const supabase = await createSupabaseServerClient();
+    const workflowStatus = input.workflowStatus ?? "draft";
+    const timestamp = new Date().toISOString();
     const { error } = await supabase
       .from("reply_drafts" as never)
       .upsert(
         {
           body: input.body.trim(),
-          context: input.context,
+          context: {
+            ...input.context,
+            workflow: {
+              readyAt: workflowStatus === "ready_to_send" ? timestamp : null,
+              status: workflowStatus,
+            },
+          },
           reply_type: input.replyType,
           source_id: input.context.sourceId,
           source_type: input.context.sourceType,
           subject: input.subject.trim(),
-          updated_at: new Date().toISOString(),
+          updated_at: timestamp,
           user_id: currentUser.appUser.id,
         } as never,
         {
@@ -55,10 +63,14 @@ export async function saveReplyDraftAction(
     }
 
     await recordAuditEvent({
-      action: "save_reply_draft",
+      action:
+        workflowStatus === "ready_to_send" ? "reply_draft_ready" : "save_reply_draft",
       actorId: currentUser.appUser.id,
       actorType: "user",
-      description: "Brouillon de réponse enregistré.",
+      description:
+        workflowStatus === "ready_to_send"
+          ? "Brouillon de réponse validé pour envoi."
+          : "Brouillon de réponse enregistré.",
       entityId: `${input.context.sourceType}:${input.context.sourceId}`,
       entityType: "reply_draft",
       payload: {
@@ -67,6 +79,7 @@ export async function saveReplyDraftAction(
         sourceId: input.context.sourceId,
         sourceType: input.context.sourceType,
         subject: input.subject,
+        workflowStatus,
       },
       requestId: input.context.requestId,
       scope: "reply.save",
@@ -76,7 +89,13 @@ export async function saveReplyDraftAction(
 
     return {
       ok: true,
-      message: "Brouillon enregistré pour ce compte.",
+      message:
+        workflowStatus === "ready_to_send"
+          ? "Brouillon validé pour envoi."
+          : "Brouillon enregistré pour ce compte.",
+      readyAt: workflowStatus === "ready_to_send" ? timestamp : null,
+      updatedAt: timestamp,
+      workflowStatus,
     };
   } catch (error) {
     await logOperationalError({
@@ -88,6 +107,7 @@ export async function saveReplyDraftAction(
         replyType: input.replyType,
         sourceId: input.context.sourceId,
         sourceType: input.context.sourceType,
+        workflowStatus: input.workflowStatus ?? "draft",
       },
       requestId: input.context.requestId,
       scope: "reply.save",

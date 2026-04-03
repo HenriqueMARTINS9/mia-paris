@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Loader2, Save, Sparkles } from "lucide-react";
+import { CheckCheck, Copy, Loader2, Save, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,8 +13,13 @@ import {
 } from "@/components/ui/sheet";
 import { MobileReplyEditor } from "@/features/replies/components/mobile-reply-editor";
 import { MobileReplyTypePicker } from "@/features/replies/components/mobile-reply-type-picker";
-import type { ReplyDraft, ReplyDraftType } from "@/features/replies/types";
+import type {
+  ReplyDraft,
+  ReplyDraftType,
+  ReplyDraftWorkflowStatus,
+} from "@/features/replies/types";
 import { replyTypeMeta } from "@/features/replies/lib/build-reply-draft";
+import { formatDateTime } from "@/lib/utils";
 
 interface MobileReplyDraftSheetProps {
   body: string;
@@ -23,12 +28,15 @@ interface MobileReplyDraftSheetProps {
   onBodyChange: (value: string) => void;
   onCopy: () => void;
   onGenerate: () => void;
+  onMarkReady: () => void;
   onReplyTypeChange: (value: ReplyDraftType) => void;
   onSave: () => void;
   onSubjectChange: (value: string) => void;
+  readyAt: string | null;
   replyType: ReplyDraftType;
   subject: string;
   title: string;
+  workflowStatus: ReplyDraftWorkflowStatus;
 }
 
 export function MobileReplyDraftSheet({
@@ -38,12 +46,15 @@ export function MobileReplyDraftSheet({
   onBodyChange,
   onCopy,
   onGenerate,
+  onMarkReady,
   onReplyTypeChange,
   onSave,
   onSubjectChange,
+  readyAt,
   replyType,
   subject,
   title,
+  workflowStatus,
 }: Readonly<MobileReplyDraftSheetProps>) {
   return (
     <Sheet>
@@ -89,11 +100,18 @@ export function MobileReplyDraftSheet({
                   {draft.disclaimer}
                 </div>
               ) : null}
+
+              {workflowStatus === "ready_to_send" ? (
+                <div className="rounded-2xl border border-primary/20 bg-primary/[0.08] px-4 py-3 text-sm text-primary">
+                  Brouillon validé pour envoi
+                  {readyAt ? ` · ${formatDateTime(readyAt)}` : ""}.
+                </div>
+              ) : null}
             </div>
           </div>
 
           <div className="sticky bottom-0 z-20 border-t border-black/[0.06] bg-[#fbf8f1]/95 px-4 pb-4 pt-3 backdrop-blur">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <Button type="button" variant="secondary" onClick={onGenerate} disabled={isPending}>
                 {isPending ? (
                   <>
@@ -114,6 +132,14 @@ export function MobileReplyDraftSheet({
               <Button type="button" variant="ghost" onClick={onSave} className="border border-black/[0.06] bg-white/70">
                 <Save className="h-4 w-4" />
                 Sauver
+              </Button>
+              <Button
+                type="button"
+                onClick={onMarkReady}
+                disabled={body.trim().length === 0 || subject.trim().length === 0 || isPending}
+              >
+                <CheckCheck className="h-4 w-4" />
+                Valider
               </Button>
             </div>
           </div>

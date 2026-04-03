@@ -25,6 +25,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { EmailFilters } from "@/features/emails/components/email-filters";
+import { GmailAutoSyncBridge } from "@/features/emails/components/gmail-auto-sync-bridge";
 import { MobileEmailDetailSheet } from "@/features/emails/components/mobile-email-detail-sheet";
 import { MobileEmailList } from "@/features/emails/components/mobile-email-list";
 import { EmailPreviewPanel } from "@/features/emails/components/email-preview-panel";
@@ -139,6 +140,7 @@ export function EmailsPage({
 
   return (
     <div className="flex flex-col gap-6">
+      <GmailAutoSyncBridge gmailInbox={gmailInbox} />
       {header}
 
       <div className="hidden grid-cols-2 gap-4 md:grid xl:grid-cols-4">

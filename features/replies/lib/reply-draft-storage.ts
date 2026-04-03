@@ -1,5 +1,6 @@
 import type {
   ReplyDraftType,
+  ReplyDraftWorkflowStatus,
   SavedReplyDraft,
 } from "@/features/replies/types";
 
@@ -24,16 +25,20 @@ export function readStoredReplyDraft(storageKey: string): SavedReplyDraft {
 
     const parsed = JSON.parse(savedDraft) as {
       body?: string;
+      readyAt?: string | null;
       replyType?: ReplyDraftType;
       subject?: string;
       updatedAt?: string | null;
+      workflowStatus?: ReplyDraftWorkflowStatus;
     };
 
     return {
       body: parsed.body ?? "",
+      readyAt: parsed.readyAt ?? null,
       replyType: parsed.replyType ?? "acknowledgement",
       subject: parsed.subject ?? "",
       updatedAt: parsed.updatedAt ?? null,
+      workflowStatus: parsed.workflowStatus ?? "draft",
     };
   } catch {
     if (typeof window !== "undefined") {
@@ -58,8 +63,10 @@ export function writeStoredReplyDraft(
 function emptySavedDraft(): SavedReplyDraft {
   return {
     body: "",
+    readyAt: null,
     replyType: "acknowledgement",
     subject: "",
     updatedAt: null,
+    workflowStatus: "draft",
   };
 }

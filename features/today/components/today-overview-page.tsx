@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { CreateDeadlineDialog } from "@/features/deadlines/components/create-deadline-dialog";
 import type { DocumentFormOptions } from "@/features/documents/types";
+import { GmailAutoSyncBridge } from "@/features/emails/components/gmail-auto-sync-bridge";
 import { NotificationPreferencesCard } from "@/features/notifications/components/notification-preferences-card";
 import type { NotificationPreferencesState } from "@/features/notifications/types";
 import { AutomationSummaryCard } from "@/features/automations/components/automation-summary-card";
@@ -68,6 +69,7 @@ export function TodayOverviewPage({
 
   return (
     <div className="flex flex-col gap-5">
+      <GmailAutoSyncBridge gmailInbox={data.gmailInbox} />
       <PageHeader
         eyebrow="Vue du jour"
         title="Aujourd’hui"

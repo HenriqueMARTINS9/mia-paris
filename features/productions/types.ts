@@ -7,13 +7,17 @@ export type ProductionStatus =
 export type ProductionRisk = "critical" | "high" | "normal" | "low";
 
 export interface ProductionListItem {
+  fabricSupplier: string | null;
   id: string;
+  inspectionStatus: string | null;
   orderId: string | null;
   orderNumber: string;
   clientId: string | null;
   clientName: string;
+  labStatus: string | null;
   modelId: string | null;
   modelName: string;
+  manufacturingPartner: string | null;
   requestId: string | null;
   requestTitle: string | null;
   productionMode: string | null;
@@ -26,6 +30,8 @@ export interface ProductionListItem {
   plannedEndAt: string | null;
   blockingReason: string | null;
   notes: string | null;
+  trimSupplier: string | null;
+  tunisiaUnit: string | null;
   createdAt: string | null;
   updatedAt: string | null;
   isBlocked: boolean;

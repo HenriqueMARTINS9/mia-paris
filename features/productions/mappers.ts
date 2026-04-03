@@ -109,15 +109,53 @@ export function mapProductionRecordToListItem({
     readString(orderRecord, ["order_number", "number", "reference", "po_number"]) ??
     compactIdentifier(orderId ?? productionRecord.id) ??
     "Sans commande";
+  const fabricSupplier = readString(productionRecord, [
+    "fabric_supplier",
+    "fabric_supplier_name",
+    "tissue_supplier",
+    "tissue_supplier_name",
+  ]);
+  const trimSupplier = readString(productionRecord, [
+    "trim_supplier",
+    "trim_supplier_name",
+    "accessories_supplier",
+    "fournitures_supplier",
+  ]);
+  const manufacturingPartner = readString(productionRecord, [
+    "manufacturing_partner",
+    "faconnier",
+    "factory_partner",
+    "subcontractor",
+  ]);
+  const tunisiaUnit = readString(productionRecord, [
+    "tunisia_unit",
+    "internal_factory",
+    "factory_unit",
+    "production_unit",
+  ]);
+  const inspectionStatus = readString(productionRecord, [
+    "inspection_status",
+    "final_inspection_status",
+    "quality_inspection_status",
+  ]);
+  const labStatus = readString(productionRecord, [
+    "lab_status",
+    "lab_test_status",
+    "compliance_status",
+  ]);
 
   return {
+    fabricSupplier,
     id: productionRecord.id,
+    inspectionStatus,
     orderId,
     orderNumber,
     clientId,
     clientName,
+    labStatus,
     modelId,
     modelName,
+    manufacturingPartner,
     requestId,
     requestTitle: requestRow?.title ?? null,
     productionMode,
@@ -144,6 +182,8 @@ export function mapProductionRecordToListItem({
     ]),
     blockingReason,
     notes: readString(productionRecord, ["notes", "internal_notes"]),
+    trimSupplier,
+    tunisiaUnit,
     createdAt: readString(productionRecord, ["created_at"]),
     updatedAt: readString(productionRecord, ["updated_at"]),
     isBlocked:

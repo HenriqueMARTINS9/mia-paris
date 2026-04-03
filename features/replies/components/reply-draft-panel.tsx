@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Copy, Loader2, Save, Sparkles } from "lucide-react";
+import { CheckCheck, Copy, Loader2, Save, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,7 @@ import type {
   ReplyDraftType,
   SavedReplyDraft,
 } from "@/features/replies/types";
+import { formatDateTime } from "@/lib/utils";
 
 export function ReplyDraftPanel({
   context,
@@ -45,9 +46,11 @@ export function ReplyDraftPanel({
   const initialDraft =
     initialSavedDraft ?? {
       body: "",
+      readyAt: null,
       replyType: "acknowledgement" as ReplyDraftType,
       subject: "",
       updatedAt: null,
+      workflowStatus: "draft" as const,
     };
   const [replyType, setReplyType] = useState<ReplyDraftType>(
     initialDraft.replyType,
@@ -55,6 +58,8 @@ export function ReplyDraftPanel({
   const [draft, setDraft] = useState<ReplyDraft | null>(null);
   const [subject, setSubject] = useState(initialDraft.subject);
   const [body, setBody] = useState(initialDraft.body);
+  const [workflowStatus, setWorkflowStatus] = useState(initialDraft.workflowStatus);
+  const [readyAt, setReadyAt] = useState(initialDraft.readyAt);
   const [isPending, startTransition] = useTransition();
 
   function handleGenerate() {
@@ -72,6 +77,8 @@ export function ReplyDraftPanel({
       setDraft(result.draft);
       setSubject(result.draft.subject);
       setBody(result.draft.body);
+      setWorkflowStatus("draft");
+      setReadyAt(null);
       toast.success(result.message);
     });
   }
@@ -86,12 +93,22 @@ export function ReplyDraftPanel({
   }
 
   function handleSave() {
+    persistDraft("draft");
+  }
+
+  function handleMarkReady() {
+    persistDraft("ready_to_send");
+  }
+
+  function persistDraft(nextWorkflowStatus: SavedReplyDraft["workflowStatus"]) {
     startTransition(async () => {
       const savedDraft = {
         body,
+        readyAt: nextWorkflowStatus === "ready_to_send" ? new Date().toISOString() : null,
         replyType,
         subject,
         updatedAt: new Date().toISOString(),
+        workflowStatus: nextWorkflowStatus,
       } satisfies SavedReplyDraft;
 
       writeStoredReplyDraft(storageKey, savedDraft);
@@ -101,6 +118,7 @@ export function ReplyDraftPanel({
         context,
         replyType,
         subject,
+        workflowStatus: nextWorkflowStatus,
       });
 
       if (!result.ok) {
@@ -108,8 +126,37 @@ export function ReplyDraftPanel({
         return;
       }
 
+      setWorkflowStatus(result.workflowStatus ?? nextWorkflowStatus);
+      setReadyAt(result.readyAt ?? null);
       toast.success(result.message);
     });
+  }
+
+  function handleSubjectChange(value: string) {
+    setSubject(value);
+
+    if (workflowStatus === "ready_to_send") {
+      setWorkflowStatus("draft");
+      setReadyAt(null);
+    }
+  }
+
+  function handleBodyChange(value: string) {
+    setBody(value);
+
+    if (workflowStatus === "ready_to_send") {
+      setWorkflowStatus("draft");
+      setReadyAt(null);
+    }
+  }
+
+  function handleReplyTypeChange(value: ReplyDraftType) {
+    setReplyType(value);
+
+    if (workflowStatus === "ready_to_send") {
+      setWorkflowStatus("draft");
+      setReadyAt(null);
+    }
   }
 
   if (!can("reply.generate")) {
@@ -123,15 +170,18 @@ export function ReplyDraftPanel({
           title={title}
           draft={draft}
           isPending={isPending}
-          onBodyChange={setBody}
+          onBodyChange={handleBodyChange}
           onCopy={handleCopy}
           onGenerate={handleGenerate}
-          onReplyTypeChange={setReplyType}
+          onMarkReady={handleMarkReady}
+          onReplyTypeChange={handleReplyTypeChange}
           onSave={handleSave}
-          onSubjectChange={setSubject}
+          onSubjectChange={handleSubjectChange}
+          readyAt={readyAt}
           replyType={replyType}
           subject={subject}
           body={body}
+          workflowStatus={workflowStatus}
         />
       </div>
 
@@ -144,6 +194,11 @@ export function ReplyDraftPanel({
             <Badge variant="outline" className="bg-white">
               {replyTypeMeta[replyType].label}
             </Badge>
+            {workflowStatus === "ready_to_send" ? (
+              <Badge className="border-primary/10 bg-primary/[0.08] text-primary">
+                Prêt à envoyer
+              </Badge>
+            ) : null}
           </div>
           <div>
             <CardTitle>{title}</CardTitle>
@@ -163,7 +218,7 @@ export function ReplyDraftPanel({
               </p>
               <ReplyTemplatePicker
                 value={replyType}
-                onSelect={setReplyType}
+                onSelect={handleReplyTypeChange}
                 disabled={isPending}
               />
               <p className="text-sm text-muted-foreground">
@@ -209,6 +264,14 @@ export function ReplyDraftPanel({
                 <Save className="h-4 w-4" />
                 Enregistrer
               </Button>
+              <Button
+                type="button"
+                onClick={handleMarkReady}
+                disabled={body.trim().length === 0 || subject.trim().length === 0 || isPending}
+              >
+                <CheckCheck className="h-4 w-4" />
+                Valider pour envoi
+              </Button>
             </div>
           </div>
 
@@ -218,7 +281,7 @@ export function ReplyDraftPanel({
             </p>
             <Input
               value={subject}
-              onChange={(event) => setSubject(event.target.value)}
+              onChange={(event) => handleSubjectChange(event.target.value)}
               placeholder="Objet du brouillon"
               disabled={isPending && !draft}
             />
@@ -230,12 +293,19 @@ export function ReplyDraftPanel({
             </p>
             <Textarea
               value={body}
-              onChange={(event) => setBody(event.target.value)}
+              onChange={(event) => handleBodyChange(event.target.value)}
               placeholder="Le brouillon apparaîtra ici après génération."
               className="min-h-[260px]"
               disabled={isPending && !draft}
             />
           </div>
+
+          {workflowStatus === "ready_to_send" ? (
+            <div className="rounded-2xl border border-primary/20 bg-primary/[0.08] px-4 py-3 text-sm text-primary">
+              Brouillon validé pour envoi
+              {readyAt ? ` · ${formatDateTime(readyAt)}` : ""}. L’équipe peut maintenant l’utiliser comme réponse prête à partir du CRM.
+            </div>
+          ) : null}
 
           {draft?.disclaimer ? (
             <div className="rounded-2xl border border-black/[0.06] bg-[#fbf8f2]/88 px-4 py-3 text-sm text-muted-foreground">

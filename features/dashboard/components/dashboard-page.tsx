@@ -18,6 +18,7 @@ import { OverdueTasksPanel } from "@/features/dashboard/components/overdue-tasks
 import { PriorityRequestsPanel } from "@/features/dashboard/components/priority-requests-panel";
 import { AutomationSummaryCard } from "@/features/automations/components/automation-summary-card";
 import { CreateDeadlineDialog } from "@/features/deadlines/components/create-deadline-dialog";
+import { GmailAutoSyncBridge } from "@/features/emails/components/gmail-auto-sync-bridge";
 import type { DocumentFormOptions } from "@/features/documents/types";
 import type { ProductionFormOptions } from "@/features/productions/types";
 import { CreateRequestDialog } from "@/features/requests/components/create-request-dialog";
@@ -62,6 +63,7 @@ export function DashboardPage({
 
   return (
     <div className="flex flex-col gap-6">
+      <GmailAutoSyncBridge gmailInbox={data.gmailInbox} />
       <PageHeader
         eyebrow="Cockpit quotidien"
         title="Dashboard"

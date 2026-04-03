@@ -38,14 +38,20 @@ export async function getSavedReplyDraft(
     }
 
     const row = data as ReplyDraftRecord;
+    const workflow =
+      readObject(readObject(row, ["context"]), ["workflow"]) ?? null;
 
     return {
       body: readString(row, ["body"]) ?? "",
+      readyAt: readString(workflow, ["readyAt", "ready_at"]) ?? null,
       replyType:
         (readString(row, ["reply_type"]) as SavedReplyDraft["replyType"] | null) ??
         "acknowledgement",
       subject: readString(row, ["subject"]) ?? "",
       updatedAt: readString(row, ["updated_at"]) ?? null,
+      workflowStatus:
+        (readString(workflow, ["status"]) as SavedReplyDraft["workflowStatus"] | null) ??
+        "draft",
     };
   } catch {
     return null;
@@ -83,7 +89,12 @@ export async function getReplyDraftHistory(
       const action = readString(log, ["action", "action_type"]);
 
       return {
-        action: action === "reply_draft_saved" ? "saved" : "generated",
+        action:
+          action === "reply_draft_ready"
+            ? "ready"
+            : action === "reply_draft_saved" || action === "save_reply_draft"
+              ? "saved"
+              : "generated",
         bodyPreview:
           readString(payload, ["bodyPreview", "body_preview"]) ??
           readString(log, ["description"]) ??

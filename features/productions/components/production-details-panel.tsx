@@ -94,6 +94,36 @@ export function ProductionDetailsPanel({
           </div>
 
           <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
+            <p className="font-semibold">Chaîne textile</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <TextileLine
+                label="Fournisseur tissu"
+                value={production.fabricSupplier}
+              />
+              <TextileLine
+                label="Fournisseur fournitures"
+                value={production.trimSupplier}
+              />
+              <TextileLine
+                label="Façonnier / partenaire"
+                value={production.manufacturingPartner}
+              />
+              <TextileLine
+                label="Unité Tunisie"
+                value={production.tunisiaUnit}
+              />
+              <TextileLine
+                label="Inspection finale"
+                value={production.inspectionStatus}
+              />
+              <TextileLine
+                label="Statut labo / conformité"
+                value={production.labStatus}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
             <p className="font-semibold">Blocage éventuel</p>
             <p className="mt-3 text-sm leading-6 text-foreground/80">
               {production.blockingReason ??
@@ -199,6 +229,25 @@ export function ProductionDetailsPanel({
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function TextileLine({
+  label,
+  value,
+}: Readonly<{
+  label: string;
+  value: string | null;
+}>) {
+  return (
+    <div className="rounded-2xl border border-white/70 bg-white/70 px-4 py-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-2 text-sm text-foreground/80">
+        {value ?? "Non renseigné"}
+      </p>
     </div>
   );
 }

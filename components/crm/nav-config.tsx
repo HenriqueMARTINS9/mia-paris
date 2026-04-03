@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
   Bot,
+  ClipboardList,
   Inbox,
   LayoutGrid,
   OctagonAlert,
@@ -10,8 +11,9 @@ import {
   Sparkles,
   Sun,
   TimerReset,
-  ClipboardList,
   ListTodo,
+  Truck,
+  Euro,
 } from "lucide-react";
 
 import type { AppPermission } from "@/features/auth/authorization";
@@ -95,6 +97,27 @@ export const primaryNavigation: NavigationItem[] = [
     description: "Flux entrant à qualifier et rattacher",
     icon: Inbox,
     summaryKey: "inboundEmails",
+  },
+  {
+    href: "/developpement",
+    label: "Développement",
+    shortLabel: "Dev",
+    description: "Prototype, TDS, swatches et validations trim regroupés par métier",
+    icon: ClipboardList,
+  },
+  {
+    href: "/logistique",
+    label: "Logistique",
+    shortLabel: "Log",
+    description: "Délais, conformité, inspection et flux export au même endroit",
+    icon: Truck,
+  },
+  {
+    href: "/facturation",
+    label: "Facturation",
+    shortLabel: "€",
+    description: "Demandes de prix, price sheets et pièces de facturation consolidées",
+    icon: Euro,
   },
 ];
 

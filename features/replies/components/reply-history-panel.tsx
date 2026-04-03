@@ -22,7 +22,11 @@ export function ReplyHistoryPanel({
             >
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">
-                  {item.action === "saved" ? "Enregistré" : "Généré"}
+                  {item.action === "saved"
+                    ? "Enregistré"
+                    : item.action === "ready"
+                      ? "Prêt à envoyer"
+                      : "Généré"}
                 </Badge>
                 {item.replyType ? (
                   <Badge variant="outline" className="bg-white">
