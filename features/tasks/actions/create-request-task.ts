@@ -8,11 +8,7 @@ import { notifyCriticalTask } from "@/features/notifications/lib/operational-not
 import type { RequestPriority, RequestMutationResult } from "@/features/requests/types";
 import { mapUiPriorityToDatabasePriority } from "@/features/requests/metadata";
 import { recordAuditEvent } from "@/lib/action-runtime";
-import {
-  isMissingSupabaseColumnError,
-  supabaseRestInsert,
-  type SupabaseRestErrorPayload,
-} from "@/lib/supabase/rest";
+import { supabaseRestInsert } from "@/lib/supabase/rest";
 
 interface CreateRequestTaskInput {
   assignedUserId: string | null;
@@ -71,10 +67,14 @@ export async function createTaskAction(
   const auditActorId = actor?.actorUserId ?? authorization.actorId;
   const auditActorType = actor?.actorType ?? authorization.actorType;
   const auditSource = actor?.source ?? authorization.source;
-  const tracedPayload = applyTaskActorTrace(payload, actor);
-  const result = await insertTaskWithFallback(
-    tracedPayload,
-    context?.rest ?? null,
+  const auditPayload = buildTaskAuditPayload(payload, actor);
+  const result = await supabaseRestInsert<Array<Record<string, unknown>>>(
+    "tasks",
+    payload,
+    {
+      select: "id,title",
+    },
+    context?.rest ?? undefined,
   );
 
   if (result.error) {
@@ -85,10 +85,7 @@ export async function createTaskAction(
       description: `Création de tâche impossible: ${result.error}`,
       entityId: input.requestId ?? null,
       entityType: "task",
-      payload: {
-        actorEmail: actor?.actorEmail ?? null,
-        ...tracedPayload,
-      },
+      payload: auditPayload,
       requestId: input.requestId ?? null,
       scope: "tasks.create",
       source: auditSource,
@@ -111,10 +108,7 @@ export async function createTaskAction(
         "Aucune tâche n'a été créée. Vérifie les policies RLS et la structure de la table tasks.",
       entityId: input.requestId ?? null,
       entityType: "task",
-      payload: {
-        actorEmail: actor?.actorEmail ?? null,
-        ...tracedPayload,
-      },
+      payload: auditPayload,
       requestId: input.requestId ?? null,
       scope: "tasks.create",
       source: auditSource,
@@ -152,10 +146,7 @@ export async function createTaskAction(
     entityId:
       typeof result.data[0]?.id === "string" ? result.data[0].id : input.requestId ?? null,
     entityType: "task",
-    payload: {
-      actorEmail: actor?.actorEmail ?? null,
-      ...tracedPayload,
-    },
+    payload: auditPayload,
     requestId: input.requestId ?? null,
     scope: "tasks.create",
     source: auditSource,
@@ -183,41 +174,7 @@ export async function createRequestTaskAction(
   return createTaskAction(input);
 }
 
-async function insertTaskWithFallback(
-  payload: Record<string, unknown>,
-  restContext: AssistantMutationExecutionContext["rest"] | null,
-) {
-  const currentPayload = { ...payload };
-
-  while (true) {
-    const result = await supabaseRestInsert<Array<Record<string, unknown>>>(
-      "tasks",
-      currentPayload,
-      {
-        select: "id,title",
-      },
-      restContext ?? undefined,
-    );
-
-    if (!result.error) {
-      return result;
-    }
-
-    if (!isMissingSupabaseColumnError(result.rawError)) {
-      return result;
-    }
-
-    const missingColumn = extractMissingColumnName(result.rawError);
-
-    if (!missingColumn || !(missingColumn in currentPayload)) {
-      return result;
-    }
-
-    delete currentPayload[missingColumn];
-  }
-}
-
-function applyTaskActorTrace(
+function buildTaskAuditPayload(
   payload: Record<string, unknown>,
   actor: AssistantMutationExecutionContext["actor"] | null,
 ) {
@@ -227,29 +184,9 @@ function applyTaskActorTrace(
 
   return {
     ...payload,
-    actor_email: actor.actorEmail,
-    actor_user_id: actor.actorUserId,
-    created_by: actor.actorUserId,
-    created_by_email: actor.actorEmail,
-    created_by_type: actor.actorType,
-    created_by_user_id: actor.actorUserId,
+    actorEmail: actor.actorEmail,
+    actorType: actor.actorType,
+    actorUserId: actor.actorUserId,
     source: actor.source,
-    updated_by: actor.actorUserId,
-    updated_by_email: actor.actorEmail,
-    updated_by_type: actor.actorType,
-    updated_by_user_id: actor.actorUserId,
   };
-}
-
-function extractMissingColumnName(error: SupabaseRestErrorPayload | null) {
-  if (!error) {
-    return null;
-  }
-
-  const haystack = [error.message, error.details, error.error, error.hint]
-    .filter(Boolean)
-    .join(" ");
-  const match = haystack.match(/column ["']?([a-zA-Z0-9_]+)["']?/i);
-
-  return match?.[1] ?? null;
 }
