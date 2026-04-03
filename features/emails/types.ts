@@ -7,6 +7,8 @@ import type { RequestAssigneeOption } from "@/features/requests/types";
 
 export type EmailProcessingStatus = "new" | "review" | "processed";
 
+export type EmailPageSize = 10 | 15;
+
 export type EmailQualificationRequestType =
   | "price_request"
   | "deadline_request"
@@ -112,16 +114,48 @@ export interface GmailInboxStatus {
 
 export type GmailSyncMode = "initial" | "incremental";
 
+export interface EmailStatusCounts {
+  new: number;
+  open: number;
+  processed: number;
+  qualified: number;
+  review: number;
+  total: number;
+}
+
+export interface EmailsPageFilters {
+  search: string;
+  selectedStatus: "all" | EmailProcessingStatus;
+}
+
+export interface EmailsPagination {
+  page: number;
+  perPage: EmailPageSize;
+  totalItems: number;
+  totalPages: number;
+}
+
 export interface EmailsPageData {
+  counts: EmailStatusCounts;
   documentOptions: DocumentFormOptions;
   documentOptionsError: string | null;
   emails: EmailListItem[];
   error: string | null;
+  filters: EmailsPageFilters;
   gmailInbox: GmailInboxStatus;
+  pagination: EmailsPagination;
   qualificationOptions: EmailQualificationOptions;
   qualificationOptionsError: string | null;
   requestOptions: RequestLinkOption[];
   requestOptionsError: string | null;
+  selectedEmailId: string | null;
+}
+
+export interface EmailInboxSnapshot {
+  counts: Pick<EmailStatusCounts, "open" | "review" | "total">;
+  error: string | null;
+  gmailInbox: GmailInboxStatus;
+  latestEmails: EmailListItem[];
 }
 
 export type EmailMutationField =

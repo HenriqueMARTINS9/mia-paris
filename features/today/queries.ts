@@ -6,8 +6,8 @@ import { cache } from "react";
 import { getDashboardPageData } from "@/features/dashboard/queries";
 import { getAutomationWorkspaceData } from "@/features/automations/queries";
 import { getDeadlinesPageData } from "@/features/deadlines/queries";
-import { getEmailsPageData } from "@/features/emails/queries";
-import { getProductionsPageData } from "@/features/productions/queries";
+import { getEmailInboxSnapshot } from "@/features/emails/queries";
+import { getProductionsListSnapshot } from "@/features/productions/queries";
 import { getRequestsOverviewPageData } from "@/features/requests/queries";
 import { getTasksPageData } from "@/features/tasks/queries";
 import type { TodayOverviewData } from "@/features/today/types";
@@ -21,16 +21,16 @@ const getTodayOverviewDataInternal = async (): Promise<TodayOverviewData> => {
     requestsData,
     tasksData,
     deadlinesData,
-    productionsData,
-    emailsData,
+    productionsSnapshot,
+    emailSnapshot,
   ] = await Promise.all([
     getDashboardPageData(),
     getAutomationWorkspaceData(),
     getRequestsOverviewPageData(),
     getTasksPageData(),
     getDeadlinesPageData(),
-    getProductionsPageData(),
-    getEmailsPageData(),
+    getProductionsListSnapshot(),
+    getEmailInboxSnapshot(),
   ]);
 
   const now = Date.now();
@@ -39,7 +39,7 @@ const getTodayOverviewDataInternal = async (): Promise<TodayOverviewData> => {
   startOfToday.setHours(0, 0, 0, 0);
   const endOfToday = startOfToday.getTime() + 24 * 60 * 60 * 1000;
 
-  const emailsToTriage = [...emailsData.emails]
+  const emailsToTriage = [...emailSnapshot.latestEmails]
     .filter((email) => email.status !== "processed")
     .sort(
       (left, right) =>
@@ -107,7 +107,7 @@ const getTodayOverviewDataInternal = async (): Promise<TodayOverviewData> => {
     })
     .slice(0, 6);
 
-  const blockedProductions = [...productionsData.productions]
+  const blockedProductions = [...productionsSnapshot.productions]
     .filter((production) => production.isBlocked || production.risk !== "low")
     .sort((left, right) => {
       if (left.isBlocked !== right.isBlocked) {
@@ -128,15 +128,15 @@ const getTodayOverviewDataInternal = async (): Promise<TodayOverviewData> => {
         requestsData.error,
         tasksData.error,
         deadlinesData.error,
-        productionsData.error,
-        emailsData.error,
+        productionsSnapshot.error,
+        emailSnapshot.error,
       ]
         .filter(Boolean)
         .join(" · ") || null,
     gmailInbox: dashboard.gmailInbox,
     kpis: {
       blockedProductions: blockedProductions.length,
-      emailsToTriage: emailsToTriage.length,
+      emailsToTriage: emailSnapshot.counts.open,
       pendingValidations: dashboard.kpis.pendingValidations,
       tasksToday: tasksToday.length,
       unassignedRequests: unassignedRequests.length,

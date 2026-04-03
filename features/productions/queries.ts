@@ -18,6 +18,7 @@ import {
 import type {
   ProductionDetailItem,
   ProductionFormOptions,
+  ProductionListItem,
   ProductionsPageData,
 } from "@/features/productions/types";
 import {
@@ -36,6 +37,13 @@ import type {
   RequestOverview,
   TaskRecord,
 } from "@/types/crm";
+
+interface ProductionReferenceMaps {
+  clientsById: Map<string, ClientRecord>;
+  modelsById: Map<string, ModelRecord>;
+  ordersById: Map<string, OrderRecord>;
+  requestsById: Map<string, RequestOverview>;
+}
 
 const getProductionsPageDataInternal = async (): Promise<ProductionsPageData> => {
   noStore();
@@ -94,26 +102,12 @@ const getProductionsPageDataInternal = async (): Promise<ProductionsPageData> =>
     }
 
     const productionRows = productionsResult.data ?? [];
-    const relatedIds = productionRows.map(getProductionRelatedIds);
-    const orderIds = uniqueStrings(relatedIds.map((item) => item.orderId));
-    const modelIds = uniqueStrings(relatedIds.map((item) => item.modelId));
-    const clientIds = uniqueStrings(relatedIds.map((item) => item.clientId));
-    const requestIds = uniqueStrings(relatedIds.map((item) => item.requestId));
+    const referenceMaps = await getProductionReferenceMaps(productionRows);
+    const orderIds = Array.from(referenceMaps.ordersById.keys());
+    const modelIds = Array.from(referenceMaps.modelsById.keys());
+    const requestIds = Array.from(referenceMaps.requestsById.keys());
 
-    const [
-      orders,
-      models,
-      clients,
-      requests,
-      tasks,
-      deadlines,
-      documents,
-      activityLogs,
-    ] = await Promise.all([
-      getOrdersByIds(orderIds),
-      getModelsByIds(modelIds),
-      getClientsByIds(clientIds),
-      getRequestsByIds(requestIds),
+    const [tasks, deadlines, documents, activityLogs] = await Promise.all([
       getTasksByRequestIds(requestIds),
       getDeadlinesByRequestIds(requestIds),
       getDocumentsByRelatedIds({
@@ -127,23 +121,7 @@ const getProductionsPageDataInternal = async (): Promise<ProductionsPageData> =>
         requestIds,
       }),
     ]);
-
-    const ordersById = new Map(orders.map((order) => [order.id, order] as const));
-    const modelsById = new Map(models.map((model) => [model.id, model] as const));
-    const clientsById = new Map(clients.map((client) => [client.id, client] as const));
-    const requestsById = new Map(requests.map((request) => [request.id, request] as const));
-
-    const productions = productionRows
-      .map((productionRecord) =>
-        mapProductionRecordToListItem({
-          clientRecordsById: clientsById,
-          modelRecordsById: modelsById,
-          orderRecordsById: ordersById,
-          productionRecord,
-          requestRowsById: requestsById,
-        }),
-      )
-      .sort(sortProductions);
+    const productions = buildProductionListItems(productionRows, referenceMaps);
 
     const tasksByRequestId = groupByForeignKey(tasks, ["request_id"]);
     const deadlinesByRequestId = groupByForeignKey(deadlines, ["request_id"]);
@@ -158,10 +136,10 @@ const getProductionsPageDataInternal = async (): Promise<ProductionsPageData> =>
       productions.map((production) => {
         const linkedRequestIds = uniqueStrings([
           production.requestId,
-          readString(ordersById.get(production.orderId ?? ""), ["request_id", "requestId"]),
+          readString(referenceMaps.ordersById.get(production.orderId ?? ""), ["request_id", "requestId"]),
         ]);
         const linkedRequests = linkedRequestIds
-          .map((requestId) => requestsById.get(requestId))
+          .map((requestId) => referenceMaps.requestsById.get(requestId))
           .filter((request): request is RequestOverview => Boolean(request))
           .map(mapProductionLinkedRequestItem);
         const linkedTasks = linkedRequestIds
@@ -228,6 +206,66 @@ const getProductionsPageDataInternal = async (): Promise<ProductionsPageData> =>
 };
 
 export const getProductionsPageData = cache(getProductionsPageDataInternal);
+
+const getProductionsListSnapshotInternal = async (): Promise<{
+  error: string | null;
+  productions: ProductionListItem[];
+}> => {
+  noStore();
+
+  if (!hasSupabaseEnv) {
+    return {
+      error:
+        "Configuration Supabase absente. Vérifie NEXT_PUBLIC_SUPABASE_URL et la clé publishable.",
+      productions: [],
+    };
+  }
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return {
+        error:
+          "Session Supabase introuvable. Reconnecte-toi pour accéder aux productions.",
+        productions: [],
+      };
+    }
+
+    const productionsResult = await supabaseRestSelectList<ProductionRecord>("productions", {
+      select: "*",
+    });
+
+    if (productionsResult.error) {
+      return {
+        error: `Impossible de charger les productions: ${productionsResult.error}`,
+        productions: [],
+      };
+    }
+
+    const productionRows = productionsResult.data ?? [];
+    const referenceMaps = await getProductionReferenceMaps(productionRows);
+
+    return {
+      error: null,
+      productions: buildProductionListItems(productionRows, referenceMaps),
+    };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error
+          ? `Impossible de charger les productions: ${error.message}`
+          : "Impossible de charger les productions.",
+      productions: [],
+    };
+  }
+};
+
+export const getProductionsListSnapshot = cache(getProductionsListSnapshotInternal);
 
 const getProductionFormOptionsInternal = async (limit = 120): Promise<{
   error: string | null;
@@ -472,6 +510,47 @@ async function getActivityLogs(input: {
   }
 
   return Array.from(logsById.values());
+}
+
+async function getProductionReferenceMaps(
+  productionRows: ProductionRecord[],
+): Promise<ProductionReferenceMaps> {
+  const relatedIds = productionRows.map(getProductionRelatedIds);
+  const orderIds = uniqueStrings(relatedIds.map((item) => item.orderId));
+  const modelIds = uniqueStrings(relatedIds.map((item) => item.modelId));
+  const clientIds = uniqueStrings(relatedIds.map((item) => item.clientId));
+  const requestIds = uniqueStrings(relatedIds.map((item) => item.requestId));
+
+  const [orders, models, clients, requests] = await Promise.all([
+    getOrdersByIds(orderIds),
+    getModelsByIds(modelIds),
+    getClientsByIds(clientIds),
+    getRequestsByIds(requestIds),
+  ]);
+
+  return {
+    clientsById: new Map(clients.map((client) => [client.id, client] as const)),
+    modelsById: new Map(models.map((model) => [model.id, model] as const)),
+    ordersById: new Map(orders.map((order) => [order.id, order] as const)),
+    requestsById: new Map(requests.map((request) => [request.id, request] as const)),
+  };
+}
+
+function buildProductionListItems(
+  productionRows: ProductionRecord[],
+  referenceMaps: ProductionReferenceMaps,
+) {
+  return productionRows
+    .map((productionRecord) =>
+      mapProductionRecordToListItem({
+        clientRecordsById: referenceMaps.clientsById,
+        modelRecordsById: referenceMaps.modelsById,
+        orderRecordsById: referenceMaps.ordersById,
+        productionRecord,
+        requestRowsById: referenceMaps.requestsById,
+      }),
+    )
+    .sort(sortProductions);
 }
 
 function buildInFilter(ids: string[]) {

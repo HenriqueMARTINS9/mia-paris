@@ -53,6 +53,10 @@ export function MobileEmailCard({
         {email.subject}
       </p>
 
+      <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
+        {email.previewText}
+      </p>
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <ProcessingStatusBadge status={email.status} />
         {email.clientName !== "Client non détecté" ? (

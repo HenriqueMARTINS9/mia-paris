@@ -4,9 +4,9 @@ import { unstable_noStore as noStore } from "next/cache";
 import { cache } from "react";
 
 import { getDeadlinesPageData } from "@/features/deadlines/queries";
-import { getEmailsPageData } from "@/features/emails/queries";
+import { getEmailInboxSnapshot } from "@/features/emails/queries";
 import { getGmailSyncSummaries } from "@/features/emails/lib/gmail-sync-history";
-import { getProductionsPageData } from "@/features/productions/queries";
+import { getProductionsListSnapshot } from "@/features/productions/queries";
 import { getRequestsOverviewPageData } from "@/features/requests/queries";
 import { getTasksPageData } from "@/features/tasks/queries";
 import { getAutomationWorkspaceData } from "@/features/automations/queries";
@@ -96,8 +96,8 @@ const getDashboardPageDataInternal = async (): Promise<DashboardPageData> => {
       requestsData,
       tasksData,
       deadlinesData,
-      productionsData,
-      emailsData,
+      productionsSnapshot,
+      emailSnapshot,
       automationOverview,
       requestRowsResult,
       validationsResult,
@@ -106,8 +106,8 @@ const getDashboardPageDataInternal = async (): Promise<DashboardPageData> => {
       getRequestsOverviewPageData(),
       getTasksPageData(),
       getDeadlinesPageData(),
-      getProductionsPageData(),
-      getEmailsPageData(),
+      getProductionsListSnapshot(),
+      getEmailInboxSnapshot(),
       getAutomationWorkspaceData(),
       supabase.from("v_requests_overview").select("*"),
       supabaseRestSelectList<ValidationRecord>("validations", {
@@ -130,7 +130,7 @@ const getDashboardPageDataInternal = async (): Promise<DashboardPageData> => {
     ).length;
 
     const gmailSyncSummaryResult = await getGmailSyncSummaries({
-      inboxId: emailsData.gmailInbox.inboxId,
+      inboxId: emailSnapshot.gmailInbox.inboxId,
       limit: 6,
     });
 
@@ -149,7 +149,7 @@ const getDashboardPageDataInternal = async (): Promise<DashboardPageData> => {
       .sort((left, right) => right.urgencyScore - left.urgencyScore)
       .slice(0, 6);
 
-    const productionsAtRisk = [...productionsData.productions]
+    const productionsAtRisk = [...productionsSnapshot.productions]
       .filter((production) => production.isBlocked || production.risk !== "low")
       .sort((left, right) => {
         if (left.isBlocked !== right.isBlocked) {
@@ -169,17 +169,17 @@ const getDashboardPageDataInternal = async (): Promise<DashboardPageData> => {
           requestsData.error,
           tasksData.error,
           deadlinesData.error,
-          productionsData.error,
-          emailsData.error,
+          productionsSnapshot.error,
+          emailSnapshot.error,
         ]
           .filter(Boolean)
           .join(" · ") || null,
-      gmailInbox: emailsData.gmailInbox,
+      gmailInbox: emailSnapshot.gmailInbox,
       kpis: {
-        emailsToReview: emailsData.emails.filter((email) => email.status === "review").length,
-        openEmails: emailsData.emails.filter((email) => email.status !== "processed").length,
+        emailsToReview: emailSnapshot.counts.review,
+        openEmails: emailSnapshot.counts.open,
         pendingValidations: getSafeValidations(validationsResult).filter(isValidationPending).length,
-        productionsBlocked: productionsData.productions.filter((production) => production.isBlocked).length,
+        productionsBlocked: productionsSnapshot.productions.filter((production) => production.isBlocked).length,
         requestsCreatedToday: requestRows.filter((request) => {
           const createdAt = new Date(request.created_at).getTime();
           return Number.isFinite(createdAt) && createdAt >= startOfDay.getTime();
@@ -197,7 +197,7 @@ const getDashboardPageDataInternal = async (): Promise<DashboardPageData> => {
           return Number.isFinite(time) && time >= now.getTime() && time <= next24h;
         }).length,
       },
-      latestEmails: [...emailsData.emails]
+      latestEmails: [...emailSnapshot.latestEmails]
         .sort(
           (left, right) =>
             new Date(right.receivedAt).getTime() - new Date(left.receivedAt).getTime(),
@@ -266,31 +266,36 @@ function riskWeight(value: string) {
   return 1;
 }
 
-function isDueWithin(value: string | null, hours: number) {
-  if (!value) {
+function isDueWithin(dueAt: string | null, hours: number) {
+  if (!dueAt) {
     return false;
   }
 
-  const time = new Date(value).getTime();
+  const now = Date.now();
+  const dueTime = new Date(dueAt).getTime();
+  const threshold = now + hours * 60 * 60 * 1000;
 
-  if (!Number.isFinite(time)) {
-    return false;
-  }
-
-  const diff = time - Date.now();
-  return diff >= 0 && diff <= hours * 60 * 60 * 1000;
+  return Number.isFinite(dueTime) && dueTime <= threshold;
 }
 
 function sortTasksByUrgency(
-  left: { dueAt: string | null; isOverdue: boolean },
-  right: { dueAt: string | null; isOverdue: boolean },
+  left: { dueAt: string | null; isOverdue: boolean; priority: string },
+  right: { dueAt: string | null; isOverdue: boolean; priority: string },
 ) {
   if (left.isOverdue !== right.isOverdue) {
     return left.isOverdue ? -1 : 1;
   }
 
-  const leftTime = left.dueAt ? new Date(left.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
-  const rightTime = right.dueAt ? new Date(right.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+  if (riskWeight(left.priority) !== riskWeight(right.priority)) {
+    return riskWeight(right.priority) - riskWeight(left.priority);
+  }
+
+  const leftTime = left.dueAt
+    ? new Date(left.dueAt).getTime()
+    : Number.MAX_SAFE_INTEGER;
+  const rightTime = right.dueAt
+    ? new Date(right.dueAt).getTime()
+    : Number.MAX_SAFE_INTEGER;
 
   return leftTime - rightTime;
 }

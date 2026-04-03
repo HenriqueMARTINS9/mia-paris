@@ -131,7 +131,7 @@ export function EmailsTable({
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="min-w-[220px]">Expéditeur</TableHead>
-              <TableHead className="min-w-[260px]">Objet</TableHead>
+              <TableHead className="min-w-[220px]">Objet</TableHead>
               <TableHead className="min-w-[165px]">Date</TableHead>
               <TableHead className="min-w-[145px]">Statut</TableHead>
               <TableHead className="min-w-[160px]">Client</TableHead>
@@ -170,8 +170,11 @@ export function EmailsTable({
                     </div>
                   </TableCell>
                   <TableCell>
-                    <p className="line-clamp-2 break-words font-semibold">
+                    <p className="line-clamp-1 break-words font-semibold">
                       {email.subject}
+                    </p>
+                    <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
+                      {email.previewText}
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                       <span className="truncate">{email.threadLabel}</span>
