@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { AssistantMutationExecutionContext } from "@/features/assistant-actions/execution-context";
 import {
   addNoteToProduction,
   addNoteToRequest,
@@ -76,6 +77,7 @@ export interface OpenClawExecutionOptions {
   auditActorType?: string | null;
   auditSource?: "assistant" | "system" | "ui";
   authorizationOverride?: ServerPermissionOverride | null;
+  mutationContext?: AssistantMutationExecutionContext | null;
 }
 
 export const openClawReadActionNames: OpenClawReadActionName[] = [
@@ -358,6 +360,7 @@ async function dispatchOpenClawAction(
             source: "assistant",
           }, {
             authorizationOverride: options?.authorizationOverride,
+            mutationContext: options?.mutationContext ?? null,
           })
         : parsed.result;
     }

@@ -1,6 +1,10 @@
 import "server-only";
 
-import { getSupabaseEnv } from "@/lib/supabase/env";
+import {
+  getSupabaseAdminEnv,
+  getSupabaseEnv,
+  hasSupabaseAdminEnv,
+} from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 interface SupabaseRestOptions {
@@ -12,6 +16,10 @@ interface SupabaseRestOptions {
   >;
   prefer?: string;
   resource: string;
+}
+
+export interface SupabaseRestExecutionContext {
+  authMode?: "service_role" | "session";
 }
 
 export interface SupabaseRestErrorPayload {
@@ -32,8 +40,10 @@ export interface SupabaseRestResponse<T> {
 export async function supabaseRestSelectList<T>(
   resource: string,
   params?: SupabaseRestOptions["params"],
+  context?: SupabaseRestExecutionContext,
 ) {
   return executeSupabaseRestRequest<T[]>({
+    context,
     resource,
     params,
   });
@@ -42,8 +52,10 @@ export async function supabaseRestSelectList<T>(
 export async function supabaseRestSelectMaybeSingle<T>(
   resource: string,
   params?: SupabaseRestOptions["params"],
+  context?: SupabaseRestExecutionContext,
 ): Promise<SupabaseRestResponse<T>> {
   const response = await executeSupabaseRestRequest<T[]>({
+    context,
     resource,
     params,
   });
@@ -69,9 +81,11 @@ export async function supabaseRestInsert<T>(
   resource: string,
   body: unknown,
   params?: SupabaseRestOptions["params"],
+  context?: SupabaseRestExecutionContext,
 ) {
   return executeSupabaseRestRequest<T>({
     body,
+    context,
     method: "POST",
     params,
     prefer: "return=representation",
@@ -83,9 +97,11 @@ export async function supabaseRestPatch<T>(
   resource: string,
   body: unknown,
   params?: SupabaseRestOptions["params"],
+  context?: SupabaseRestExecutionContext,
 ) {
   return executeSupabaseRestRequest<T>({
     body,
+    context,
     method: "PATCH",
     params,
     prefer: "return=representation",
@@ -135,12 +151,18 @@ export function isMissingSupabaseColumnError(
 
 async function executeSupabaseRestRequest<T>({
   body,
+  context,
   method = "GET",
   params,
   prefer,
   resource,
-}: SupabaseRestOptions): Promise<SupabaseRestResponse<T>> {
-  const authHeaders = await getSupabaseRestAuthHeaders(method !== "GET");
+}: SupabaseRestOptions & {
+  context?: SupabaseRestExecutionContext;
+}): Promise<SupabaseRestResponse<T>> {
+  const authHeaders = await getSupabaseRestAuthHeaders(
+    method !== "GET",
+    context,
+  );
 
   if (authHeaders.error) {
     return {
@@ -181,7 +203,31 @@ async function executeSupabaseRestRequest<T>({
   };
 }
 
-async function getSupabaseRestAuthHeaders(includeContentType: boolean) {
+async function getSupabaseRestAuthHeaders(
+  includeContentType: boolean,
+  context?: SupabaseRestExecutionContext,
+) {
+  if (context?.authMode === "service_role") {
+    if (!hasSupabaseAdminEnv) {
+      return {
+        error:
+          "SUPABASE_SERVICE_ROLE_KEY manquante. Impossible d'exécuter cette mutation serveur contrôlée.",
+        headers: null,
+      };
+    }
+
+    const { supabaseServiceRoleKey } = getSupabaseAdminEnv();
+
+    return {
+      error: null,
+      headers: {
+        apikey: supabaseServiceRoleKey,
+        Authorization: `Bearer ${supabaseServiceRoleKey}`,
+        ...(includeContentType ? { "Content-Type": "application/json" } : {}),
+      },
+    };
+  }
+
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },

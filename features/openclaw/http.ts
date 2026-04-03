@@ -11,11 +11,9 @@ import {
   type OpenClawReadActionName,
   type OpenClawSafeWriteActionName,
 } from "@/features/openclaw/integration";
+import { getOpenClawAssistantExecutionContext } from "@/features/openclaw/server-context";
 import { logOperationalError, recordAuditEvent } from "@/lib/action-runtime";
 import { getOpenClawEnv, hasOpenClawCrmToken } from "@/lib/openclaw/env";
-import type { AppUserRole } from "@/types/crm";
-
-const openClawServiceRole: AppUserRole = "admin";
 
 const openClawExternalReadActionSet = new Set<OpenClawReadActionName>(
   openClawReadActionNames,
@@ -115,6 +113,7 @@ export async function handleOpenClawHttpRequest(request: Request) {
   }
 
   try {
+    const openClawExecutionContext = getOpenClawAssistantExecutionContext();
     const result = await executeOpenClawAction(
       {
         action: bodyValidation.value.action as OpenClawExposedActionName,
@@ -122,14 +121,11 @@ export async function handleOpenClawHttpRequest(request: Request) {
       },
       {
         allowedActions: openClawExternalActionSet,
-        auditActorType: "assistant",
-        auditSource: "assistant",
-        authorizationOverride: {
-          actorId: null,
-          actorType: "assistant",
-          role: openClawServiceRole,
-          source: "assistant",
-        },
+        auditActorId: openClawExecutionContext.actor?.actorUserId ?? null,
+        auditActorType: openClawExecutionContext.actor?.actorType ?? "assistant",
+        auditSource: openClawExecutionContext.actor?.source ?? "assistant",
+        authorizationOverride: openClawExecutionContext.authorizationOverride ?? null,
+        mutationContext: openClawExecutionContext,
       },
     );
 

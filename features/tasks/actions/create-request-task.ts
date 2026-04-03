@@ -2,12 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 
-import { authorizeServerAction } from "@/features/auth/server-authorization";
+import type { AssistantMutationExecutionContext } from "@/features/assistant-actions/execution-context";
+import { authorizeServerPermissions } from "@/features/auth/server-authorization";
 import { notifyCriticalTask } from "@/features/notifications/lib/operational-notifications";
 import type { RequestPriority, RequestMutationResult } from "@/features/requests/types";
 import { mapUiPriorityToDatabasePriority } from "@/features/requests/metadata";
 import { recordAuditEvent } from "@/lib/action-runtime";
-import { supabaseRestInsert } from "@/lib/supabase/rest";
+import {
+  isMissingSupabaseColumnError,
+  supabaseRestInsert,
+  type SupabaseRestErrorPayload,
+} from "@/lib/supabase/rest";
 
 interface CreateRequestTaskInput {
   assignedUserId: string | null;
@@ -20,8 +25,12 @@ interface CreateRequestTaskInput {
 
 export async function createTaskAction(
   input: CreateRequestTaskInput,
+  context?: AssistantMutationExecutionContext,
 ): Promise<RequestMutationResult> {
-  const authorization = await authorizeServerAction("tasks.create");
+  const authorization = await authorizeServerPermissions(
+    ["tasks.create"],
+    context?.authorizationOverride,
+  );
 
   if (!authorization.ok) {
     return {
@@ -58,26 +67,31 @@ export async function createTaskAction(
     payload.due_at = new Date(`${input.dueAt}T09:00:00`).toISOString();
   }
 
-  const result = await supabaseRestInsert<Array<Record<string, unknown>>>(
-    "tasks",
-    payload,
-    {
-      select: "id,title",
-    },
+  const actor = context?.actor ?? null;
+  const auditActorId = actor?.actorUserId ?? authorization.actorId;
+  const auditActorType = actor?.actorType ?? authorization.actorType;
+  const auditSource = actor?.source ?? authorization.source;
+  const tracedPayload = applyTaskActorTrace(payload, actor);
+  const result = await insertTaskWithFallback(
+    tracedPayload,
+    context?.rest ?? null,
   );
 
   if (result.error) {
     await recordAuditEvent({
       action: "create_task",
-      actorId: authorization.actorId,
-      actorType: "user",
+      actorId: auditActorId,
+      actorType: auditActorType,
       description: `Création de tâche impossible: ${result.error}`,
       entityId: input.requestId ?? null,
       entityType: "task",
-      payload,
+      payload: {
+        actorEmail: actor?.actorEmail ?? null,
+        ...tracedPayload,
+      },
       requestId: input.requestId ?? null,
       scope: "tasks.create",
-      source: "ui",
+      source: auditSource,
       status: "failure",
     });
 
@@ -91,16 +105,19 @@ export async function createTaskAction(
   if (!result.data || result.data.length === 0) {
     await recordAuditEvent({
       action: "create_task",
-      actorId: authorization.actorId,
-      actorType: "user",
+      actorId: auditActorId,
+      actorType: auditActorType,
       description:
         "Aucune tâche n'a été créée. Vérifie les policies RLS et la structure de la table tasks.",
       entityId: input.requestId ?? null,
       entityType: "task",
-      payload,
+      payload: {
+        actorEmail: actor?.actorEmail ?? null,
+        ...tracedPayload,
+      },
       requestId: input.requestId ?? null,
       scope: "tasks.create",
-      source: "ui",
+      source: auditSource,
       status: "failure",
     });
 
@@ -129,16 +146,19 @@ export async function createTaskAction(
 
   await recordAuditEvent({
     action: "create_task",
-    actorId: authorization.actorId,
-    actorType: "user",
+    actorId: auditActorId,
+    actorType: auditActorType,
     description: "Tâche CRM créée.",
     entityId:
       typeof result.data[0]?.id === "string" ? result.data[0].id : input.requestId ?? null,
     entityType: "task",
-    payload,
+    payload: {
+      actorEmail: actor?.actorEmail ?? null,
+      ...tracedPayload,
+    },
     requestId: input.requestId ?? null,
     scope: "tasks.create",
-    source: "ui",
+    source: auditSource,
     status: "success",
   });
 
@@ -161,4 +181,75 @@ export async function createRequestTaskAction(
   }
 
   return createTaskAction(input);
+}
+
+async function insertTaskWithFallback(
+  payload: Record<string, unknown>,
+  restContext: AssistantMutationExecutionContext["rest"] | null,
+) {
+  const currentPayload = { ...payload };
+
+  while (true) {
+    const result = await supabaseRestInsert<Array<Record<string, unknown>>>(
+      "tasks",
+      currentPayload,
+      {
+        select: "id,title",
+      },
+      restContext ?? undefined,
+    );
+
+    if (!result.error) {
+      return result;
+    }
+
+    if (!isMissingSupabaseColumnError(result.rawError)) {
+      return result;
+    }
+
+    const missingColumn = extractMissingColumnName(result.rawError);
+
+    if (!missingColumn || !(missingColumn in currentPayload)) {
+      return result;
+    }
+
+    delete currentPayload[missingColumn];
+  }
+}
+
+function applyTaskActorTrace(
+  payload: Record<string, unknown>,
+  actor: AssistantMutationExecutionContext["actor"] | null,
+) {
+  if (!actor) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    actor_email: actor.actorEmail,
+    actor_user_id: actor.actorUserId,
+    created_by: actor.actorUserId,
+    created_by_email: actor.actorEmail,
+    created_by_type: actor.actorType,
+    created_by_user_id: actor.actorUserId,
+    source: actor.source,
+    updated_by: actor.actorUserId,
+    updated_by_email: actor.actorEmail,
+    updated_by_type: actor.actorType,
+    updated_by_user_id: actor.actorUserId,
+  };
+}
+
+function extractMissingColumnName(error: SupabaseRestErrorPayload | null) {
+  if (!error) {
+    return null;
+  }
+
+  const haystack = [error.message, error.details, error.error, error.hint]
+    .filter(Boolean)
+    .join(" ");
+  const match = haystack.match(/column ["']?([a-zA-Z0-9_]+)["']?/i);
+
+  return match?.[1] ?? null;
 }

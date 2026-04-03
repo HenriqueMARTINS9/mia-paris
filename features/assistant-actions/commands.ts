@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { AssistantMutationExecutionContext } from "@/features/assistant-actions/execution-context";
 import {
   authorizeServerPermissions,
   type ServerPermissionOverride,
@@ -48,6 +49,7 @@ import { supabaseRestSelectMaybeSingle } from "@/lib/supabase/rest";
 
 interface AssistantCommandExecutionOptions {
   authorizationOverride?: ServerPermissionOverride | null;
+  mutationContext?: AssistantMutationExecutionContext | null;
 }
 
 export async function getTodayUrgencies(
@@ -236,6 +238,13 @@ export async function createTask(
     requestId: input.requestId ?? null,
     taskType: taskTypeValidation.value,
     title: titleValidation.value,
+  }, {
+    actor: options?.mutationContext?.actor ?? null,
+    authorizationOverride:
+      options?.mutationContext?.authorizationOverride ??
+      options?.authorizationOverride ??
+      null,
+    rest: options?.mutationContext?.rest ?? null,
   });
 
   if (!result.ok) {
