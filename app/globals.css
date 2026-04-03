@@ -72,7 +72,6 @@ body {
   color: var(--foreground);
   font-family: var(--font-manrope), sans-serif;
   text-rendering: optimizeLegibility;
-  background-attachment: fixed;
   -webkit-tap-highlight-color: transparent;
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -129,6 +128,12 @@ select {
 
 .safe-pt {
   padding-top: env(safe-area-inset-top, 0px);
+}
+
+@media (min-width: 768px) {
+  body {
+    background-attachment: fixed;
+  }
 }
 
 @media (min-width: 1280px) {

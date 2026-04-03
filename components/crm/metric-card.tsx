@@ -41,7 +41,7 @@ export function MetricCard({
 }: Readonly<MetricCardProps>) {
   return (
     <Card className="overflow-hidden">
-      <CardContent className="relative p-4 sm:p-5">
+      <CardContent className="relative p-3.5 sm:p-5">
         <div
           className={cn(
             "absolute inset-x-0 top-0 h-1 bg-gradient-to-r",
@@ -50,17 +50,17 @@ export function MetricCard({
         />
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
               {label}
             </p>
-            <p className="mt-3 text-[1.75rem] font-semibold tracking-[-0.03em] text-foreground sm:text-[2rem]">
+            <p className="mt-2.5 text-[1.5rem] font-semibold tracking-[-0.03em] text-foreground sm:mt-3 sm:text-[2rem]">
               {value}
             </p>
           </div>
 
           <div
             className={cn(
-              "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl sm:h-11 sm:w-11",
+              "flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl sm:h-11 sm:w-11",
               accentStyles[accent],
             )}
           >
@@ -68,14 +68,16 @@ export function MetricCard({
           </div>
         </div>
 
-        <div className="mt-4 flex items-start gap-3 rounded-[1.1rem] border border-black/[0.06] bg-[#fbf8f2] px-3 py-3 sm:mt-5 sm:px-3.5">
+        <div className="mt-3.5 flex items-start gap-3 rounded-[1rem] border border-black/[0.06] bg-[#fbf8f2] px-3 py-3 sm:mt-5 sm:rounded-[1.1rem] sm:px-3.5">
           <span
             className={cn(
               "mt-1.5 h-2 w-2 shrink-0 rounded-full",
               accentDotStyles[accent],
             )}
           />
-          <p className="text-sm leading-5 text-muted-foreground sm:leading-6">{hint}</p>
+          <p className="line-clamp-2 text-[13px] leading-5 text-muted-foreground sm:text-sm sm:leading-6">
+            {hint}
+          </p>
         </div>
       </CardContent>
     </Card>

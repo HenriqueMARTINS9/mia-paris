@@ -61,7 +61,7 @@ export function RequestDetailPanel({
 }: Readonly<RequestDetailPanelProps>) {
   if (!request) {
     return (
-      <Card className={cn(mode === "desktop" && "sticky top-24")}>
+      <Card className={cn(mode === "desktop" && "sticky top-20")}>
         <CardContent className="flex min-h-[28rem] flex-col items-center justify-center gap-3 p-8 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-primary/[0.08] text-primary">
             <Package className="h-6 w-6" />
@@ -79,7 +79,7 @@ export function RequestDetailPanel({
   }
 
   return (
-    <Card className={cn(mode === "desktop" && "sticky top-24")}>
+    <Card className={cn(mode === "desktop" && "sticky top-20")}>
       <CardHeader className="space-y-4 p-4 sm:p-6">
         <div className="flex flex-wrap items-center gap-2">
           <RequestStatusBadge status={request.status} />
@@ -107,7 +107,7 @@ export function RequestDetailPanel({
         />
       </CardHeader>
 
-      <CardContent className="space-y-5 p-4 pt-0 sm:p-6 sm:pt-0">
+      <CardContent className="space-y-4 p-4 pt-0 sm:space-y-5 sm:p-6 sm:pt-0">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-2xl border border-white/70 bg-white/60 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -139,7 +139,7 @@ export function RequestDetailPanel({
           </div>
         </div>
 
-        <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
+        <div className="rounded-[1.35rem] border border-white/70 bg-white/60 p-4">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <Mail className="h-4 w-4" />
@@ -157,7 +157,7 @@ export function RequestDetailPanel({
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
+          <div className="rounded-[1.35rem] border border-white/70 bg-white/60 p-4">
             <div className="flex items-center gap-2">
               <Fingerprint className="h-4 w-4 text-muted-foreground" />
               <p className="font-semibold">Paramètres dossier</p>
@@ -183,7 +183,7 @@ export function RequestDetailPanel({
             </div>
           </div>
 
-          <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
+          <div className="rounded-[1.35rem] border border-white/70 bg-white/60 p-4">
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-muted-foreground" />
               <p className="font-semibold">Contacts clés</p>
@@ -207,7 +207,7 @@ export function RequestDetailPanel({
           </div>
         </div>
 
-        <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
+        <div className="rounded-[1.35rem] border border-white/70 bg-white/60 p-4">
           <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="font-semibold">Prochaines actions</p>
             <Badge variant="outline">{request.owner}</Badge>
@@ -225,7 +225,7 @@ export function RequestDetailPanel({
           </div>
         </div>
 
-        <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
+        <div className="rounded-[1.35rem] border border-white/70 bg-white/60 p-4">
           <div className="flex items-center gap-2">
             <Clock3 className="h-4 w-4 text-muted-foreground" />
             <p className="font-semibold">Jalons</p>
@@ -262,7 +262,7 @@ export function RequestDetailPanel({
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
+          <div className="rounded-[1.35rem] border border-white/70 bg-white/60 p-4">
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
               <p className="font-semibold">Documents</p>
@@ -288,7 +288,7 @@ export function RequestDetailPanel({
             </div>
           </div>
 
-          <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
+          <div className="rounded-[1.35rem] border border-white/70 bg-white/60 p-4">
             <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="font-semibold">Tags / contexte</p>
               <Badge

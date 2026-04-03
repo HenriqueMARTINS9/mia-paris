@@ -26,7 +26,7 @@ export function MobileEmailList({
   }
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-2.5">
       {emails.map((email) => (
         <MobileEmailCard
           key={email.id}

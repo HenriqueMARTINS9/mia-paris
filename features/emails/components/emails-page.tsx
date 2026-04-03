@@ -197,7 +197,7 @@ export function EmailsPage({
 
       <div className="flex min-w-0 flex-col gap-4">
         <div className="grid gap-3 md:hidden">
-          <div className="grid grid-cols-3 gap-3 rounded-[1.35rem] border border-black/[0.06] bg-[#fbf8f2]/95 p-3.5">
+          <div className="grid grid-cols-2 gap-3 rounded-[1.25rem] border border-black/[0.06] bg-[#fbf8f2]/95 p-3">
             <div className="rounded-[1rem] border border-black/[0.06] bg-white px-3 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 Nouveaux
@@ -215,6 +215,12 @@ export function EmailsPage({
                 Traités
               </p>
               <p className="mt-2 text-xl font-semibold tracking-tight">{processedCount}</p>
+            </div>
+            <div className="rounded-[1rem] border border-black/[0.06] bg-white px-3 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Qualifiés
+              </p>
+              <p className="mt-2 text-xl font-semibold tracking-tight">{qualifiedCount}</p>
             </div>
           </div>
 
@@ -304,14 +310,14 @@ export function EmailsPage({
           open={mobileDetailsOpen && Boolean(selectedEmail)}
           onOpenChange={setMobileDetailsOpen}
         >
-          <SheetContent className="sm:max-w-2xl">
+          <SheetContent className="inset-x-0 bottom-0 top-auto h-[min(90vh,820px)] w-full max-w-none rounded-t-[1.6rem] border-b-0 border-l-0 border-r-0 p-4 sm:inset-y-0 sm:right-0 sm:h-full sm:max-w-2xl sm:rounded-none sm:border-b sm:border-l sm:border-r-0 sm:border-t-0 sm:p-6">
             <SheetHeader>
               <SheetTitle>Détail email</SheetTitle>
               <SheetDescription>
                 Aperçu du message, qualification IA et actions de transformation CRM.
               </SheetDescription>
             </SheetHeader>
-            <div className="mt-6 overflow-y-auto pb-6">
+            <div className="mt-4 overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom,0px))] sm:mt-6 sm:pb-6">
               <EmailPreviewPanel
                 documentOptions={documentOptions}
                 documentOptionsError={documentOptionsError}

@@ -109,12 +109,12 @@ export function DeadlinesTable({
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="min-w-[260px]">Label</TableHead>
-              <TableHead className="min-w-[180px]">Client</TableHead>
-              <TableHead className="min-w-[220px]">Objet lié</TableHead>
-              <TableHead className="min-w-[150px]">Priorité</TableHead>
-              <TableHead className="min-w-[150px]">Statut</TableHead>
-              <TableHead className="min-w-[170px] text-right">Deadline</TableHead>
+              <TableHead className="min-w-[235px]">Label</TableHead>
+              <TableHead className="min-w-[155px]">Client</TableHead>
+              <TableHead className="min-w-[190px]">Objet lié</TableHead>
+              <TableHead className="min-w-[135px]">Priorité</TableHead>
+              <TableHead className="min-w-[135px]">Statut</TableHead>
+              <TableHead className="min-w-[155px] text-right">Deadline</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -134,23 +134,25 @@ export function DeadlinesTable({
                       </div>
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-semibold tracking-tight">{deadline.label}</p>
+                          <p className="line-clamp-2 break-words font-semibold tracking-tight">
+                            {deadline.label}
+                          </p>
                           {deadline.isOverdue ? (
                             <Badge variant="destructive">Retard</Badge>
                           ) : null}
                         </div>
-                        <p className="mt-2 text-sm text-muted-foreground">
+                        <p className="mt-2 line-clamp-2 break-words text-sm text-muted-foreground">
                           {deadline.requestTitle}
                         </p>
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <p className="font-semibold">{deadline.clientName}</p>
+                    <p className="truncate font-semibold">{deadline.clientName}</p>
                   </TableCell>
                   <TableCell>
-                    <p className="font-semibold">{deadline.linkedObjectLabel}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
+                    <p className="line-clamp-2 break-words font-semibold">{deadline.linkedObjectLabel}</p>
+                    <p className="mt-1 truncate text-sm text-muted-foreground">
                       {deadline.orderNumber ?? deadline.productionStatus ?? "Objet métier"}
                     </p>
                   </TableCell>

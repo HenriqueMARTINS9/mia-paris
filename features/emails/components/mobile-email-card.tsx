@@ -44,7 +44,7 @@ export function MobileEmailCard({
             {email.fromEmail}
           </p>
         </div>
-        <p className="shrink-0 text-xs text-muted-foreground">
+        <p className="mt-0.5 shrink-0 text-right text-[11px] leading-4 text-muted-foreground">
           {formatDateTime(email.receivedAt)}
         </p>
       </div>
@@ -77,7 +77,7 @@ export function MobileEmailCard({
           type="button"
           size="sm"
           variant="ghost"
-          className="h-8 px-2.5"
+          className="h-8 shrink-0 px-2.5"
           onClick={handleOpen}
         >
           Ouvrir

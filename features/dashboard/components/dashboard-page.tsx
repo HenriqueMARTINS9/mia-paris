@@ -1,8 +1,6 @@
 import { ErrorState } from "@/components/crm/error-state";
 import { MobileQuickActionsSheet } from "@/components/crm/mobile-quick-actions-sheet";
 import { PageHeader } from "@/components/crm/page-header";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { BlockedProductionsPanel } from "@/features/dashboard/components/blocked-productions-panel";
 import { DashboardKpiCards } from "@/features/dashboard/components/dashboard-kpi-cards";
 import { GmailSyncHistoryPanel } from "@/features/dashboard/components/gmail-sync-history-panel";
@@ -102,17 +100,6 @@ export function DashboardPage({
         </MobileQuickActionsSheet>
       </div>
 
-      <Card className="md:hidden">
-        <CardContent className="flex flex-col gap-3 p-4">
-          <p className="text-base font-semibold tracking-tight text-foreground">
-            Priorité mobile du jour
-          </p>
-          <p className="text-sm leading-6 text-muted-foreground">
-            Commence par les emails entrants, les urgences et les retards qui bloquent le flux client.
-          </p>
-        </CardContent>
-      </Card>
-
       <div className="grid gap-4 md:hidden">
         <MobileDashboardKpis kpis={data.kpis} />
         <AutomationSummaryCard compact overview={data.automationOverview} />
@@ -124,30 +111,6 @@ export function DashboardPage({
           latestSyncs={data.latestSyncs}
         />
       </div>
-
-      <Card className="hidden md:block">
-        <CardContent className="flex flex-col gap-4 p-5">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className="bg-[#fbf8f2]">
-                Brief du jour
-              </Badge>
-              <Badge variant="outline" className="bg-white">
-                {data.kpis.openEmails} emails à absorber
-              </Badge>
-              <Badge variant="outline" className="bg-white">
-                {data.kpis.urgencies24h} urgences &lt; 24h
-              </Badge>
-            </div>
-            <p className="mt-4 text-lg font-semibold tracking-tight text-foreground">
-              Commence par l’inbox et les urgences, puis traite les retards et les blocages qui freinent le pipeline.
-            </p>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-              L’écran met d’abord en avant les signaux critiques, puis le détail opérationnel par bloc métier, sans doublons visuels ni panneaux qui se concurrencent.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
 
       <div className="hidden md:block">
         <DashboardKpiCards kpis={data.kpis} />

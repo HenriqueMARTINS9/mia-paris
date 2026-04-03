@@ -180,7 +180,7 @@ export function DemandesPage({
         }
       />
 
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="À qualifier"
           value={String(qualificationCount)}
@@ -323,14 +323,14 @@ export function DemandesPage({
         open={mobileDetailsOpen && Boolean(selectedRequest)}
         onOpenChange={setMobileDetailsOpen}
       >
-        <SheetContent className="sm:max-w-2xl">
+        <SheetContent className="inset-x-0 bottom-0 top-auto h-[min(90vh,820px)] w-full max-w-none rounded-t-[1.6rem] border-b-0 border-l-0 border-r-0 p-4 sm:inset-y-0 sm:right-0 sm:h-full sm:max-w-2xl sm:rounded-none sm:border-b sm:border-l sm:border-r-0 sm:border-t-0 sm:p-6">
           <SheetHeader>
             <SheetTitle>Détail demande</SheetTitle>
             <SheetDescription>
               Vue compacte des informations clés, actions et jalons associés.
             </SheetDescription>
           </SheetHeader>
-          <div className="mt-6 overflow-y-auto pb-6">
+          <div className="mt-4 overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom,0px))] sm:mt-6 sm:pb-6">
             <RequestDetailPanel
               request={selectedRequest}
               assignees={assignees}

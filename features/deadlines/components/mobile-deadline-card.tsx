@@ -85,7 +85,7 @@ export function MobileDeadlineCard({
             <UrgencyBadge deadline={deadline} />
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
             <div className="rounded-[1rem] border border-black/[0.06] bg-[#fbf8f2]/88 px-3 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 Échéance

@@ -39,7 +39,7 @@ export function TaskDetailPanel({
 }: Readonly<TaskDetailPanelProps>) {
   if (!task) {
     return (
-      <Card className={cn(mode === "desktop" && "sticky top-24")}>
+      <Card className={cn(mode === "desktop" && "sticky top-20")}>
         <CardContent className="flex min-h-[26rem] flex-col items-center justify-center gap-3 p-8 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-primary/[0.08] text-primary">
             <FolderKanban className="h-6 w-6" />
@@ -56,7 +56,7 @@ export function TaskDetailPanel({
   }
 
   return (
-    <Card className={cn(mode === "desktop" && "sticky top-24")}>
+    <Card className={cn(mode === "desktop" && "sticky top-20")}>
       <CardHeader className="space-y-4 p-4 sm:p-6">
         <div className="flex flex-wrap items-center gap-2">
           <TaskStatusBadge status={task.status} />
@@ -92,7 +92,7 @@ export function TaskDetailPanel({
         />
       </CardHeader>
 
-      <CardContent className="space-y-5 p-4 pt-0 sm:p-6 sm:pt-0">
+      <CardContent className="space-y-4 p-4 pt-0 sm:space-y-5 sm:p-6 sm:pt-0">
         <div className="grid gap-3 sm:grid-cols-2">
           <InfoCard
             icon={Package2}
@@ -114,7 +114,7 @@ export function TaskDetailPanel({
           />
         </div>
 
-        <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
+        <div className="rounded-[1.35rem] border border-white/70 bg-white/60 p-4">
           <div className="flex items-center gap-2">
             <UserRound className="h-4 w-4 text-muted-foreground" />
             <p className="font-semibold">Contexte opérationnel</p>
@@ -128,7 +128,7 @@ export function TaskDetailPanel({
           </div>
         </div>
 
-        <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
+        <div className="rounded-[1.35rem] border border-white/70 bg-white/60 p-4">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-muted-foreground" />
             <p className="font-semibold">Note de pilotage</p>

@@ -27,7 +27,7 @@ export function DeadlineDetailPanel({
 }: Readonly<DeadlineDetailPanelProps>) {
   if (!deadline) {
     return (
-      <Card className={cn(mode === "desktop" && "sticky top-24")}>
+      <Card className={cn(mode === "desktop" && "sticky top-20")}>
         <CardContent className="flex min-h-[24rem] flex-col items-center justify-center gap-3 p-8 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-destructive/10 text-destructive">
             <AlertTriangle className="h-6 w-6" />
@@ -44,7 +44,7 @@ export function DeadlineDetailPanel({
   }
 
   return (
-    <Card className={cn(mode === "desktop" && "sticky top-24")}>
+    <Card className={cn(mode === "desktop" && "sticky top-20")}>
       <CardHeader className="space-y-4 p-4 sm:p-6">
         <div className="flex flex-wrap items-center gap-2">
           <DeadlineStatusBadge status={deadline.status} />
@@ -71,7 +71,7 @@ export function DeadlineDetailPanel({
         />
       </CardHeader>
 
-      <CardContent className="space-y-5 p-4 pt-0 sm:p-6 sm:pt-0">
+      <CardContent className="space-y-4 p-4 pt-0 sm:space-y-5 sm:p-6 sm:pt-0">
         <div className="grid gap-3 sm:grid-cols-2">
           <InfoCard
             icon={CalendarClock}
@@ -93,7 +93,7 @@ export function DeadlineDetailPanel({
           />
         </div>
 
-        <div className="rounded-3xl border border-white/70 bg-white/60 p-4">
+        <div className="rounded-[1.35rem] border border-white/70 bg-white/60 p-4">
           <p className="font-semibold">Contexte risque</p>
           <div className="mt-4 space-y-3 text-sm">
             <MetaRow label="Client" value={deadline.clientName} />

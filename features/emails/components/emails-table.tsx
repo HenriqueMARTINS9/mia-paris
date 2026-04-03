@@ -131,13 +131,12 @@ export function EmailsTable({
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="min-w-[220px]">Expéditeur</TableHead>
-              <TableHead className="min-w-[220px]">Objet</TableHead>
-              <TableHead className="min-w-[170px]">Date</TableHead>
-              <TableHead className="min-w-[180px]">Thread</TableHead>
-              <TableHead className="min-w-[150px]">Statut</TableHead>
-              <TableHead className="min-w-[180px]">Client détecté</TableHead>
-              <TableHead className="min-w-[180px]">Type détecté</TableHead>
-              <TableHead className="min-w-[170px] text-right">Confiance</TableHead>
+              <TableHead className="min-w-[260px]">Objet</TableHead>
+              <TableHead className="min-w-[165px]">Date</TableHead>
+              <TableHead className="min-w-[145px]">Statut</TableHead>
+              <TableHead className="min-w-[160px]">Client</TableHead>
+              <TableHead className="min-w-[170px]">Type</TableHead>
+              <TableHead className="min-w-[130px] text-right">Confiance</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -161,10 +160,10 @@ export function EmailsTable({
                       </div>
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-semibold tracking-tight">{email.fromName}</p>
+                          <p className="truncate font-semibold tracking-tight">{email.fromName}</p>
                           {email.isUnread ? <Badge>Non lu</Badge> : null}
                         </div>
-                        <p className="mt-1 text-sm text-muted-foreground">
+                        <p className="mt-1 truncate text-sm text-muted-foreground">
                           {email.fromEmail}
                         </p>
                       </div>
@@ -174,39 +173,35 @@ export function EmailsTable({
                     <p className="line-clamp-2 break-words font-semibold">
                       {email.subject}
                     </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                      <span className="truncate">{email.threadLabel}</span>
+                      {email.linkedRequestId ? (
+                        <Link
+                          href={`/requests/${email.linkedRequestId}`}
+                          className="inline-flex items-center gap-1 hover:text-foreground"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          Voir demande
+                          <ArrowUpRight className="h-3.5 w-3.5" />
+                        </Link>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <p className="font-semibold">{formatDateTime(email.receivedAt)}</p>
                   </TableCell>
                   <TableCell>
-                    <p className="font-semibold">{email.threadLabel}</p>
-                    {email.linkedRequestId ? (
-                      <Link
-                        href={`/requests/${email.linkedRequestId}`}
-                        className="mt-1 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        Voir demande
-                        <ArrowUpRight className="h-3.5 w-3.5" />
-                      </Link>
-                    ) : (
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Aucun dossier lié
-                      </p>
-                    )}
-                  </TableCell>
-                  <TableCell>
                     <ProcessingStatusBadge status={email.status} />
                   </TableCell>
                   <TableCell>
-                    <p className="font-semibold">{email.clientName}</p>
+                    <p className="truncate font-semibold">{email.clientName}</p>
                   </TableCell>
                   <TableCell>
                     <div className="inline-flex items-center gap-2">
                       {email.detectedType ? (
                         <>
                           <Sparkles className="h-4 w-4 text-primary" />
-                          <span className="font-semibold">{email.detectedType}</span>
+                          <span className="truncate font-semibold">{email.detectedType}</span>
                         </>
                       ) : (
                         <span className="text-sm text-muted-foreground">Non détecté</span>

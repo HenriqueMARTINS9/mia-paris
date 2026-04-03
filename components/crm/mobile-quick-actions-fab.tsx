@@ -13,7 +13,7 @@ export function MobileQuickActionsFab({
     <Button
       type="button"
       size="icon"
-      className="fixed bottom-5 right-4 z-40 h-14 w-14 rounded-full shadow-[0_18px_36px_rgba(20,79,74,0.28)] md:hidden"
+      className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom,0px))] right-4 z-40 h-[3.25rem] w-[3.25rem] rounded-full shadow-[0_18px_36px_rgba(20,79,74,0.28)] md:hidden"
       onClick={onClick}
       aria-label="Ouvrir les actions rapides"
     >

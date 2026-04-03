@@ -131,7 +131,7 @@ export function DeadlinesPage({
     <div className="flex flex-col gap-6">
       {header}
 
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="Sous 24h"
           value={String(under24hCount)}
@@ -285,14 +285,14 @@ export function DeadlinesPage({
             open={mobileDetailsOpen && Boolean(selectedDeadline)}
             onOpenChange={setMobileDetailsOpen}
           >
-            <SheetContent className="sm:max-w-2xl">
+            <SheetContent className="inset-x-0 bottom-0 top-auto h-[min(90vh,820px)] w-full max-w-none rounded-t-[1.6rem] border-b-0 border-l-0 border-r-0 p-4 sm:inset-y-0 sm:right-0 sm:h-full sm:max-w-2xl sm:rounded-none sm:border-b sm:border-l sm:border-r-0 sm:border-t-0 sm:p-6">
               <SheetHeader>
                 <SheetTitle>Détail deadline</SheetTitle>
                 <SheetDescription>
                   Priorité, clôture rapide et contexte du jalon critique.
                 </SheetDescription>
               </SheetHeader>
-              <div className="mt-6 overflow-y-auto pb-6">
+              <div className="mt-4 overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom,0px))] sm:mt-6 sm:pb-6">
                 <DeadlineDetailPanel deadline={selectedDeadline} mode="sheet" />
               </div>
             </SheetContent>

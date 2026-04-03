@@ -329,7 +329,7 @@ export function MobileEmailDetailSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full max-w-none border-l-0 p-0 sm:max-w-2xl sm:border-l sm:p-6">
+      <SheetContent className="inset-x-0 bottom-0 top-auto h-[100dvh] w-full max-w-none rounded-none border-b-0 border-l-0 border-r-0 p-0 sm:inset-y-0 sm:right-0 sm:h-full sm:max-w-2xl sm:border-b sm:border-l sm:border-r-0 sm:border-t-0 sm:p-6">
         <div className="flex h-full flex-col">
           <SheetHeader className="border-b border-black/[0.06] px-4 py-4">
             <SheetTitle>Email métier</SheetTitle>
@@ -355,7 +355,7 @@ export function MobileEmailDetailSheet({
                       type="button"
                       onClick={() => setActiveSection(section.id)}
                       className={cn(
-                        "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em]",
+                        "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em]",
                         activeSection === section.id
                           ? "border-primary/[0.14] bg-primary/10 text-primary"
                           : "border-black/[0.06] bg-white text-muted-foreground",

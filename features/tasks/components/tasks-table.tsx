@@ -138,14 +138,14 @@ export function TasksTable({
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="min-w-[280px]">Titre</TableHead>
-              <TableHead className="min-w-[140px]">Type</TableHead>
-              <TableHead className="min-w-[180px]">Client</TableHead>
-              <TableHead className="min-w-[220px]">Demande liée</TableHead>
-              <TableHead className="min-w-[150px]">Priorité</TableHead>
-              <TableHead className="min-w-[150px]">Statut</TableHead>
-              <TableHead className="min-w-[170px]">Responsable</TableHead>
-              <TableHead className="min-w-[170px] text-right">Échéance</TableHead>
+              <TableHead className="min-w-[250px]">Titre</TableHead>
+              <TableHead className="min-w-[125px]">Type</TableHead>
+              <TableHead className="min-w-[155px]">Client</TableHead>
+              <TableHead className="min-w-[190px]">Demande liée</TableHead>
+              <TableHead className="min-w-[135px]">Priorité</TableHead>
+              <TableHead className="min-w-[135px]">Statut</TableHead>
+              <TableHead className="min-w-[150px]">Responsable</TableHead>
+              <TableHead className="min-w-[155px] text-right">Échéance</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -165,7 +165,9 @@ export function TasksTable({
                       </div>
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-semibold tracking-tight">{task.title}</p>
+                          <p className="line-clamp-2 break-words font-semibold tracking-tight">
+                            {task.title}
+                          </p>
                           {task.isOverdue ? (
                             <Badge variant="destructive">Retard</Badge>
                           ) : null}
@@ -191,13 +193,13 @@ export function TasksTable({
                   </TableCell>
                   <TableCell>
                     <p className="font-semibold">{task.clientName}</p>
-                    <p className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                    <p className="mt-1 truncate text-xs uppercase tracking-[0.16em] text-muted-foreground">
                       {task.productionStatus ?? "Sans production"}
                     </p>
                   </TableCell>
                   <TableCell>
-                    <p className="font-semibold">{task.requestTitle}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
+                    <p className="line-clamp-2 break-words font-semibold">{task.requestTitle}</p>
+                    <p className="mt-1 truncate text-sm text-muted-foreground">
                       {task.requestLabel ?? "Aucune demande liée"}
                     </p>
                   </TableCell>
@@ -209,7 +211,7 @@ export function TasksTable({
                   </TableCell>
                   <TableCell>
                     <p className="font-semibold">{task.owner}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
+                    <p className="mt-1 truncate text-sm text-muted-foreground">
                       {task.orderNumber ?? "Sans ordre de prod"}
                     </p>
                   </TableCell>
