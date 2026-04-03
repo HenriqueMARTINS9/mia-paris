@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import {
   getSupabaseAdminEnv,
   getSupabaseEnv,
@@ -208,26 +210,52 @@ async function getSupabaseRestAuthHeaders(
   context?: SupabaseRestExecutionContext,
 ) {
   if (context?.authMode === "service_role") {
-    if (!hasSupabaseAdminEnv) {
-      return {
-        error:
-          "SUPABASE_SERVICE_ROLE_KEY manquante. Impossible d'exécuter cette mutation serveur contrôlée.",
-        headers: null,
-      };
-    }
-
-    const { supabaseServiceRoleKey } = getSupabaseAdminEnv();
-
+    const cachedResult = await getServiceRoleRestAuthHeaders();
     return {
-      error: null,
-      headers: {
-        apikey: supabaseServiceRoleKey,
-        Authorization: `Bearer ${supabaseServiceRoleKey}`,
-        ...(includeContentType ? { "Content-Type": "application/json" } : {}),
-      },
+      error: cachedResult.error,
+      headers: cachedResult.headers
+        ? {
+            ...cachedResult.headers,
+            ...(includeContentType ? { "Content-Type": "application/json" } : {}),
+          }
+        : null,
     };
   }
 
+  const cachedResult = await getSessionRestAuthHeaders();
+
+  return {
+    error: cachedResult.error,
+    headers: cachedResult.headers
+      ? {
+          ...cachedResult.headers,
+          ...(includeContentType ? { "Content-Type": "application/json" } : {}),
+        }
+      : null,
+  };
+}
+
+const getServiceRoleRestAuthHeaders = cache(async () => {
+  if (!hasSupabaseAdminEnv) {
+    return {
+      error:
+        "SUPABASE_SERVICE_ROLE_KEY manquante. Impossible d'exécuter cette mutation serveur contrôlée.",
+      headers: null,
+    };
+  }
+
+  const { supabaseServiceRoleKey } = getSupabaseAdminEnv();
+
+  return {
+    error: null,
+    headers: {
+      apikey: supabaseServiceRoleKey,
+      Authorization: `Bearer ${supabaseServiceRoleKey}`,
+    },
+  };
+});
+
+const getSessionRestAuthHeaders = cache(async () => {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -262,10 +290,9 @@ async function getSupabaseRestAuthHeaders(
     headers: {
       apikey: supabasePublishableKey,
       Authorization: `Bearer ${session.access_token}`,
-      ...(includeContentType ? { "Content-Type": "application/json" } : {}),
     },
   };
-}
+});
 
 function buildSupabaseRestUrl(
   resource: string,

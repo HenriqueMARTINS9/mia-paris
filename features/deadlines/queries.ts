@@ -1,6 +1,7 @@
 import "server-only";
 
 import { unstable_noStore as noStore } from "next/cache";
+import { cache } from "react";
 
 import { getRequestLinkOptions } from "@/features/requests/queries";
 import { mapDeadlineOverviewToListItem } from "@/features/deadlines/mappers";
@@ -9,7 +10,7 @@ import { supabaseRestSelectList } from "@/lib/supabase/rest";
 import { createSupabaseServerClient, hasSupabaseEnv } from "@/lib/supabase/server";
 import type { DeadlineCritical, DeadlineRecord } from "@/types/crm";
 
-export async function getDeadlinesPageData(): Promise<DeadlinesPageData> {
+const getDeadlinesPageDataInternal = async (): Promise<DeadlinesPageData> => {
   noStore();
 
   if (!hasSupabaseEnv) {
@@ -87,7 +88,9 @@ export async function getDeadlinesPageData(): Promise<DeadlinesPageData> {
           : "Impossible de charger les deadlines.",
     };
   }
-}
+};
+
+export const getDeadlinesPageData = cache(getDeadlinesPageDataInternal);
 
 async function getDeadlineRecordsByIds(deadlineIds: string[]) {
   if (deadlineIds.length === 0) {

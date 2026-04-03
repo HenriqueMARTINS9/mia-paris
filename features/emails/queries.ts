@@ -1,6 +1,7 @@
 import "server-only";
 
 import { unstable_noStore as noStore } from "next/cache";
+import { cache } from "react";
 
 import { getDocumentFormOptions } from "@/features/documents/queries";
 import {
@@ -34,7 +35,7 @@ import type {
   RequestOverview,
 } from "@/types/crm";
 
-export async function getEmailsPageData(): Promise<EmailsPageData> {
+const getEmailsPageDataInternal = async (): Promise<EmailsPageData> => {
   noStore();
 
   const emptyQualificationOptions = {
@@ -229,12 +230,14 @@ export async function getEmailsPageData(): Promise<EmailsPageData> {
       requestOptionsError: null,
     };
   }
-}
+};
 
-async function getEmailQualificationOptions(): Promise<{
+export const getEmailsPageData = cache(getEmailsPageDataInternal);
+
+const getEmailQualificationOptions = cache(async (): Promise<{
   error: string | null;
   options: Omit<EmailsPageData["qualificationOptions"], "assignees">;
-}> {
+}> => {
   const [clientsResult, contactsResult, productDepartmentsResult, modelsResult] =
     await Promise.all([
       supabaseRestSelectList<ClientRecord>("clients", {
@@ -301,7 +304,7 @@ async function getEmailQualificationOptions(): Promise<{
       })),
     },
   };
-}
+});
 
 async function getClientsByIds(clientIds: string[]) {
   if (clientIds.length === 0) {

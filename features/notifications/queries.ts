@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { getCurrentUserContext } from "@/features/auth/queries";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
@@ -20,7 +22,7 @@ const defaultPreferences: NotificationPreferencesState = {
   taskCritical: true,
 };
 
-export async function getNotificationPreferencesState() {
+const getNotificationPreferencesStateInternal = async () => {
   const currentUser = await getCurrentUserContext();
 
   if (!currentUser?.authUser) {
@@ -78,4 +80,8 @@ export async function getNotificationPreferencesState() {
           : "Impossible de charger les préférences de notifications.",
     };
   }
-}
+};
+
+export const getNotificationPreferencesState = cache(
+  getNotificationPreferencesStateInternal,
+);

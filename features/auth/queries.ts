@@ -2,6 +2,7 @@ import "server-only";
 
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { cache } from "react";
 
 import type { CurrentUserContext } from "@/features/auth/types";
 import type { Database } from "@/lib/supabase/database.types";
@@ -10,7 +11,7 @@ import type { UserRecord } from "@/types/crm";
 
 const DEFAULT_REDIRECT_PATH = "/demandes";
 
-export async function getCurrentAuthUser() {
+const getCurrentAuthUserInternal = async () => {
   if (!hasSupabaseEnv) {
     return null;
   }
@@ -26,9 +27,11 @@ export async function getCurrentAuthUser() {
   }
 
   return user;
-}
+};
 
-export async function getCurrentUserContext(): Promise<CurrentUserContext | null> {
+export const getCurrentAuthUser = cache(getCurrentAuthUserInternal);
+
+const getCurrentUserContextInternal = async (): Promise<CurrentUserContext | null> => {
   if (!hasSupabaseEnv) {
     return null;
   }
@@ -47,7 +50,9 @@ export async function getCurrentUserContext(): Promise<CurrentUserContext | null
     authUser: user,
     appUser: await getCurrentAppUserWithClient(supabase, user.id),
   };
-}
+};
+
+export const getCurrentUserContext = cache(getCurrentUserContextInternal);
 
 export async function requireCurrentUserContext(): Promise<CurrentUserContext> {
   const currentUser = await getCurrentUserContext();
@@ -59,7 +64,7 @@ export async function requireCurrentUserContext(): Promise<CurrentUserContext> {
   return currentUser;
 }
 
-export async function getCurrentAppUser(): Promise<UserRecord | null> {
+const getCurrentAppUserInternal = async (): Promise<UserRecord | null> => {
   if (!hasSupabaseEnv) {
     return null;
   }
@@ -75,7 +80,9 @@ export async function getCurrentAppUser(): Promise<UserRecord | null> {
   }
 
   return getCurrentAppUserWithClient(supabase, user.id);
-}
+};
+
+export const getCurrentAppUser = cache(getCurrentAppUserInternal);
 
 export function normalizeRedirectPath(pathname: string | null | undefined) {
   if (!pathname || !pathname.startsWith("/") || pathname.startsWith("//")) {

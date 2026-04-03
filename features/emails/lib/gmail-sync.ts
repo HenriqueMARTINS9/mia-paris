@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { getCurrentUserContext } from "@/features/auth/queries";
 import { recordGmailSyncRun } from "@/features/emails/lib/gmail-sync-history";
 import { resolveGmailSyncFailureMessage } from "@/features/emails/lib/gmail-sync-errors";
@@ -233,7 +235,7 @@ async function recordGmailSyncEvent(input: {
   });
 }
 
-export async function getCurrentUserGmailInboxStatus() {
+const getCurrentUserGmailInboxStatusInternal = async () => {
   const currentUser = await getCurrentUserContext();
 
   if (!currentUser?.authUser) {
@@ -278,7 +280,11 @@ export async function getCurrentUserGmailInboxStatus() {
       inboxId: inbox.id,
       lastSyncedAt: inbox.last_synced_at ?? null,
     };
-}
+};
+
+export const getCurrentUserGmailInboxStatus = cache(
+  getCurrentUserGmailInboxStatusInternal,
+);
 
 async function getSharedActiveGoogleInbox(admin: ReturnType<typeof createSupabaseAdminClient>) {
   const result = await admin

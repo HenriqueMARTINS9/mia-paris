@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import type { GmailSyncSummary } from "@/features/dashboard/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
@@ -16,13 +18,13 @@ import {
 import type { Database } from "@/lib/supabase/database.types";
 import type { ActivityLogRecord, GmailSyncRunRecord } from "@/types/crm";
 
-export async function getGmailSyncSummaries(input: {
+const getGmailSyncSummariesInternal = async (input: {
   inboxId: string | null;
   limit?: number;
 }): Promise<{
   error: string | null;
   runs: GmailSyncSummary[];
-}> {
+}> => {
   if (!input.inboxId) {
     return {
       error: null,
@@ -77,7 +79,9 @@ export async function getGmailSyncSummaries(input: {
     error: null,
     runs: (legacyResult.data ?? []).map(mapLegacySyncLog),
   };
-}
+};
+
+export const getGmailSyncSummaries = cache(getGmailSyncSummariesInternal);
 
 export async function recordGmailSyncRun(input: {
   errorCount: number;

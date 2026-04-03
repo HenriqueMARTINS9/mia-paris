@@ -2,6 +2,7 @@ import "server-only";
 
 import { unstable_noStore as noStore } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { cache } from "react";
 
 import { mapRequestOverviewRowToListItem } from "@/features/requests/mappers";
 import type {
@@ -33,7 +34,7 @@ interface RequestsOverviewPageData {
   error: string | null;
 }
 
-export async function getRequestsOverviewPageData(): Promise<RequestsOverviewPageData> {
+const getRequestsOverviewPageDataInternal = async (): Promise<RequestsOverviewPageData> => {
   noStore();
 
   if (!hasSupabaseEnv) {
@@ -99,18 +100,22 @@ export async function getRequestsOverviewPageData(): Promise<RequestsOverviewPag
           : "Impossible de charger les demandes.",
     };
   }
-}
+};
 
-export async function getRequestAssigneeOptions() {
+export const getRequestsOverviewPageData = cache(getRequestsOverviewPageDataInternal);
+
+const getRequestAssigneeOptionsInternal = async () => {
   const supabase = await createSupabaseServerClient();
 
   return getRequestAssigneeOptionsWithClient(supabase);
-}
+};
 
-export async function getRequestLinkOptions(limit = 120): Promise<{
+export const getRequestAssigneeOptions = cache(getRequestAssigneeOptionsInternal);
+
+const getRequestLinkOptionsInternal = async (limit = 120): Promise<{
   options: RequestLinkOption[];
   error: string | null;
-}> {
+}> => {
   try {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase
@@ -141,12 +146,14 @@ export async function getRequestLinkOptions(limit = 120): Promise<{
           : "Impossible de charger les demandes liées.",
     };
   }
-}
+};
 
-export async function getRequestFormOptions(limit = 120): Promise<{
+export const getRequestLinkOptions = cache(getRequestLinkOptionsInternal);
+
+const getRequestFormOptionsInternal = async (limit = 120): Promise<{
   error: string | null;
   options: RequestFormOptions;
-}> {
+}> => {
   const [assigneesResult, clientsResult, contactsResult, modelsResult, departmentsResult] =
     await Promise.all([
       getRequestAssigneeOptions(),
@@ -216,7 +223,9 @@ export async function getRequestFormOptions(limit = 120): Promise<{
       })),
     },
   };
-}
+};
+
+export const getRequestFormOptions = cache(getRequestFormOptionsInternal);
 
 async function getRequestAssigneeOptionsWithClient(
   supabase: SupabaseClient<Database>,

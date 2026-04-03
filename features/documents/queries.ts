@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { getRequestLinkOptions } from "@/features/requests/queries";
 import type {
   DocumentFormOptions,
@@ -21,10 +23,10 @@ import type {
   ProductionRecord,
 } from "@/types/crm";
 
-export async function getDocumentFormOptions(limit = 120): Promise<{
+const getDocumentFormOptionsInternal = async (limit = 120): Promise<{
   error: string | null;
   options: DocumentFormOptions;
-}> {
+}> => {
   const [requestsResult, modelsResult, ordersResult, productionsResult] =
     await Promise.all([
       getRequestLinkOptions(limit),
@@ -191,7 +193,9 @@ export async function getDocumentFormOptions(limit = 120): Promise<{
       requests: options.requests,
     },
   };
-}
+};
+
+export const getDocumentFormOptions = cache(getDocumentFormOptionsInternal);
 
 export async function getDocumentsByRelatedIds(input: {
   modelIds?: string[];

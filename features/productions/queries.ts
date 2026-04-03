@@ -1,6 +1,7 @@
 import "server-only";
 
 import { unstable_noStore as noStore } from "next/cache";
+import { cache } from "react";
 
 import { getDocumentsByRelatedIds } from "@/features/documents/queries";
 import { getRequestLinkOptions } from "@/features/requests/queries";
@@ -36,7 +37,7 @@ import type {
   TaskRecord,
 } from "@/types/crm";
 
-export async function getProductionsPageData(): Promise<ProductionsPageData> {
+const getProductionsPageDataInternal = async (): Promise<ProductionsPageData> => {
   noStore();
 
   const emptyOptions: ProductionFormOptions = {
@@ -224,12 +225,14 @@ export async function getProductionsPageData(): Promise<ProductionsPageData> {
           : "Impossible de charger les productions.",
     };
   }
-}
+};
 
-export async function getProductionFormOptions(limit = 120): Promise<{
+export const getProductionsPageData = cache(getProductionsPageDataInternal);
+
+const getProductionFormOptionsInternal = async (limit = 120): Promise<{
   error: string | null;
   options: ProductionFormOptions;
-}> {
+}> => {
   const [requestsResult, clientsResult, modelsResult, ordersResult] =
     await Promise.all([
       getRequestLinkOptions(limit),
@@ -323,7 +326,9 @@ export async function getProductionFormOptions(limit = 120): Promise<{
         : null,
     options,
   };
-}
+};
+
+export const getProductionFormOptions = cache(getProductionFormOptionsInternal);
 
 async function getOrdersByIds(orderIds: string[]) {
   if (orderIds.length === 0) {

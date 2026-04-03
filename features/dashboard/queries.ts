@@ -1,6 +1,7 @@
 import "server-only";
 
 import { unstable_noStore as noStore } from "next/cache";
+import { cache } from "react";
 
 import { getDeadlinesPageData } from "@/features/deadlines/queries";
 import { getEmailsPageData } from "@/features/emails/queries";
@@ -20,7 +21,7 @@ import {
 } from "@/lib/record-helpers";
 import type { ActivityLogRecord, RequestOverview, ValidationRecord } from "@/types/crm";
 
-export async function getDashboardPageData(): Promise<DashboardPageData> {
+const getDashboardPageDataInternal = async (): Promise<DashboardPageData> => {
   noStore();
 
   const emptyData: DashboardPageData = {
@@ -217,7 +218,9 @@ export async function getDashboardPageData(): Promise<DashboardPageData> {
           : "Impossible de charger le dashboard.",
     };
   }
-}
+};
+
+export const getDashboardPageData = cache(getDashboardPageDataInternal);
 
 function getSafeValidations(result: Awaited<ReturnType<typeof supabaseRestSelectList<ValidationRecord>>>) {
   if (result.error && !isMissingSupabaseResourceError(result.rawError)) {

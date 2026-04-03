@@ -1,6 +1,7 @@
 import "server-only";
 
 import { unstable_noStore as noStore } from "next/cache";
+import { cache } from "react";
 
 import { getDashboardPageData } from "@/features/dashboard/queries";
 import { getAutomationWorkspaceData } from "@/features/automations/queries";
@@ -11,7 +12,7 @@ import { getRequestsOverviewPageData } from "@/features/requests/queries";
 import { getTasksPageData } from "@/features/tasks/queries";
 import type { TodayOverviewData } from "@/features/today/types";
 
-export async function getTodayOverviewData(): Promise<TodayOverviewData> {
+const getTodayOverviewDataInternal = async (): Promise<TodayOverviewData> => {
   noStore();
 
   const [
@@ -147,7 +148,9 @@ export async function getTodayOverviewData(): Promise<TodayOverviewData> {
     unassignedRequests,
     urgencies24h,
   };
-}
+};
+
+export const getTodayOverviewData = cache(getTodayOverviewDataInternal);
 
 function riskWeight(value: string) {
   if (value === "critical") {

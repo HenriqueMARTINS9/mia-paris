@@ -1,6 +1,7 @@
 import "server-only";
 
 import { unstable_noStore as noStore } from "next/cache";
+import { cache } from "react";
 
 import { getRequestAssigneeOptions, getRequestLinkOptions } from "@/features/requests/queries";
 import { mapTaskOverviewToListItem, mapTaskRecordToListItemFallback } from "@/features/tasks/mappers";
@@ -9,7 +10,7 @@ import { supabaseRestSelectList, supabaseRestSelectMaybeSingle } from "@/lib/sup
 import { createSupabaseServerClient, hasSupabaseEnv } from "@/lib/supabase/server";
 import type { RequestOverview, TaskOpen, TaskRecord } from "@/types/crm";
 
-export async function getTasksPageData(): Promise<TasksPageData> {
+const getTasksPageDataInternal = async (): Promise<TasksPageData> => {
   noStore();
 
   if (!hasSupabaseEnv) {
@@ -101,14 +102,16 @@ export async function getTasksPageData(): Promise<TasksPageData> {
           : "Impossible de charger les tâches.",
     };
   }
-}
+};
 
-export async function getTaskDetailPageData(taskId: string): Promise<{
+export const getTasksPageData = cache(getTasksPageDataInternal);
+
+const getTaskDetailPageDataInternal = async (taskId: string): Promise<{
   assignees: TasksPageData["assignees"];
   assigneesError: string | null;
   error: string | null;
   task: TaskListItem | null;
-}> {
+}> => {
   noStore();
 
   try {
@@ -182,7 +185,9 @@ export async function getTaskDetailPageData(taskId: string): Promise<{
       task: null,
     };
   }
-}
+};
+
+export const getTaskDetailPageData = cache(getTaskDetailPageDataInternal);
 
 async function getTaskRecordsByIds(taskIds: string[]) {
   if (taskIds.length === 0) {

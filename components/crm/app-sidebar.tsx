@@ -7,6 +7,7 @@ import { Building2, Dot, Menu } from "lucide-react";
 
 import { useCrmSummary } from "@/components/crm/crm-summary-provider";
 import { useAuthorization } from "@/features/auth/components/auth-role-provider";
+import type { AppPermission } from "@/features/auth/authorization";
 import { Badge } from "@/components/ui/badge";
 import {
   Sheet,
@@ -15,7 +16,11 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { primaryNavigation, secondaryNavigation } from "@/components/crm/nav-config";
+import {
+  navigationSections,
+  type NavigationItem,
+  type NavigationSection,
+} from "@/components/crm/nav-config";
 import { cn } from "@/lib/utils";
 import type { CrmSummary } from "@/types/crm";
 
@@ -23,12 +28,7 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { can } = useAuthorization();
   const { summary, isLoading } = useCrmSummary();
-  const visiblePrimaryNavigation = primaryNavigation.filter(
-    (item) => !item.requiredPermission || can(item.requiredPermission),
-  );
-  const visibleSecondaryNavigation = secondaryNavigation.filter(
-    (item) => !item.requiredPermission || can(item.requiredPermission),
-  );
+  const visibleSections = getVisibleNavigationSections(can);
 
   return (
     <aside className="hidden md:block">
@@ -63,35 +63,32 @@ export function AppSidebar() {
           </Link>
 
           <div className="flex-1 overflow-y-auto px-2 py-4 lg:px-3">
-            <div className="mb-3 hidden px-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40 lg:block">
-              Pilotage
-            </div>
-            <nav className="space-y-1.5">
-              {visiblePrimaryNavigation.map((item) => (
-                <SidebarLink
-                  key={item.href}
-                  item={item}
-                  pathname={pathname}
-                  summary={summary}
-                  isLoading={isLoading}
-                />
-              ))}
-            </nav>
+            <div className="space-y-6">
+              {visibleSections.map((section) => (
+                <div key={section.id}>
+                  <div className="mb-3 hidden px-2 lg:block">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">
+                      {section.label}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-white/28">
+                      {section.description}
+                    </p>
+                  </div>
 
-            <div className="mb-3 mt-6 hidden px-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40 lg:block">
-              Automatisation
-            </div>
-            <nav className="space-y-1.5">
-              {visibleSecondaryNavigation.map((item) => (
-                <SidebarLink
-                  key={item.href}
-                  item={item}
-                  pathname={pathname}
-                  summary={summary}
-                  isLoading={isLoading}
-                />
+                  <nav className="space-y-1.5">
+                    {section.items.map((item) => (
+                      <SidebarLink
+                        key={item.href}
+                        item={item}
+                        pathname={pathname}
+                        summary={summary}
+                        isLoading={isLoading}
+                      />
+                    ))}
+                  </nav>
+                </div>
               ))}
-            </nav>
+            </div>
           </div>
         </div>
       </div>
@@ -105,7 +102,7 @@ function SidebarLink({
   summary,
   isLoading,
 }: Readonly<{
-  item: (typeof primaryNavigation)[number] | (typeof secondaryNavigation)[number];
+  item: NavigationItem;
   pathname: string;
   summary: CrmSummary;
   isLoading: boolean;
@@ -181,12 +178,7 @@ export function MobileNavigationMenu() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { can } = useAuthorization();
   const { summary, isLoading } = useCrmSummary();
-  const visiblePrimaryNavigation = primaryNavigation.filter(
-    (item) => !item.requiredPermission || can(item.requiredPermission),
-  );
-  const visibleSecondaryNavigation = secondaryNavigation.filter(
-    (item) => !item.requiredPermission || can(item.requiredPermission),
-  );
+  const visibleSections = getVisibleNavigationSections(can);
 
   return (
     <>
@@ -222,41 +214,33 @@ export function MobileNavigationMenu() {
             </SheetHeader>
 
             <div className="flex-1 overflow-y-auto px-4 py-5">
-              <div className="mb-3 px-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">
-                Pilotage
-              </div>
-              <nav className="space-y-2">
-                {visiblePrimaryNavigation.map((item) => (
-                  <SheetSidebarLink
-                    key={item.href}
-                    item={item}
-                    pathname={pathname}
-                    summary={summary}
-                    isLoading={isLoading}
-                    onNavigate={() => setMobileMenuOpen(false)}
-                  />
-                ))}
-              </nav>
+              <div className="space-y-6">
+                {visibleSections.map((section) => (
+                  <div key={section.id}>
+                    <div className="mb-3 px-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">
+                        {section.label}
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-white/28">
+                        {section.description}
+                      </p>
+                    </div>
 
-              {visibleSecondaryNavigation.length > 0 ? (
-                <>
-                  <div className="mb-3 mt-6 px-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">
-                    Automatisation
+                    <nav className="space-y-2">
+                      {section.items.map((item) => (
+                        <SheetSidebarLink
+                          key={item.href}
+                          item={item}
+                          pathname={pathname}
+                          summary={summary}
+                          isLoading={isLoading}
+                          onNavigate={() => setMobileMenuOpen(false)}
+                        />
+                      ))}
+                    </nav>
                   </div>
-                  <nav className="space-y-2">
-                    {visibleSecondaryNavigation.map((item) => (
-                      <SheetSidebarLink
-                        key={item.href}
-                        item={item}
-                        pathname={pathname}
-                        summary={summary}
-                        isLoading={isLoading}
-                        onNavigate={() => setMobileMenuOpen(false)}
-                      />
-                    ))}
-                  </nav>
-                </>
-              ) : null}
+                ))}
+              </div>
             </div>
           </div>
         </SheetContent>
@@ -272,7 +256,7 @@ function SheetSidebarLink({
   summary,
   isLoading,
 }: Readonly<{
-  item: (typeof primaryNavigation)[number] | (typeof secondaryNavigation)[number];
+  item: NavigationItem;
   onNavigate: () => void;
   pathname: string;
   summary: CrmSummary;
@@ -324,4 +308,17 @@ function SheetSidebarLink({
       </div>
     </Link>
   );
+}
+
+function getVisibleNavigationSections(
+  can: (permission: AppPermission) => boolean,
+): NavigationSection[] {
+  return navigationSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter(
+        (item) => !item.requiredPermission || can(item.requiredPermission),
+      ),
+    }))
+    .filter((section) => section.items.length > 0);
 }
