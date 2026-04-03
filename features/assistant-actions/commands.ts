@@ -354,7 +354,10 @@ export async function addNoteToRequest(
     return createAssistantActionFailure("validation_error", noteValidation.message);
   }
 
-  const noteField = await detectRequestNoteField(input.requestId);
+  const noteField = await detectRequestNoteField(
+    input.requestId,
+    options?.mutationContext?.rest ?? null,
+  );
 
   if (!noteField) {
     return createAssistantActionFailure(
@@ -367,6 +370,13 @@ export async function addNoteToRequest(
     note: noteValidation.value,
     noteField,
     requestId: input.requestId,
+  }, {
+    actor: options?.mutationContext?.actor ?? null,
+    authorizationOverride:
+      options?.mutationContext?.authorizationOverride ??
+      options?.authorizationOverride ??
+      null,
+    rest: options?.mutationContext?.rest ?? null,
   });
 
   if (!result.ok) {
@@ -418,6 +428,13 @@ export async function addNoteToProduction(
   const result = await updateProductionNotesAction({
     notes,
     productionId: input.productionId,
+  }, {
+    actor: options?.mutationContext?.actor ?? null,
+    authorizationOverride:
+      options?.mutationContext?.authorizationOverride ??
+      options?.authorizationOverride ??
+      null,
+    rest: options?.mutationContext?.rest ?? null,
   });
 
   if (!result.ok) {
@@ -722,11 +739,14 @@ export async function getAssistantWorkspaceData(): Promise<AssistantWorkspaceDat
   };
 }
 
-async function detectRequestNoteField(requestId: string) {
+async function detectRequestNoteField(
+  requestId: string,
+  restContext?: AssistantMutationExecutionContext["rest"] | null,
+) {
   const result = await supabaseRestSelectMaybeSingle<Record<string, unknown>>("requests", {
     id: `eq.${requestId}`,
     select: "id,notes,internal_notes,note",
-  });
+  }, restContext ?? undefined);
 
   if (result.error || !result.data) {
     return null;

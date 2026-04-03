@@ -2,9 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 
-import { insertActivityLogViaRest } from "@/lib/activity-logs";
+import type { AssistantMutationExecutionContext } from "@/features/assistant-actions/execution-context";
 import { recordAuditEvent } from "@/lib/action-runtime";
-import { authorizeServerAction } from "@/features/auth/server-authorization";
+import {
+  authorizeServerAction,
+  authorizeServerPermissions,
+} from "@/features/auth/server-authorization";
 import { notifyBlockedProduction } from "@/features/notifications/lib/operational-notifications";
 import {
   mapUiProductionRiskToDatabaseValues,
@@ -155,6 +158,7 @@ export async function updateProductionBlockingReasonAction(
 
 export async function updateProductionNotesAction(
   input: UpdateProductionNotesInput,
+  context?: AssistantMutationExecutionContext,
 ): Promise<ProductionMutationResult> {
   return patchFirstMatchingPayload({
     field: "notes",
@@ -163,7 +167,7 @@ export async function updateProductionNotesAction(
     ]),
     productionId: input.productionId,
     successMessage: "Notes production mises à jour.",
-  });
+  }, context);
 }
 
 function buildSingleFieldPayloads(columns: string[], values: Array<string | null>) {
@@ -186,8 +190,10 @@ async function patchFirstMatchingPayload(options: {
   payloads: Array<Record<string, unknown>>;
   productionId: string;
   successMessage: string;
-}): Promise<ProductionMutationResult> {
-  const authorization = await authorizeServerAction("productions.update");
+}, context?: AssistantMutationExecutionContext): Promise<ProductionMutationResult> {
+  const authorization = context?.authorizationOverride
+    ? await authorizeServerPermissions(["productions.update"], context.authorizationOverride)
+    : await authorizeServerAction("productions.update");
 
   if (!authorization.ok) {
     return {
@@ -218,22 +224,28 @@ async function patchFirstMatchingPayload(options: {
         id: `eq.${options.productionId}`,
         select: "id,request_id,order_number,title,blocking_reason,blocked_reason",
       },
+      context?.rest ?? undefined,
     );
 
     if (!result.error && result.data && result.data.length > 0) {
       const requestId = getRequestIdFromMutation(result.data[0]);
 
-      await insertActivityLogViaRest({
+      const actor = context?.actor ?? null;
+
+      await recordAuditEvent({
         action: `production_${options.field}_updated`,
-        actorId: authorization.actorId,
-        actorType: "user",
+        actorId: actor?.actorUserId ?? authorization.actorId,
+        actorType: actor?.actorType ?? authorization.actorType,
         description: options.successMessage,
         entityId: options.productionId,
         entityType: "production",
-        payload,
+        payload: {
+          ...payload,
+          actorEmail: actor?.actorEmail ?? null,
+        },
         requestId,
         scope: `productions.${options.field}`,
-        source: "ui",
+        source: actor?.source ?? authorization.source,
         status: "success",
       });
 
@@ -270,19 +282,20 @@ async function patchFirstMatchingPayload(options: {
 
   await recordAuditEvent({
     action: `production_${options.field}_update_failed`,
-    actorId: authorization.actorId,
-    actorType: "user",
+    actorId: context?.actor?.actorUserId ?? authorization.actorId,
+    actorType: context?.actor?.actorType ?? authorization.actorType,
     description:
       latestError ??
       "Mutation impossible sur productions. Vérifie les colonnes disponibles.",
     entityId: options.productionId,
     entityType: "production",
     payload: {
+      actorEmail: context?.actor?.actorEmail ?? null,
       payloadsTried: options.payloads.length,
     },
     requestId: null,
     scope: `productions.${options.field}`,
-    source: "ui",
+    source: context?.actor?.source ?? authorization.source,
     status: "failure",
   });
 

@@ -9,6 +9,7 @@ import type {
   RequestOverviewListItem,
   RequestPriority,
 } from "@/features/requests/types";
+import type { AssistantTaskType } from "@/features/tasks/task-types";
 
 export type AssistantActionKind = "read" | "write";
 
@@ -71,7 +72,7 @@ export interface AssistantCreateTaskInput {
   priority: RequestPriority;
   requestId?: string | null;
   source?: AssistantActionSource;
-  taskType: string;
+  taskType: AssistantTaskType;
   title: string;
 }
 

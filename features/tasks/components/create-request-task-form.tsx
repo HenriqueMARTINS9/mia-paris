@@ -13,6 +13,7 @@ import type {
   RequestPriority,
 } from "@/features/requests/types";
 import { requestPriorityMeta } from "@/features/requests/metadata";
+import { manualTaskTypeOptions } from "@/features/tasks/task-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -29,13 +30,6 @@ interface CreateRequestTaskFormProps {
   requestOptionsError?: string | null;
   sectionId?: string;
 }
-
-const taskTypeOptions = [
-  { label: "Suivi dossier", value: "follow_up" },
-  { label: "Chiffrage", value: "costing" },
-  { label: "Validation", value: "validation" },
-  { label: "Production", value: "production" },
-] as const;
 
 export function CreateRequestTaskForm({
   assignees,
@@ -54,7 +48,7 @@ export function CreateRequestTaskForm({
   const fixedRequestId = requestId;
   const [title, setTitle] = useState("");
   const [taskType, setTaskType] =
-    useState<(typeof taskTypeOptions)[number]["value"]>("follow_up");
+    useState<(typeof manualTaskTypeOptions)[number]["value"]>("follow_up");
   const [priority, setPriority] = useState<RequestPriority>("normal");
   const [assignedUserId, setAssignedUserId] = useState(defaultAssignedUserId ?? "");
   const [dueAt, setDueAt] = useState(defaultDueAt ? defaultDueAt.slice(0, 10) : "");
@@ -114,11 +108,13 @@ export function CreateRequestTaskForm({
           <Select
             value={taskType}
             onChange={(event) =>
-              setTaskType(event.target.value as (typeof taskTypeOptions)[number]["value"])
+              setTaskType(
+                event.target.value as (typeof manualTaskTypeOptions)[number]["value"],
+              )
             }
             disabled={isPending}
           >
-            {taskTypeOptions.map((option) => (
+            {manualTaskTypeOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>

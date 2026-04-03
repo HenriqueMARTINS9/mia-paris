@@ -2,8 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 
+import type { AssistantMutationExecutionContext } from "@/features/assistant-actions/execution-context";
 import type { RequestNoteField } from "@/features/requests/detail-types";
-import { authorizeServerAction } from "@/features/auth/server-authorization";
+import {
+  authorizeServerAction,
+  authorizeServerPermissions,
+} from "@/features/auth/server-authorization";
 import {
   mapUiPriorityToDatabasePriority,
   mapUiStatusToDatabaseStatus,
@@ -159,8 +163,12 @@ export async function markRequestAsProcessedAction(
 
 export async function appendRequestNoteAction(
   input: AppendRequestNoteInput,
+  context?: AssistantMutationExecutionContext,
 ): Promise<RequestMutationResult> {
-  const authorization = await authorizeServerAction("requests.update");
+  const authorization = await authorizeServerPermissions(
+    ["requests.update"],
+    context?.authorizationOverride,
+  );
 
   if (!authorization.ok) {
     return {
@@ -201,6 +209,7 @@ export async function appendRequestNoteAction(
       id: `eq.${input.requestId}`,
       select: `id,${input.noteField}`,
     },
+    context?.rest ?? undefined,
   );
 
   if (currentRecord.error) {
@@ -219,11 +228,15 @@ export async function appendRequestNoteAction(
     };
   }
 
-  const authorContext = await getCurrentUserContext().catch(() => null);
+  const actor = context?.actor ?? null;
+  const authorContext =
+    actor ? null : await getCurrentUserContext().catch(() => null);
   const authorLabel =
-    authorContext?.appUser?.full_name ??
-    authorContext?.authUser.email ??
-    "MIA PARIS";
+    actor?.actorType === "assistant"
+      ? "OpenClaw"
+      : authorContext?.appUser?.full_name ??
+        authorContext?.authUser.email ??
+        "MIA PARIS";
   const currentValue =
     typeof currentRecord.data[input.noteField] === "string"
       ? (currentRecord.data[input.noteField] as string)
@@ -240,6 +253,7 @@ export async function appendRequestNoteAction(
       id: `eq.${input.requestId}`,
       select: "id",
     },
+    context?.rest ?? undefined,
   );
 
   if (patchResult.error) {
@@ -268,18 +282,19 @@ export async function appendRequestNoteAction(
 
   await recordAuditEvent({
     action: "add_note_to_request",
-    actorId: authorContext?.appUser?.id ?? null,
-    actorType: "user",
+    actorId: actor?.actorUserId ?? authorization.actorId,
+    actorType: actor?.actorType ?? authorization.actorType,
     description: "Note métier ajoutée sur la demande.",
     entityId: input.requestId,
     entityType: "request",
     payload: {
+      actorEmail: actor?.actorEmail ?? null,
       noteField: input.noteField,
       notePreview: input.note.trim().slice(0, 220),
     },
     requestId: input.requestId,
     scope: "requests.add_note",
-    source: "ui",
+    source: actor?.source ?? authorization.source,
     status: "success",
   });
 

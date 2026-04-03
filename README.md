@@ -301,8 +301,11 @@ Livre:
 - controle par permissions
 - route HTTP securisee `app/api/openclaw/route.ts`
 - console interne de simulation via `app/api/openclaw/actions/route.ts`
+- acteur technique serveur dedie pour les writes externes OpenClaw
+- rendu compact par defaut pour WhatsApp/mobile
+- doc operationnelle du bridge dans `docs/openclaw-crm-bridge.md`
 
-Actions safe exposees:
+Actions READ exposees:
 - `getTodayUrgencies`
 - `getUnprocessedEmails`
 - `getRequestsWithoutAssignee`
@@ -310,17 +313,27 @@ Actions safe exposees:
 - `getHighRiskProductions`
 - `searchClientHistory`
 - `searchModelHistory`
+
+Actions SAFE WRITE exposees:
 - `prepareReplyDraft`
 - `createTask`
 - `addNoteToRequest`
 - `addNoteToProduction`
 
+Actions sensibles fermees:
+- `createDeadline`
+
 Contrat HTTP externe actuel:
 - `POST /api/openclaw`
 - header `Authorization: Bearer <OPENCLAW_CRM_TOKEN>`
 - body JSON `{ "action": "...", "payload": { ... } }`
-- perimetre actuel: actions lecture uniquement
-- actions safe d'ecriture deja mappees mais non ouvertes sur la route externe
+- codes HTTP: `400`, `401`, `403`, `422`, `500`
+- `Cache-Control: no-store`
+- `payload.responseMode` supporte:
+  - `compact` par defaut pour WhatsApp
+  - `detailed` sur demande explicite
+- les writes safe OpenClaw n'utilisent pas de session navigateur
+- aucune valeur enum n'est devinee cote route externe
 
 ### 15. Monitoring, audit et observabilite
 

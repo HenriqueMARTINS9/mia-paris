@@ -25,6 +25,12 @@ import type {
 } from "@/features/assistant-actions/types";
 import type { ServerPermissionOverride } from "@/features/auth/server-authorization";
 import { getCurrentUserContext } from "@/features/auth/queries";
+import { requestPriorityOptions } from "@/features/requests/metadata";
+import { replyTemplateOrder } from "@/features/replies/lib/reply-templates";
+import {
+  assistantTaskTypeValues,
+  isAssistantTaskType,
+} from "@/features/tasks/task-types";
 import { recordAuditEvent } from "@/lib/action-runtime";
 
 export type OpenClawReadActionName =
@@ -103,7 +109,7 @@ const openClawSafeWriteActionSet = new Set<OpenClawSafeWriteActionName>(
   openClawSafeWriteActionNames,
 );
 
-const openClawFutureSensitiveActions: OpenClawFutureSensitiveActionName[] = [
+export const openClawFutureSensitiveActionNames: OpenClawFutureSensitiveActionName[] = [
   "createDeadline",
 ];
 
@@ -182,7 +188,7 @@ export function getOpenClawActionDescriptors(): OpenClawActionDescriptor[] {
       sampleInput: openClawActionSamples[action.command] ?? null,
     }));
 
-  const futureDescriptors = openClawFutureSensitiveActions.map((actionName) => {
+  const futureDescriptors = openClawFutureSensitiveActionNames.map((actionName) => {
     const catalogEntry = assistantActionCatalog.find((item) => item.command === actionName);
 
     return {
@@ -349,6 +355,7 @@ async function dispatchOpenClawAction(
             source: "assistant",
           }, {
             authorizationOverride: options?.authorizationOverride,
+            mutationContext: options?.mutationContext ?? null,
           })
         : parsed.result;
     }
@@ -372,6 +379,7 @@ async function dispatchOpenClawAction(
             source: "assistant",
           }, {
             authorizationOverride: options?.authorizationOverride,
+            mutationContext: options?.mutationContext ?? null,
           })
         : parsed.result;
     }
@@ -383,6 +391,7 @@ async function dispatchOpenClawAction(
             source: "assistant",
           }, {
             authorizationOverride: options?.authorizationOverride,
+            mutationContext: options?.mutationContext ?? null,
           })
         : parsed.result;
     }
@@ -439,6 +448,18 @@ function parseCreateTaskInput(input: unknown) {
   ) {
     return invalidPayloadResult(
       "Les champs title, taskType et priority sont requis pour createTask.",
+    );
+  }
+
+  if (!isAssistantTaskType(input.taskType)) {
+    return invalidPayloadResult(
+      `taskType invalide pour createTask. Valeurs supportées: ${assistantTaskTypeValues.join(", ")}.`,
+    );
+  }
+
+  if (!requestPriorityOptions.includes(input.priority as AssistantCreateTaskInput["priority"])) {
+    return invalidPayloadResult(
+      `priority invalide pour createTask. Valeurs supportées: ${requestPriorityOptions.join(", ")}.`,
     );
   }
 
@@ -510,6 +531,12 @@ function parsePrepareReplyDraftInput(input: unknown) {
   ) {
     return invalidPayloadResult(
       "Le contexte de prepareReplyDraft doit contenir sourceId, sourceType et subject.",
+    );
+  }
+
+  if (!replyTemplateOrder.includes(input.replyType as AssistantPrepareReplyDraftInput["replyType"])) {
+    return invalidPayloadResult(
+      `replyType invalide pour prepareReplyDraft. Valeurs supportées: ${replyTemplateOrder.join(", ")}.`,
     );
   }
 

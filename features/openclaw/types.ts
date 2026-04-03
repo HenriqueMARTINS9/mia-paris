@@ -5,6 +5,8 @@ export type {
   AssistantWorkspaceData as AssistantReadyWorkspaceData,
 } from "@/features/assistant-actions/types";
 
+export type OpenClawResponseMode = "compact" | "detailed";
+
 export interface PrepareReplyDraftInput {
   context: ReplyDraftContext;
   replyType: ReplyDraftType;

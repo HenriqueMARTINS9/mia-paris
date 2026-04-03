@@ -5,36 +5,48 @@ import { timingSafeEqual } from "node:crypto";
 import type { AssistantActionCode, AssistantActionKind } from "@/features/assistant-actions/types";
 import {
   executeOpenClawAction,
+  openClawFutureSensitiveActionNames,
   openClawReadActionNames,
   openClawSafeWriteActionNames,
   type OpenClawExposedActionName,
+  type OpenClawFutureSensitiveActionName,
   type OpenClawReadActionName,
   type OpenClawSafeWriteActionName,
 } from "@/features/openclaw/integration";
+import { presentOpenClawData } from "@/features/openclaw/presenters";
 import { getOpenClawAssistantExecutionContext } from "@/features/openclaw/server-context";
+import type { OpenClawResponseMode } from "@/features/openclaw/types";
 import { logOperationalError, recordAuditEvent } from "@/lib/action-runtime";
 import { getOpenClawEnv, hasOpenClawCrmToken } from "@/lib/openclaw/env";
+
+const OPENCLAW_DEFAULT_RESPONSE_MODE: OpenClawResponseMode = "compact";
 
 const openClawExternalReadActionSet = new Set<OpenClawReadActionName>(
   openClawReadActionNames,
 );
-const openClawPlannedSafeActionSet = new Set<OpenClawSafeWriteActionName>(
+const openClawDeclaredSafeWriteActionSet = new Set<OpenClawSafeWriteActionName>(
   openClawSafeWriteActionNames,
 );
-const openClawExternalSafeWriteActionSet = new Set<OpenClawSafeWriteActionName>([
-  "createTask",
-]);
+const openClawSensitiveActionSet = new Set<OpenClawFutureSensitiveActionName>(
+  openClawFutureSensitiveActionNames,
+);
 const openClawExternalActionSet = new Set<OpenClawExposedActionName>([
   ...openClawReadActionNames,
-  ...openClawExternalSafeWriteActionSet,
+  ...openClawSafeWriteActionNames,
+]);
+const openClawKnownActionSet = new Set<OpenClawHttpActionName>([
+  ...openClawReadActionNames,
+  ...openClawSafeWriteActionNames,
+  ...openClawFutureSensitiveActionNames,
 ]);
 
 export const openClawHttpReadActions = [...openClawReadActionNames];
-export const openClawHttpPlannedSafeActions = [...openClawSafeWriteActionNames];
+export const openClawHttpSafeWriteActions = [...openClawSafeWriteActionNames];
+export const openClawHttpSensitiveActions = [...openClawFutureSensitiveActionNames];
 
 export type OpenClawHttpActionName =
-  | OpenClawReadActionName
-  | OpenClawSafeWriteActionName;
+  | OpenClawExposedActionName
+  | OpenClawFutureSensitiveActionName;
 
 export type OpenClawHttpResponseCode = AssistantActionCode | "unauthorized";
 
@@ -112,12 +124,33 @@ export async function handleOpenClawHttpRequest(request: Request) {
     };
   }
 
+  if (!isHttpActionExposed(bodyValidation.value.action)) {
+    const forbiddenMessage = getOpenClawExposureMessage(bodyValidation.value.action);
+
+    await recordOpenClawHttpFailure({
+      action: bodyValidation.value.action,
+      code: "forbidden",
+      message: forbiddenMessage,
+    });
+
+    return {
+      status: 403,
+      body: createErrorResponse({
+        action: bodyValidation.value.action,
+        code: "forbidden",
+        message: forbiddenMessage,
+      }),
+    };
+  }
+
+  const payloadOptions = extractPayloadOptions(bodyValidation.value.payload);
+
   try {
     const openClawExecutionContext = getOpenClawAssistantExecutionContext();
     const result = await executeOpenClawAction(
       {
-        action: bodyValidation.value.action as OpenClawExposedActionName,
-        input: bodyValidation.value.payload,
+        action: bodyValidation.value.action,
+        input: payloadOptions.actionPayload,
       },
       {
         allowedActions: openClawExternalActionSet,
@@ -135,7 +168,14 @@ export async function handleOpenClawHttpRequest(request: Request) {
         action: result.action,
         auditScope: result.auditScope,
         code: result.code,
-        data: result.data,
+        data: result.ok
+          ? presentOpenClawData({
+              action: result.action,
+              data: result.data,
+              input: payloadOptions.actionPayload,
+              mode: payloadOptions.responseMode,
+            })
+          : null,
         kind: result.kind,
         message: result.message,
         ok: result.ok,
@@ -173,7 +213,13 @@ export async function handleOpenClawHttpRequest(request: Request) {
 export function validateOpenClawHttpBody(value: unknown):
   | {
       ok: true;
-      value: OpenClawHttpRequestBody;
+      value: {
+        action: OpenClawExposedActionName;
+        payload?: unknown;
+      } | {
+        action: OpenClawFutureSensitiveActionName;
+        payload?: unknown;
+      };
     }
   | {
       ok: false;
@@ -201,17 +247,16 @@ export function validateOpenClawHttpBody(value: unknown):
 
   const action = value.action.trim() as OpenClawHttpActionName;
 
-  if (
-    !openClawExternalReadActionSet.has(action as OpenClawReadActionName) &&
-    !openClawPlannedSafeActionSet.has(action as OpenClawSafeWriteActionName)
-  ) {
+  if (!openClawKnownActionSet.has(action)) {
     return {
       ok: false,
       action: null,
       code: "validation_error",
       message: [
         `Action OpenClaw inconnue: ${value.action}.`,
-        `Actions lecture actuellement ouvertes: ${openClawHttpReadActions.join(", ")}.`,
+        `Actions lecture: ${openClawHttpReadActions.join(", ")}.`,
+        `Actions safe write: ${openClawHttpSafeWriteActions.join(", ")}.`,
+        `Actions sensibles fermées: ${openClawHttpSensitiveActions.join(", ")}.`,
       ].join(" "),
     };
   }
@@ -221,7 +266,15 @@ export function validateOpenClawHttpBody(value: unknown):
     value: {
       action,
       payload: "payload" in value ? value.payload : undefined,
-    },
+    } as
+      | {
+          action: OpenClawExposedActionName;
+          payload?: unknown;
+        }
+      | {
+          action: OpenClawFutureSensitiveActionName;
+          payload?: unknown;
+        },
   };
 }
 
@@ -300,11 +353,7 @@ function createErrorResponse(input: {
     auditScope: input.action ? `openclaw.${input.action}` : "openclaw.http",
     code: input.code,
     data: null,
-    kind: input.action
-      ? openClawExternalReadActionSet.has(input.action as OpenClawReadActionName)
-        ? "read"
-        : "write"
-      : null,
+    kind: input.action ? getHttpActionKind(input.action) : null,
     message: input.message,
     ok: false,
   };
@@ -327,6 +376,48 @@ function mapOpenClawResultToStatus(
   }
 
   return 500;
+}
+
+function extractPayloadOptions(payload: unknown) {
+  if (!isRecord(payload)) {
+    return {
+      actionPayload: payload,
+      responseMode: OPENCLAW_DEFAULT_RESPONSE_MODE,
+    };
+  }
+
+  const { responseMode, ...rest } = payload;
+  const resolvedMode =
+    responseMode === "detailed" || responseMode === "compact"
+      ? responseMode
+      : OPENCLAW_DEFAULT_RESPONSE_MODE;
+
+  return {
+    actionPayload: rest,
+    responseMode: resolvedMode,
+  };
+}
+
+function getOpenClawExposureMessage(action: OpenClawHttpActionName) {
+  if (openClawSensitiveActionSet.has(action as OpenClawFutureSensitiveActionName)) {
+    return `L'action ${action} est classée sensible et reste fermée sur la route HTTP externe OpenClaw.`;
+  }
+
+  if (openClawDeclaredSafeWriteActionSet.has(action as OpenClawSafeWriteActionName)) {
+    return `L'action ${action} est reconnue mais n'est pas encore ouverte sur la route HTTP externe OpenClaw.`;
+  }
+
+  return `L'action ${action} n'est pas exposée sur la route HTTP externe OpenClaw.`;
+}
+
+function getHttpActionKind(action: OpenClawHttpActionName): AssistantActionKind {
+  return openClawExternalReadActionSet.has(action as OpenClawReadActionName) ? "read" : "write";
+}
+
+function isHttpActionExposed(
+  action: OpenClawHttpActionName,
+): action is OpenClawExposedActionName {
+  return openClawExternalActionSet.has(action as OpenClawExposedActionName);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

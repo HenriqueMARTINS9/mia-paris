@@ -103,7 +103,7 @@ export function AssistantReadyActionsPanel({
                 <div>
                   <p className="font-medium text-foreground">Lecture CRM prête</p>
                   <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                    Urgences, emails non traités, productions bloquées, demandes sans owner et historique sont déjà requêtables proprement.
+                    Urgences, emails non traités, productions bloquées, demandes sans owner et historique sont déjà requêtables proprement depuis OpenClaw.
                   </p>
                 </div>
               </div>
@@ -112,7 +112,7 @@ export function AssistantReadyActionsPanel({
                 <div>
                   <p className="font-medium text-foreground">Mutations encadrées</p>
                   <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                    Les actions safe sont découpées dans une vraie couche serveur typée, avec permissions métier et audit unifiés avant branchement OpenClaw.
+                    Les writes safe `createTask`, `addNote*` et `prepareReplyDraft` passent par une vraie couche serveur typée, avec permissions métier et audit unifiés.
                   </p>
                 </div>
               </div>
