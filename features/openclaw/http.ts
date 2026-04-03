@@ -23,6 +23,13 @@ const openClawExternalReadActionSet = new Set<OpenClawReadActionName>(
 const openClawPlannedSafeActionSet = new Set<OpenClawSafeWriteActionName>(
   openClawSafeWriteActionNames,
 );
+const openClawExternalSafeWriteActionSet = new Set<OpenClawSafeWriteActionName>([
+  "createTask",
+]);
+const openClawExternalActionSet = new Set<OpenClawExposedActionName>([
+  ...openClawReadActionNames,
+  ...openClawExternalSafeWriteActionSet,
+]);
 
 export const openClawHttpReadActions = [...openClawReadActionNames];
 export const openClawHttpPlannedSafeActions = [...openClawSafeWriteActionNames];
@@ -114,7 +121,7 @@ export async function handleOpenClawHttpRequest(request: Request) {
         input: bodyValidation.value.payload,
       },
       {
-        allowedActions: openClawExternalReadActionSet as ReadonlySet<OpenClawExposedActionName>,
+        allowedActions: openClawExternalActionSet,
         auditActorType: "assistant",
         auditSource: "assistant",
         authorizationOverride: {
