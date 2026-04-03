@@ -46,7 +46,7 @@ export async function createTaskAction(
 
   const payload: Record<string, unknown> = {
     priority: mapUiPriorityToDatabasePriority(input.priority),
-    status: "open",
+    status: "todo",
     task_type: input.taskType,
     title: input.title.trim(),
   };
