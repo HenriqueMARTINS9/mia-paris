@@ -16,6 +16,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { EmailFilters } from "@/features/emails/components/email-filters";
 import { EmailPreviewPanel } from "@/features/emails/components/email-preview-panel";
 import { EmailsTable } from "@/features/emails/components/emails-table";
@@ -53,10 +60,18 @@ export function EmailsPage({
   const [searchInput, setSearchInput] = useState(filters.search);
   const [selectedBucket, setSelectedBucket] = useState(filters.selectedBucket);
   const [selectedStatus, setSelectedStatus] = useState(filters.selectedStatus);
-  const [selectedEmailIdState, setSelectedEmailIdState] = useState<string | null>(
-    selectedEmailId ?? emails[0]?.id ?? null,
-  );
-  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
+  const [isDesktopViewport, setIsDesktopViewport] = useState(false);
+  const selectedEmailQueryId = searchParams.get("email");
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 768px)");
+    const handleChange = () => setIsDesktopViewport(mediaQuery.matches);
+
+    handleChange();
+    mediaQuery.addEventListener("change", handleChange);
+
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -96,8 +111,10 @@ export function EmailsPage({
     selectedStatus,
   ]);
 
-  const selectedEmail =
-    emails.find((email) => email.id === selectedEmailIdState) ?? emails[0] ?? null;
+  const selectedEmail = selectedEmailQueryId
+    ? emails.find((email) => email.id === selectedEmailQueryId) ?? null
+    : null;
+  const highlightedEmailId = selectedEmail?.id ?? selectedEmailId ?? null;
   const hasActiveFilters =
     filters.search.trim().length > 0 ||
     filters.selectedBucket !== "important" ||
@@ -113,6 +130,18 @@ export function EmailsPage({
 
     return `${from}-${to} sur ${pagination.totalItems}`;
   }, [emails.length, pagination.page, pagination.perPage, pagination.totalItems]);
+
+  function closeEmailDetail() {
+    navigateWithQuery({
+      pathname,
+      patch: {
+        email: null,
+      },
+      router,
+      searchParams,
+      startTransition: startRoutingTransition,
+    });
+  }
 
   const header = (
     <PageHeader
@@ -235,10 +264,8 @@ export function EmailsPage({
           <CardContent className="space-y-4 p-4">
             <MobileEmailList
               emails={emails}
-              selectedEmailId={selectedEmail?.id ?? null}
+              selectedEmailId={highlightedEmailId}
               onSelectEmail={(emailId) => {
-                setSelectedEmailIdState(emailId);
-                setMobileDetailsOpen(true);
                 navigateWithQuery({
                   pathname,
                   patch: {
@@ -291,8 +318,12 @@ export function EmailsPage({
           documentOptions={documentOptions}
           documentOptionsError={documentOptionsError}
           email={selectedEmail}
-          open={mobileDetailsOpen && Boolean(selectedEmail)}
-          onOpenChange={setMobileDetailsOpen}
+          open={!isDesktopViewport && Boolean(selectedEmail)}
+          onOpenChange={(open) => {
+            if (!open) {
+              closeEmailDetail();
+            }
+          }}
           qualificationOptions={qualificationOptions}
           qualificationOptionsError={qualificationOptionsError}
           requestOptions={requestOptions}
@@ -300,101 +331,117 @@ export function EmailsPage({
         />
       </div>
 
-      <div className="hidden md:grid md:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)] md:items-start md:gap-6">
-        <div className="min-w-0 space-y-4">
-          <Card>
-            <CardHeader className="gap-3 border-b border-black/[0.06] pb-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <Badge variant="outline" className="bg-[#fbf8f2]">
-                    Inbox opérationnelle
-                  </Badge>
-                  <CardTitle className="mt-2">Liste des emails</CardTitle>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline" className="bg-white">
-                    {visibleCountLabel}
-                  </Badge>
-                  <Badge variant="outline" className="bg-white">
-                    {bucketCounts.important} importants
-                  </Badge>
-                  <Badge variant="outline" className="bg-white">
-                    {bucketCounts.toReview} à vérifier
-                  </Badge>
-                  <Badge variant="outline" className="bg-white">
-                    {bucketCounts.promotional} pub
-                  </Badge>
-                </div>
+      <div className="hidden md:block">
+        <Card>
+          <CardHeader className="gap-3 border-b border-black/[0.06] pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <Badge variant="outline" className="bg-[#fbf8f2]">
+                  Inbox opérationnelle
+                </Badge>
+                <CardTitle className="mt-2">Liste des emails</CardTitle>
               </div>
-            </CardHeader>
-            <CardContent className="px-0 pb-0">
-              <EmailsTable
-                emails={emails}
-                selectedEmailId={selectedEmail?.id ?? null}
-                onSelectEmail={(emailId) => {
-                  setSelectedEmailIdState(emailId);
-                  navigateWithQuery({
-                    pathname,
-                    patch: {
-                      email: emailId,
-                    },
-                    router,
-                    searchParams,
-                    startTransition: startRoutingTransition,
-                  });
-                }}
-              />
-            </CardContent>
-            <CardContent className="border-t border-black/[0.06] p-4">
-              <EmailPaginationControls
-                currentPage={pagination.page}
-                disabled={isRoutingPending}
-                onPageChange={(nextPage) =>
-                  navigateWithQuery({
-                    pathname,
-                    patch: {
-                      email: null,
-                      page: String(nextPage),
-                    },
-                    router,
-                    searchParams,
-                    startTransition: startRoutingTransition,
-                  })
-                }
-                onPerPageChange={(nextPerPage) =>
-                  navigateWithQuery({
-                    pathname,
-                    patch: {
-                      email: null,
-                      page: "1",
-                      perPage: String(nextPerPage),
-                    },
-                    router,
-                    searchParams,
-                    startTransition: startRoutingTransition,
-                  })
-                }
-                perPage={pagination.perPage}
-                totalPages={pagination.totalPages}
-                totalSummary={paginationSummary}
-              />
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="min-w-0">
-          <EmailPreviewPanel
-            documentOptions={documentOptions}
-            documentOptionsError={documentOptionsError}
-            email={selectedEmail}
-            mode="desktop"
-            qualificationOptions={qualificationOptions}
-            qualificationOptionsError={qualificationOptionsError}
-            requestOptions={requestOptions}
-            requestOptionsError={requestOptionsError}
-          />
-        </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline" className="bg-white">
+                  {visibleCountLabel}
+                </Badge>
+                <Badge variant="outline" className="bg-white">
+                  {bucketCounts.important} importants
+                </Badge>
+                <Badge variant="outline" className="bg-white">
+                  {bucketCounts.toReview} à vérifier
+                </Badge>
+                <Badge variant="outline" className="bg-white">
+                  {bucketCounts.promotional} pub
+                </Badge>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="px-0 pb-0">
+            <EmailsTable
+              emails={emails}
+              selectedEmailId={highlightedEmailId}
+              onSelectEmail={(emailId) => {
+                navigateWithQuery({
+                  pathname,
+                  patch: {
+                    email: emailId,
+                  },
+                  router,
+                  searchParams,
+                  startTransition: startRoutingTransition,
+                });
+              }}
+            />
+          </CardContent>
+          <CardContent className="border-t border-black/[0.06] p-4">
+            <EmailPaginationControls
+              currentPage={pagination.page}
+              disabled={isRoutingPending}
+              onPageChange={(nextPage) =>
+                navigateWithQuery({
+                  pathname,
+                  patch: {
+                    email: null,
+                    page: String(nextPage),
+                  },
+                  router,
+                  searchParams,
+                  startTransition: startRoutingTransition,
+                })
+              }
+              onPerPageChange={(nextPerPage) =>
+                navigateWithQuery({
+                  pathname,
+                  patch: {
+                    email: null,
+                    page: "1",
+                    perPage: String(nextPerPage),
+                  },
+                  router,
+                  searchParams,
+                  startTransition: startRoutingTransition,
+                })
+              }
+              perPage={pagination.perPage}
+              totalPages={pagination.totalPages}
+              totalSummary={paginationSummary}
+            />
+          </CardContent>
+        </Card>
       </div>
+
+      <Sheet
+        open={isDesktopViewport && Boolean(selectedEmail)}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeEmailDetail();
+          }
+        }}
+      >
+        <SheetContent className="hidden w-full max-w-none border-l-0 p-0 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:translate-x-full data-[state=open]:translate-x-0 md:flex md:max-w-[46rem] md:border-l">
+          <div className="flex h-full min-h-0 flex-col">
+            <SheetHeader className="border-b border-black/[0.06] px-6 py-5">
+              <SheetTitle>Email métier</SheetTitle>
+              <SheetDescription>
+                Aperçu complet, qualification, rattachement CRM et pièces jointes sans réduire la largeur de la liste.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+              <EmailPreviewPanel
+                documentOptions={documentOptions}
+                documentOptionsError={documentOptionsError}
+                email={selectedEmail}
+                mode="sheet"
+                qualificationOptions={qualificationOptions}
+                qualificationOptionsError={qualificationOptionsError}
+                requestOptions={requestOptions}
+                requestOptionsError={requestOptionsError}
+              />
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
