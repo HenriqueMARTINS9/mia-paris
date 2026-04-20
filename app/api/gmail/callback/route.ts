@@ -4,7 +4,6 @@ import {
   getCurrentUserContext,
   normalizeRedirectPath,
 } from "@/features/auth/queries";
-import { isExplicitAdminRole } from "@/features/auth/authorization";
 import { getGmailProfile } from "@/lib/google/gmail";
 import { exchangeGoogleCodeForTokens } from "@/lib/google/oauth";
 import {
@@ -46,11 +45,6 @@ export async function GET(request: NextRequest) {
     !isMatchingOAuthUser(oauthState, currentUser)
   ) {
     redirectUrl.searchParams.set("gmail", "oauth_state_error");
-    return redirectWithCleanup(redirectUrl);
-  }
-
-  if (!isExplicitAdminRole(currentUser.appUser?.role ?? null)) {
-    redirectUrl.searchParams.set("gmail", "forbidden");
     return redirectWithCleanup(redirectUrl);
   }
 

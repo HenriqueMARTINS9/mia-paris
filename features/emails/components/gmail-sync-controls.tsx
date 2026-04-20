@@ -18,8 +18,8 @@ export function GmailSyncControls({
 }: Readonly<{ gmailInbox: GmailInboxStatus }>) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const { can, isAdminExplicit } = useAuthorization();
-  const canManageSharedGmailInbox = isAdminExplicit;
+  const { can } = useAuthorization();
+  const canManageSharedGmailInbox = true;
   const canRunSync = can("emails.sync") && gmailInbox.connected;
 
   function handleSync() {
