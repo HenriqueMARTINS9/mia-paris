@@ -48,11 +48,7 @@ export async function exchangeGoogleCodeForTokens(input: {
   };
 
   if (!response.ok || !payload.access_token) {
-    throw new Error(
-      payload.error_description ??
-        payload.error ??
-        "Échange OAuth Google impossible.",
-    );
+    throw new Error(formatGoogleOAuthError(payload, "Échange OAuth Google impossible."));
   }
 
   return payload;
@@ -80,12 +76,25 @@ export async function refreshGoogleAccessToken(input: { refreshToken: string }) 
   };
 
   if (!response.ok || !payload.access_token) {
-    throw new Error(
-      payload.error_description ??
-        payload.error ??
-        "Refresh token Google impossible.",
-    );
+    throw new Error(formatGoogleOAuthError(payload, "Refresh token Google impossible."));
   }
 
   return payload;
+}
+
+function formatGoogleOAuthError(
+  payload: {
+    error?: string;
+    error_description?: string;
+  },
+  fallbackMessage: string,
+) {
+  const errorCode = payload.error?.trim();
+  const errorDescription = payload.error_description?.trim();
+
+  if (errorCode && errorDescription) {
+    return `${errorCode}: ${errorDescription}`;
+  }
+
+  return errorCode || errorDescription || fallbackMessage;
 }
