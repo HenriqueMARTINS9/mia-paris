@@ -638,11 +638,20 @@ function buildSyncQuery(input: {
   );
 
   if (referenceEpoch > 0) {
-    const afterEpoch = Math.max(0, Math.floor((referenceEpoch - 3_600_000) / 1000));
-    queryParts.push(`after:${afterEpoch}`);
+    const afterDate = formatGmailQueryDate(referenceEpoch - 86_400_000);
+    queryParts.push(`after:${afterDate}`);
   }
 
   return queryParts.join(" ").trim() || null;
+}
+
+function formatGmailQueryDate(epochMs: number) {
+  const date = new Date(Math.max(0, epochMs));
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+
+  return `${year}/${month}/${day}`;
 }
 
 function buildInitialThreadRows(
