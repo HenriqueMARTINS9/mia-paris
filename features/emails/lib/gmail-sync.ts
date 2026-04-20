@@ -320,12 +320,12 @@ async function syncInbox(input: {
     syncCursor: input.inbox.sync_cursor ?? null,
   });
   const syncTimestamp = new Date().toISOString();
-  const listResult = await listGmailMessages({
+  const listState = await listGmailMessagesWithFallback({
     accessToken,
     maxResults,
     query: syncState.query,
   });
-  const messageRefs = listResult.messages ?? [];
+  const messageRefs = listState.payload.messages ?? [];
 
   if (messageRefs.length === 0) {
     await admin
@@ -347,7 +347,7 @@ async function syncInbox(input: {
       importedThreads: 0,
       message: "Aucun nouvel email Gmail à importer.",
       ok: true,
-      queryUsed: syncState.query,
+      queryUsed: listState.queryUsed,
       syncMode: syncState.mode,
       syncedAt: syncTimestamp,
     };
@@ -545,12 +545,46 @@ async function syncInbox(input: {
     ignoredMessages,
     importedMessages,
     importedThreads,
-    message: `Synchronisation Gmail terminée: ${importedThreads} thread(s), ${importedMessages} email(s) importé(s), ${ignoredMessages} déjà présent(s).`,
+    message: listState.usedFallback
+      ? `Synchronisation Gmail terminée avec repli sur les derniers emails: ${importedThreads} thread(s), ${importedMessages} email(s) importé(s), ${ignoredMessages} déjà présent(s).`
+      : `Synchronisation Gmail terminée: ${importedThreads} thread(s), ${importedMessages} email(s) importé(s), ${ignoredMessages} déjà présent(s).`,
     ok: true,
-    queryUsed: syncState.query,
+    queryUsed: listState.queryUsed,
     syncMode: syncState.mode,
     syncedAt: syncTimestamp,
   };
+}
+
+async function listGmailMessagesWithFallback(input: {
+  accessToken: string;
+  maxResults: number;
+  query: string | null;
+}) {
+  try {
+    const payload = await listGmailMessages(input);
+
+    return {
+      payload,
+      queryUsed: input.query,
+      usedFallback: false,
+    };
+  } catch (error) {
+    if (!input.query || !shouldRetryGmailListWithoutQuery(error)) {
+      throw error;
+    }
+
+    const payload = await listGmailMessages({
+      accessToken: input.accessToken,
+      maxResults: input.maxResults,
+      query: null,
+    });
+
+    return {
+      payload,
+      queryUsed: null,
+      usedFallback: true,
+    };
+  }
 }
 
 async function ensureActiveAccessToken(inbox: InboxRecord) {
@@ -652,6 +686,17 @@ function formatGmailQueryDate(epochMs: number) {
   const day = String(date.getUTCDate()).padStart(2, "0");
 
   return `${year}/${month}/${day}`;
+}
+
+function shouldRetryGmailListWithoutQuery(error: unknown) {
+  const message =
+    error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+
+  return (
+    message.includes("bad request") ||
+    message.includes("metadata scope") ||
+    message.includes("invalid argument")
+  );
 }
 
 function buildInitialThreadRows(
