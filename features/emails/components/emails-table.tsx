@@ -129,16 +129,14 @@ export function EmailsTable({
       </div>
 
       <div className="hidden md:block">
-        <Table>
+        <Table className="table-fixed">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="min-w-[220px]">Expéditeur</TableHead>
-              <TableHead className="min-w-[220px]">Objet</TableHead>
-              <TableHead className="min-w-[165px]">Date</TableHead>
-              <TableHead className="min-w-[145px]">Statut</TableHead>
-              <TableHead className="min-w-[160px]">Client</TableHead>
-              <TableHead className="min-w-[170px]">Type</TableHead>
-              <TableHead className="min-w-[130px] text-right">Confiance</TableHead>
+              <TableHead className="w-[24%] min-w-[220px]">Expéditeur</TableHead>
+              <TableHead className="w-[36%] min-w-[280px]">Message</TableHead>
+              <TableHead className="w-[15%] min-w-[150px]">Reçu</TableHead>
+              <TableHead className="w-[15%] min-w-[170px]">Inbox</TableHead>
+              <TableHead className="w-[10%] min-w-[140px]">Client</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -160,7 +158,7 @@ export function EmailsTable({
                       <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/[0.08] text-primary">
                         <MailOpen className="h-4 w-4" />
                       </div>
-                      <div className="min-w-0">
+                      <div className="min-w-0 overflow-hidden">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="truncate font-semibold tracking-tight">{email.fromName}</p>
                           {email.isUnread ? <Badge>Non lu</Badge> : null}
@@ -175,11 +173,18 @@ export function EmailsTable({
                     <p className="line-clamp-1 break-words font-semibold">
                       {email.subject}
                     </p>
-                    <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
-                      {email.previewText}
+                    <p className="mt-1 line-clamp-1 break-words text-sm text-muted-foreground">
+                      {getEmailSnippet(email)}
                     </p>
                     <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                      <span className="truncate">{email.threadLabel}</span>
+                      {email.detectedType ? (
+                        <span className="inline-flex items-center gap-1 truncate">
+                          <Sparkles className="h-3.5 w-3.5 text-primary" />
+                          {email.detectedType}
+                        </span>
+                      ) : (
+                        <span className="truncate">{email.threadLabel}</span>
+                      )}
                       {email.linkedRequestId ? (
                         <Link
                           href={`/requests/${email.linkedRequestId}`}
@@ -196,34 +201,23 @@ export function EmailsTable({
                     <p className="font-semibold">{formatDateTime(email.receivedAt)}</p>
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <EmailInboxBucketBadge bucket={email.triage.bucket} />
                       <ProcessingStatusBadge status={email.status} />
+                      {email.confidence !== null ? (
+                        <span className="text-xs font-semibold text-muted-foreground">
+                          {Math.round(email.confidence * 100)}%
+                        </span>
+                      ) : null}
                     </div>
                   </TableCell>
                   <TableCell>
                     <p className="truncate font-semibold">{email.clientName}</p>
-                  </TableCell>
-                  <TableCell>
-                    <div className="inline-flex items-center gap-2">
-                      {email.detectedType ? (
-                        <>
-                          <Sparkles className="h-4 w-4 text-primary" />
-                          <span className="truncate font-semibold">{email.detectedType}</span>
-                        </>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">Non détecté</span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {email.confidence !== null ? (
-                      <div className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/70 px-3 py-1.5 text-sm font-semibold">
-                        {Math.round(email.confidence * 100)}%
-                      </div>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">n/a</span>
-                    )}
+                    {email.detectedType ? (
+                      <p className="mt-1 truncate text-xs text-muted-foreground">
+                        {email.detectedType}
+                      </p>
+                    ) : null}
                   </TableCell>
                 </TableRow>
               );
@@ -233,4 +227,16 @@ export function EmailsTable({
       </div>
     </>
   );
+}
+
+function getEmailSnippet(email: EmailListItem) {
+  const rawSnippet = (email.previewText || email.bodyText || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (rawSnippet.length <= 110) {
+    return rawSnippet;
+  }
+
+  return `${rawSnippet.slice(0, 107).trimEnd()}...`;
 }

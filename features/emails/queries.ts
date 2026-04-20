@@ -6,7 +6,7 @@ import { cache } from "react";
 import { getDocumentFormOptions } from "@/features/documents/queries";
 import { getCurrentUserGmailInboxStatus } from "@/features/emails/lib/gmail-sync";
 import {
-  mapUiEmailStatusToDatabaseValues,
+  mapRawEmailStatusToUiStatus,
 } from "@/features/emails/metadata";
 import {
   getEmailRelatedIds,
@@ -214,9 +214,13 @@ const getPaginatedEmailsPageDataInternal = async (
       rowsResult.rows,
       ancillaries.qualificationOptions,
     );
-    const bucketCounts = countEmailBuckets(allMatchingEmails);
-    const bucketFilteredEmails = filterEmailsByBucket(
+    const statusFilteredEmails = filterEmailsByStatus(
       allMatchingEmails,
+      input.selectedStatus,
+    );
+    const bucketCounts = countEmailBuckets(statusFilteredEmails);
+    const bucketFilteredEmails = filterEmailsByBucket(
+      statusFilteredEmails,
       input.selectedBucket,
     );
     const totalItems = bucketFilteredEmails.length;
@@ -531,7 +535,6 @@ async function getFilteredEmailRows(
 ) {
   let query = supabase.from("emails").select("*");
   query = applyEmailSearchFilter(query, input.search);
-  query = applyEmailStatusFilter(query, input.selectedStatus);
   query = applyEmailOrdering(query);
 
   const { data, error } = await query;
@@ -559,39 +562,46 @@ async function getLatestEmailRows(
 async function getEmailStatusCounts(
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
 ): Promise<EmailStatusCounts> {
-  const [total, newCount, reviewCount, processedCount, qualifiedCount] =
-    await Promise.all([
-      countEmails(supabase),
-      countEmails(supabase, "new"),
-      countEmails(supabase, "review"),
-      countEmails(supabase, "processed"),
-      countQualifiedEmails(supabase),
-    ]);
+  const [statusRowsResult, qualifiedCount] = await Promise.all([
+    supabase.from("emails").select("id,processing_status,status,triage_status"),
+    countQualifiedEmails(supabase),
+  ]);
+
+  const rows = (statusRowsResult.data ?? []) as EmailRecord[];
+  const counts = rows.reduce(
+    (accumulator, row) => {
+      const status = mapRawEmailStatusToUiStatus(
+        readString(row, ["processing_status", "status", "triage_status"]) ?? null,
+      );
+
+      accumulator.total += 1;
+
+      if (status === "new") {
+        accumulator.new += 1;
+      } else if (status === "review") {
+        accumulator.review += 1;
+      } else {
+        accumulator.processed += 1;
+      }
+
+      return accumulator;
+    },
+    {
+      new: 0,
+      processed: 0,
+      review: 0,
+      total: 0,
+    },
+  );
 
   return {
-    new: newCount,
-    open: newCount + reviewCount,
-    processed: processedCount,
+    new: counts.new,
+    open: counts.new + counts.review,
+    processed: counts.processed,
     qualified: qualifiedCount,
-    review: reviewCount,
-    total,
+    review: counts.review,
+    total: counts.total,
   };
-}
-
-async function countEmails(
-  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
-  status?: EmailProcessingStatus,
-) {
-  let query = supabase.from("emails").select("id", { count: "exact", head: true });
-  query = applyEmailStatusFilter(query, status ?? "all");
-
-  const { count, error } = await query;
-
-  if (error) {
-    return 0;
-  }
-
-  return count ?? 0;
 }
 
 async function countQualifiedEmails(
@@ -640,10 +650,6 @@ interface EmailSearchableQuery {
   or: (filters: string) => unknown;
 }
 
-interface EmailFilterableQuery {
-  in: (column: string, values: string[]) => unknown;
-}
-
 function applyEmailOrdering<T>(query: T): T {
   const orderableQuery = query as unknown as EmailOrderableQuery;
 
@@ -670,15 +676,15 @@ function applyEmailSearchFilter<T>(query: T, search: string): T {
   return (query as unknown as EmailSearchableQuery).or(searchExpression) as T;
 }
 
-function applyEmailStatusFilter<T>(query: T, status: EmailStatusFilter): T {
+function filterEmailsByStatus(
+  emails: EmailsPageData["emails"],
+  status: EmailStatusFilter,
+) {
   if (status === "all") {
-    return query;
+    return emails;
   }
 
-  return (query as unknown as EmailFilterableQuery).in(
-    "processing_status",
-    mapUiEmailStatusToDatabaseValues(status),
-  ) as T;
+  return emails.filter((email) => email.status === status);
 }
 
 function sanitizeEmailSearch(value: string) {
