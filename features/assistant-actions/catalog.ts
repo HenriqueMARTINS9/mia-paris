@@ -101,6 +101,17 @@ export const assistantActionCatalog: AssistantActionDefinition[] = [
     safeForOpenClaw: true,
   },
   {
+    command: "runEmailOpsCycle",
+    description: "Synchronise Gmail puis trie et enrichit les emails CRM un par un.",
+    example: "Lance le cycle assistant emails du matin",
+    exposure: "safe",
+    key: "email-ops-cycle",
+    kind: "write",
+    label: "Traiter l’inbox email",
+    permission: "assistant.write.safe",
+    safeForOpenClaw: true,
+  },
+  {
     command: "setEmailInboxBucket",
     description: "Classe un email dans Important, Pub ou À vérifier.",
     example: "Classe ce mail en important",

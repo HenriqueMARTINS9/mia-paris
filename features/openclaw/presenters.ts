@@ -1,6 +1,10 @@
 import "server-only";
 
-import type { AssistantHistorySearchResult } from "@/features/assistant-actions/types";
+import type {
+  AssistantHistorySearchResult,
+  AssistantPrepareReplyDraftResult,
+  AssistantRunEmailOpsCycleResult,
+} from "@/features/assistant-actions/types";
 import type { DeadlineListItem } from "@/features/deadlines/types";
 import type { EmailListItem } from "@/features/emails/types";
 import type { ProductionListItem } from "@/features/productions/types";
@@ -11,7 +15,6 @@ import type {
 } from "@/features/openclaw/integration";
 import type { OpenClawResponseMode } from "@/features/openclaw/types";
 import { replyTypeMeta } from "@/features/replies/lib/build-reply-draft";
-import type { AssistantPrepareReplyDraftResult } from "@/features/assistant-actions/types";
 
 const DEFAULT_COMPACT_LIMIT = 5;
 
@@ -41,6 +44,8 @@ export function presentOpenClawData(input: {
       return presentHistorySearch(input.data);
     case "prepareReplyDraft":
       return presentReplyDraft(input.data);
+    case "runEmailOpsCycle":
+      return presentEmailOpsCycle(input.data);
     case "runGmailSync":
     case "createTask":
     case "addNoteToRequest":
@@ -204,6 +209,46 @@ function presentReplyDraft(data: unknown) {
   };
 }
 
+function presentEmailOpsCycle(data: unknown) {
+  const result = isEmailOpsCycleResult(data) ? data : null;
+  const items =
+    result?.items.slice(0, DEFAULT_COMPACT_LIMIT).map((item) => ({
+      bucket: item.bucket,
+      client: item.clientName,
+      dueAt: item.dueAt,
+      from: item.from,
+      priority: item.priority,
+      recommendedAction: item.recommendedAction,
+      requestType: item.requestType,
+      status: item.status,
+      subject: item.subject,
+    })) ?? [];
+
+  return {
+    cycle: {
+      crmEnrichedCount: result?.crmEnrichedCount ?? 0,
+      errorCount: result?.errorCount ?? 0,
+      importantCount: result?.importantCount ?? 0,
+      processedCount: result?.processedCount ?? 0,
+      promotionalCount: result?.promotionalCount ?? 0,
+      syncImportedMessages: result?.sync.importedMessages ?? 0,
+      syncOk: result?.sync.ok ?? false,
+      toReviewCount: result?.toReviewCount ?? 0,
+    },
+    format: "compact" as const,
+    items,
+    recommendedAction:
+      result && result.toReviewCount > 0
+        ? "Ouvrir ensuite l’onglet À vérifier pour arbitrer les emails incertains."
+        : "Traiter ensuite les emails classés Important dans le CRM.",
+    summary:
+      result?.sync.ok === false
+        ? "Cycle assistant exécuté, mais la sync Gmail doit être vérifiée."
+        : "Cycle assistant emails terminé.",
+    truncated: (result?.items.length ?? 0) > items.length,
+  };
+}
+
 function presentSafeWriteResult(input: {
   action: OpenClawSafeWriteActionName;
   data: unknown;
@@ -246,6 +291,38 @@ function presentSafeWriteResult(input: {
         queryUsed: readString(syncResult, "queryUsed"),
         syncMode: readString(syncResult, "syncMode"),
       },
+    };
+  }
+
+  if (input.action === "runEmailOpsCycle") {
+    const emailOpsResult = isRecord(input.data) ? input.data : {};
+    const syncResult =
+      isRecord(emailOpsResult.sync) ? emailOpsResult.sync : null;
+    const toReviewCount = readNumber(emailOpsResult, "toReviewCount") ?? 0;
+
+    return {
+      cycle: {
+        crmEnrichedCount: readNumber(emailOpsResult, "crmEnrichedCount"),
+        errorCount: readNumber(emailOpsResult, "errorCount"),
+        importantCount: readNumber(emailOpsResult, "importantCount"),
+        processedCount: readNumber(emailOpsResult, "processedCount"),
+        promotionalCount: readNumber(emailOpsResult, "promotionalCount"),
+        toReviewCount,
+      },
+      format: "compact" as const,
+      recommendedAction:
+        toReviewCount > 0
+          ? "Vérifier ensuite l’onglet À vérifier dans le CRM."
+          : "Ouvrir ensuite l’inbox CRM pour traiter les emails importants.",
+      summary: resultMessage,
+      sync: syncResult
+        ? {
+            importedMessages: readNumber(syncResult, "importedMessages"),
+            message: readString(syncResult, "message"),
+            ok: readBoolean(syncResult, "ok"),
+            queryUsed: readString(syncResult, "queryUsed"),
+          }
+        : null,
     };
   }
 
@@ -323,6 +400,10 @@ function isReplyDraftResult(value: unknown): value is AssistantPrepareReplyDraft
   return isRecord(value) && "draft" in value;
 }
 
+function isEmailOpsCycleResult(value: unknown): value is AssistantRunEmailOpsCycleResult {
+  return isRecord(value) && Array.isArray(value.items) && isRecord(value.sync);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -337,4 +418,10 @@ function readNumber(record: Record<string, unknown>, key: string) {
   const value = record[key];
 
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readBoolean(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+
+  return typeof value === "boolean" ? value : null;
 }

@@ -27,6 +27,7 @@ Fichiers recommandés à charger dans MyClaw pour donner au bridge OpenClaw le b
 - `features/emails/types.ts`
 - `features/emails/actions/update-email.ts`
 - `features/emails/actions/sync-gmail.ts`
+- `features/emails/lib/assistant-email-ops.ts`
 - `features/emails/lib/gmail-sync.ts`
 - `features/emails/lib/inbox-triage.ts`
 - `features/emails/queries.ts`
@@ -62,3 +63,22 @@ Avec ça, le bot a déjà:
 - les garde-fous
 - le comportement Gmail
 - la logique de tri inbox
+
+## Routine recommandée MyClaw
+
+Pour la gestion quotidienne des emails, préférer `runEmailOpsCycle` plutôt que `runGmailSync` seul.
+
+Routine simple conseillée:
+
+1. `08:30` -> `runEmailOpsCycle` avec `{ "limit": 15, "syncLimit": 50 }`
+2. `13:00` -> `runEmailOpsCycle` avec `{ "limit": 15, "syncLimit": 50 }`
+3. `17:30` -> `runEmailOpsCycle` avec `{ "limit": 15, "syncLimit": 50 }`
+
+Comportement attendu:
+
+- sync Gmail
+- lecture email par email
+- classement `important / promotional / to_review`
+- enrichissement des données CRM détectables
+- priorité aux emails `important`
+- relecture humaine des emails `to_review`

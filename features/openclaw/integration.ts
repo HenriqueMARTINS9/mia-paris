@@ -11,6 +11,7 @@ import {
   getTodayUrgencies,
   getUnprocessedEmails,
   prepareReplyDraft,
+  runEmailOpsCycle,
   runGmailSync,
   setEmailInboxBucket,
   searchClientHistory,
@@ -24,6 +25,7 @@ import type {
   AssistantAddRequestNoteInput,
   AssistantCreateTaskInput,
   AssistantPrepareReplyDraftInput,
+  AssistantRunEmailOpsCycleInput,
   AssistantRunGmailSyncInput,
   AssistantSetEmailInboxBucketInput,
 } from "@/features/assistant-actions/types";
@@ -51,6 +53,7 @@ export type OpenClawSafeWriteActionName =
   | "addNoteToRequest"
   | "createTask"
   | "prepareReplyDraft"
+  | "runEmailOpsCycle"
   | "runGmailSync"
   | "setEmailInboxBucket";
 
@@ -104,6 +107,7 @@ export const openClawReadActionNames: OpenClawReadActionName[] = [
 
 export const openClawSafeWriteActionNames: OpenClawSafeWriteActionName[] = [
   "prepareReplyDraft",
+  "runEmailOpsCycle",
   "runGmailSync",
   "setEmailInboxBucket",
   "createTask",
@@ -174,6 +178,10 @@ const openClawActionSamples: Record<
       summary: "Le client demande une révision rapide du target price.",
     },
     replyType: "acknowledgement",
+  },
+  runEmailOpsCycle: {
+    limit: 15,
+    syncLimit: 50,
   },
   runGmailSync: {
     limit: 50,
@@ -368,6 +376,18 @@ async function dispatchOpenClawAction(
       const parsed = parsePrepareReplyDraftInput(input);
       return parsed.ok
         ? prepareReplyDraft({
+            ...parsed.value,
+            source: "assistant",
+          }, {
+            authorizationOverride: options?.authorizationOverride,
+            mutationContext: options?.mutationContext ?? null,
+          })
+        : parsed.result;
+    }
+    case "runEmailOpsCycle": {
+      const parsed = parseRunEmailOpsCycleInput(input);
+      return parsed.ok
+        ? runEmailOpsCycle({
             ...parsed.value,
             source: "assistant",
           }, {
@@ -624,6 +644,55 @@ function parseRunGmailSyncInput(input: unknown) {
   };
 }
 
+function parseRunEmailOpsCycleInput(input: unknown) {
+  if (input === undefined || input === null) {
+    return {
+      ok: true as const,
+      value: {
+        limit: null,
+        syncLimit: null,
+      } satisfies AssistantRunEmailOpsCycleInput,
+    };
+  }
+
+  if (!isRecord(input)) {
+    return invalidPayloadResult("Payload invalide pour runEmailOpsCycle.");
+  }
+
+  if (
+    "limit" in input &&
+    (typeof input.limit !== "number" ||
+      !Number.isFinite(input.limit) ||
+      input.limit < 1 ||
+      input.limit > 40)
+  ) {
+    return invalidPayloadResult(
+      "limit invalide pour runEmailOpsCycle. Utilise un nombre entre 1 et 40.",
+    );
+  }
+
+  if (
+    "syncLimit" in input &&
+    (typeof input.syncLimit !== "number" ||
+      !Number.isFinite(input.syncLimit) ||
+      input.syncLimit < 1 ||
+      input.syncLimit > 100)
+  ) {
+    return invalidPayloadResult(
+      "syncLimit invalide pour runEmailOpsCycle. Utilise un nombre entre 1 et 100.",
+    );
+  }
+
+  return {
+    ok: true as const,
+    value: {
+      limit: typeof input.limit === "number" ? Math.floor(input.limit) : null,
+      syncLimit:
+        typeof input.syncLimit === "number" ? Math.floor(input.syncLimit) : null,
+    } satisfies AssistantRunEmailOpsCycleInput,
+  };
+}
+
 function parseSetEmailInboxBucketInput(input: unknown) {
   if (!isRecord(input) || typeof input.emailId !== "string" || typeof input.bucket !== "string") {
     return invalidPayloadResult(
@@ -704,8 +773,10 @@ function sanitizeAuditInput(action: OpenClawExposedActionName, input: unknown) {
           }
         : null;
     case "runGmailSync":
+    case "runEmailOpsCycle":
       return {
         limit: typeof input.limit === "number" ? input.limit : null,
+        syncLimit: typeof input.syncLimit === "number" ? input.syncLimit : null,
       };
     case "setEmailInboxBucket":
       return {
@@ -762,6 +833,7 @@ function getAuditEntityType(action: OpenClawExposedActionName) {
     case "prepareReplyDraft":
       return "reply_draft";
     case "runGmailSync":
+    case "runEmailOpsCycle":
       return "gmail_sync";
     case "setEmailInboxBucket":
       return "email";
@@ -793,6 +865,10 @@ function getAuditRequestId(action: OpenClawExposedActionName, input: unknown) {
   }
 
   if (action === "runGmailSync") {
+    return null;
+  }
+
+  if (action === "runEmailOpsCycle") {
     return null;
   }
 

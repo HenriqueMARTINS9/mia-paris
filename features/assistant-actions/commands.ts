@@ -1,5 +1,7 @@
 import "server-only";
 
+import { revalidatePath } from "next/cache";
+
 import type { AssistantMutationExecutionContext } from "@/features/assistant-actions/execution-context";
 import {
   authorizeServerPermissions,
@@ -23,6 +25,7 @@ import type {
   AssistantPrepareReplyDraftResult,
   AssistantProductionList,
   AssistantRequestBacklogList,
+  AssistantRunEmailOpsCycleInput,
   AssistantRunGmailSyncInput,
   AssistantSetEmailInboxBucketInput,
   AssistantUnprocessedEmailList,
@@ -37,6 +40,7 @@ import {
   validateRequiredText,
 } from "@/features/assistant-actions/validators";
 import { getDeadlinesPageData } from "@/features/deadlines/queries";
+import { runAssistantEmailOpsCycle } from "@/features/emails/lib/assistant-email-ops";
 import { syncLatestGmailMessagesForActor } from "@/features/emails/lib/gmail-sync";
 import { setEmailInboxBucketAction } from "@/features/emails/actions/update-email";
 import { getEmailsPageData } from "@/features/emails/queries";
@@ -233,6 +237,65 @@ export async function runGmailSync(
   }
 
   return createAssistantActionSuccess(result, result.message);
+}
+
+export async function runEmailOpsCycle(
+  input: AssistantRunEmailOpsCycleInput,
+  options?: AssistantCommandExecutionOptions,
+) {
+  const authorization = await authorizeServerPermissions(
+    ["assistant.write.safe", "emails.sync", "emails.qualify"],
+    options?.authorizationOverride,
+  );
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const cycle = await runAssistantEmailOpsCycle({
+    actor: options?.mutationContext?.actor ?? null,
+    limit: input.limit ?? null,
+    rest: options?.mutationContext?.rest ?? null,
+    syncLimit: input.syncLimit ?? null,
+  });
+
+  await recordAuditEvent({
+    action: "assistant_run_email_ops_cycle",
+    actorId: authorization.actorId,
+    actorType: authorization.actorType,
+    description: cycle.message,
+    entityId: cycle.result.sync.connectedInboxEmail,
+    entityType: "email_ops",
+    payload: {
+      crmEnrichedCount: cycle.result.crmEnrichedCount,
+      errorCount: cycle.result.errorCount,
+      importantCount: cycle.result.importantCount,
+      limit: input.limit ?? null,
+      preview: cycle.result.items.slice(0, 5),
+      processedCount: cycle.result.processedCount,
+      promotionalCount: cycle.result.promotionalCount,
+      skippedCount: cycle.result.skippedCount,
+      source: normalizeAssistantSource(input.source),
+      syncLimit: input.syncLimit ?? null,
+      syncMessage: cycle.result.sync.message,
+      toReviewCount: cycle.result.toReviewCount,
+    },
+    requestId: null,
+    scope: "assistant_actions.run_email_ops_cycle",
+    source: normalizeAssistantSource(input.source),
+    status: cycle.ok ? "success" : "failure",
+  });
+
+  if (!cycle.ok) {
+    return createAssistantActionFailure("error", cycle.message);
+  }
+
+  revalidatePath("/emails");
+  revalidatePath("/dashboard");
+  revalidatePath("/aujourdhui");
+  revalidatePath("/", "layout");
+
+  return createAssistantActionSuccess(cycle.result, cycle.message);
 }
 
 export async function getRequestsWithoutAssignee(

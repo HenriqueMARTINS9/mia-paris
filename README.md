@@ -316,6 +316,7 @@ Actions READ exposees:
 
 Actions SAFE WRITE exposees:
 - `prepareReplyDraft`
+- `runEmailOpsCycle`
 - `runGmailSync`
 - `setEmailInboxBucket`
 - `createTask`
@@ -352,6 +353,7 @@ Livre:
 - activity logs enrichis
 
 Trace notamment:
+- `runEmailOpsCycle`
 - `createTask`
 - `createDeadline`
 - `updateProduction`

@@ -184,6 +184,84 @@ Payload valide:
 
 Les actions ci-dessous sont ouvertes sur la route HTTP externe, mais doivent être utilisées avec intention explicite. Le bridge ne doit jamais inventer des enums ou fallbacker en “note mémoire” si une vraie action CRM safe existe et a été demandée.
 
+### `runEmailOpsCycle`
+
+But métier:
+
+- synchroniser Gmail
+- lire les emails un par un
+- classer chaque email en `important`, `promotional` ou `to_review`
+- remplir les données CRM détectables sur l’email
+
+Champs optionnels:
+
+- `limit`
+- `syncLimit`
+
+Valeurs valides:
+
+- `limit`: entier entre `1` et `40`
+- `syncLimit`: entier entre `1` et `100`
+
+Payload valide:
+
+```json
+{
+  "limit": 15,
+  "syncLimit": 50
+}
+```
+
+Réponse compacte:
+
+```json
+{
+  "cycle": {
+    "crmEnrichedCount": 8,
+    "errorCount": 0,
+    "importantCount": 6,
+    "processedCount": 10,
+    "promotionalCount": 2,
+    "syncImportedMessages": 4,
+    "syncOk": true,
+    "toReviewCount": 2
+  },
+  "format": "compact",
+  "items": [
+    {
+      "bucket": "important",
+      "client": "Etam",
+      "dueAt": "2026-04-20",
+      "from": "Camille",
+      "priority": "high",
+      "recommendedAction": "Qualifier puis créer ou rattacher une demande dans le CRM.",
+      "requestType": "price_request",
+      "status": "classified",
+      "subject": "Need updated target price"
+    }
+  ],
+  "recommendedAction": "Traiter ensuite les emails classés Important dans le CRM.",
+  "summary": "Cycle assistant emails terminé.",
+  "truncated": true
+}
+```
+
+Règles métier:
+
+- `important`: email métier prioritaire à traiter
+- `promotional`: pub, newsletter, bruit marketing
+- `to_review`: cas ambigu à vérifier humainement
+- les emails déjà qualifiés proprement sont ignorés au run suivant
+- les emails incertains passent en statut `review` côté CRM quand le schéma le permet
+
+Routine recommandée MyClaw:
+
+- lancer `runEmailOpsCycle` 3 fois par jour
+- suggestion simple:
+  - `08:30`
+  - `13:00`
+  - `17:30`
+
 ### `runGmailSync`
 
 Champs optionnels:
@@ -434,6 +512,7 @@ Réponse attendue:
 - Résumer les réponses pour WhatsApp.
 - Utiliser `responseMode: "detailed"` uniquement si le contexte le demande vraiment.
 - Ne jamais inventer une valeur enum.
+- Pour la gestion email quotidienne, préférer `runEmailOpsCycle` à un simple `runGmailSync`.
 - Ne jamais remplacer une vraie action CRM safe par une simple note mémoire si l’utilisateur demande explicitement la mutation.
 - Utiliser les actions READ sans confirmation.
 - Utiliser les SAFE WRITE uniquement après intention claire.

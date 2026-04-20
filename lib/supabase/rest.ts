@@ -151,6 +151,26 @@ export function isMissingSupabaseColumnError(
   return error.code === "42703" || message.includes("column");
 }
 
+export function extractMissingSupabaseColumnName(
+  error: SupabaseRestErrorPayload | null,
+) {
+  if (!error) {
+    return null;
+  }
+
+  const haystack = [
+    error.message,
+    error.details,
+    error.error,
+    error.hint,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const match = haystack.match(/column ["']?([a-zA-Z0-9_]+)["']?/i);
+
+  return match?.[1] ?? null;
+}
+
 async function executeSupabaseRestRequest<T>({
   body,
   context,

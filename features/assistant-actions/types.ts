@@ -39,6 +39,7 @@ export type AssistantActionName =
   | "getTodayUrgencies"
   | "getUnprocessedEmails"
   | "prepareReplyDraft"
+  | "runEmailOpsCycle"
   | "runGmailSync"
   | "setEmailInboxBucket"
   | "searchClientHistory"
@@ -113,6 +114,12 @@ export interface AssistantRunGmailSyncInput {
   source?: AssistantActionSource;
 }
 
+export interface AssistantRunEmailOpsCycleInput {
+  limit?: number | null;
+  source?: AssistantActionSource;
+  syncLimit?: number | null;
+}
+
 export interface AssistantSetEmailInboxBucketInput {
   bucket: EmailInboxBucket;
   confidence?: number | null;
@@ -125,6 +132,32 @@ export interface AssistantPrepareReplyDraftResult {
   draft: ReplyDraft | null;
   message: string;
   ok: boolean;
+}
+
+export interface AssistantEmailOpsCycleItem {
+  bucket: EmailInboxBucket | null;
+  clientName: string | null;
+  dueAt: string | null;
+  emailId: string;
+  from: string;
+  priority: RequestPriority | null;
+  reason: string | null;
+  recommendedAction: string | null;
+  requestType: string | null;
+  status: "classified" | "error" | "skipped";
+  subject: string;
+}
+
+export interface AssistantRunEmailOpsCycleResult {
+  crmEnrichedCount: number;
+  errorCount: number;
+  importantCount: number;
+  items: AssistantEmailOpsCycleItem[];
+  processedCount: number;
+  promotionalCount: number;
+  skippedCount: number;
+  sync: GmailSyncResult;
+  toReviewCount: number;
 }
 
 export interface AssistantWorkspacePreviewCard {
@@ -151,3 +184,4 @@ export type AssistantCreateDeadlineResult = RequestMutationResult;
 export type AssistantAddNoteToRequestResult = RequestMutationResult;
 export type AssistantAddNoteToProductionResult = ProductionMutationResult;
 export type AssistantRunGmailSyncResult = GmailSyncResult;
+export type AssistantRunEmailOpsCycleData = AssistantRunEmailOpsCycleResult;
