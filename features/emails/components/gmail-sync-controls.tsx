@@ -19,6 +19,8 @@ export function GmailSyncControls({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const { can, isAdminExplicit } = useAuthorization();
+  const canManageSharedGmailInbox = isAdminExplicit;
+  const canRunSync = can("emails.sync") && gmailInbox.connected;
 
   function handleSync() {
     startTransition(async () => {
@@ -56,21 +58,29 @@ export function GmailSyncControls({
         </Badge>
       )}
 
-      {isAdminExplicit || can("emails.sync") ? (
+      {canManageSharedGmailInbox || can("emails.sync") ? (
         <>
-          {isAdminExplicit ? (
-            <Button asChild variant="outline" className="w-full sm:w-auto">
+          {canManageSharedGmailInbox ? (
+            <Button
+              asChild
+              variant={gmailInbox.connected ? "outline" : "default"}
+              className="w-full sm:w-auto"
+            >
               <Link href="/api/gmail/connect?redirectTo=/emails">
                 <Settings2 className="h-4 w-4" />
                 {gmailInbox.connected
-                  ? "Reconnecter la boite Gmail partagee"
-                  : "Connecter la boite Gmail partagee"}
+                  ? "Reconnecter Gmail partage"
+                  : "Connecter Gmail partage"}
               </Link>
             </Button>
           ) : null}
 
           {can("emails.sync") ? (
-            <Button onClick={handleSync} disabled={isPending} className="w-full sm:w-auto">
+            <Button
+              onClick={handleSync}
+              disabled={isPending || !canRunSync}
+              className="w-full sm:w-auto"
+            >
               {isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -79,7 +89,7 @@ export function GmailSyncControls({
               ) : (
                 <>
                   <RefreshCcw className="h-4 w-4" />
-                  Relancer la sync
+                  {gmailInbox.connected ? "Relancer la sync" : "Sync indisponible"}
                 </>
               )}
             </Button>
