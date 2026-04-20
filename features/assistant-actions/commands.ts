@@ -23,6 +23,8 @@ import type {
   AssistantPrepareReplyDraftResult,
   AssistantProductionList,
   AssistantRequestBacklogList,
+  AssistantRunGmailSyncInput,
+  AssistantSetEmailInboxBucketInput,
   AssistantUnprocessedEmailList,
   AssistantUrgencyList,
   AssistantWorkspaceData,
@@ -35,6 +37,8 @@ import {
   validateRequiredText,
 } from "@/features/assistant-actions/validators";
 import { getDeadlinesPageData } from "@/features/deadlines/queries";
+import { syncLatestGmailMessagesForActor } from "@/features/emails/lib/gmail-sync";
+import { setEmailInboxBucketAction } from "@/features/emails/actions/update-email";
 import { getEmailsPageData } from "@/features/emails/queries";
 import { getProductionsPageData } from "@/features/productions/queries";
 import { updateProductionNotesAction } from "@/features/productions/actions/update-production";
@@ -116,12 +120,119 @@ export async function getUnprocessedEmails(
     options?.authorizationOverride
       ? await getAssistantServiceEmails()
       : (await getEmailsPageData()).emails
-  ).filter((email) => email.status !== "processed");
+  ).filter(
+    (email) =>
+      email.status !== "processed" && email.triage.bucket !== "promotional",
+  );
 
   return createAssistantActionSuccess(
     emails,
     `${emails.length} email(s) non traité(s) ou à revoir.`,
   );
+}
+
+export async function setEmailInboxBucket(
+  input: AssistantSetEmailInboxBucketInput,
+  options?: AssistantCommandExecutionOptions,
+): Promise<AssistantActionResult<Awaited<ReturnType<typeof setEmailInboxBucketAction>>>> {
+  const authorization = await authorizeServerPermissions(
+    ["assistant.write.safe", "emails.qualify"],
+    options?.authorizationOverride,
+  );
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const result = await setEmailInboxBucketAction({
+    bucket: input.bucket,
+    confidence: input.confidence ?? null,
+    emailId: input.emailId,
+    reason: input.reason ?? null,
+    source: input.source ?? "assistant",
+  });
+
+  if (!result.ok) {
+    return createAssistantActionFailure("error", result.message);
+  }
+
+  await recordAuditEvent({
+    action: "assistant_set_email_inbox_bucket",
+    actorId: authorization.actorId,
+    actorType: authorization.actorType,
+    description: result.message,
+    entityId: input.emailId,
+    entityType: "email",
+    payload: {
+      bucket: input.bucket,
+      confidence: input.confidence ?? null,
+      emailId: input.emailId,
+      reasonPreview: input.reason?.slice(0, 220) ?? null,
+      source: normalizeAssistantSource(input.source),
+    },
+    requestId: null,
+    scope: "assistant_actions.set_email_inbox_bucket",
+    source: normalizeAssistantSource(input.source),
+    status: "success",
+  });
+
+  return createAssistantActionSuccess(result, result.message);
+}
+
+export async function runGmailSync(
+  input: AssistantRunGmailSyncInput,
+  options?: AssistantCommandExecutionOptions,
+) {
+  const authorization = await authorizeServerPermissions(
+    ["assistant.write.safe", "emails.sync"],
+    options?.authorizationOverride,
+  );
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const requestedLimit =
+    typeof input.limit === "number" && Number.isFinite(input.limit)
+      ? Math.max(1, Math.min(100, Math.floor(input.limit)))
+      : 50;
+  const result = await syncLatestGmailMessagesForActor(requestedLimit, {
+    actorUserId:
+      options?.mutationContext?.actor?.actorUserId ??
+      authorization.actorId ??
+      null,
+  });
+
+  await recordAuditEvent({
+    action: "assistant_run_gmail_sync",
+    actorId: authorization.actorId,
+    actorType: authorization.actorType,
+    description: result.message,
+    entityId: result.connectedInboxEmail,
+    entityType: "gmail_sync",
+    payload: {
+      connectedInboxEmail: result.connectedInboxEmail,
+      errorCount: result.errorCount ?? 0,
+      ignoredMessages: result.ignoredMessages,
+      importedMessages: result.importedMessages,
+      importedThreads: result.importedThreads,
+      limit: requestedLimit,
+      queryUsed: result.queryUsed ?? null,
+      source: normalizeAssistantSource(input.source),
+      syncMode: result.syncMode ?? null,
+      syncedAt: result.syncedAt ?? null,
+    },
+    requestId: null,
+    scope: "assistant_actions.run_gmail_sync",
+    source: normalizeAssistantSource(input.source),
+    status: result.ok ? "success" : "failure",
+  });
+
+  if (!result.ok) {
+    return createAssistantActionFailure("error", result.message);
+  }
+
+  return createAssistantActionSuccess(result, result.message);
 }
 
 export async function getRequestsWithoutAssignee(

@@ -43,6 +43,7 @@ import type {
 const SEARCH_DEBOUNCE_MS = 280;
 
 export function EmailsPage({
+  bucketCounts,
   counts,
   documentOptions,
   documentOptionsError = null,
@@ -62,6 +63,7 @@ export function EmailsPage({
   const searchParams = useSearchParams();
   const [isRoutingPending, startRoutingTransition] = useTransition();
   const [searchInput, setSearchInput] = useState(filters.search);
+  const [selectedBucket, setSelectedBucket] = useState(filters.selectedBucket);
   const [selectedStatus, setSelectedStatus] = useState(filters.selectedStatus);
   const [selectedEmailIdState, setSelectedEmailIdState] = useState<string | null>(
     selectedEmailId ?? emails[0]?.id ?? null,
@@ -72,6 +74,7 @@ export function EmailsPage({
     const timeoutId = window.setTimeout(() => {
       if (
         searchInput === filters.search &&
+        selectedBucket === filters.selectedBucket &&
         selectedStatus === filters.selectedStatus
       ) {
         return;
@@ -81,6 +84,7 @@ export function EmailsPage({
         pathname,
         patch: {
           email: null,
+          bucket: selectedBucket === "important" ? null : selectedBucket,
           page: "1",
           search: searchInput.trim() || null,
           status: selectedStatus === "all" ? null : selectedStatus,
@@ -94,18 +98,22 @@ export function EmailsPage({
     return () => window.clearTimeout(timeoutId);
   }, [
     filters.search,
+    filters.selectedBucket,
     filters.selectedStatus,
     pathname,
     router,
     searchInput,
     searchParams,
+    selectedBucket,
     selectedStatus,
   ]);
 
   const selectedEmail =
     emails.find((email) => email.id === selectedEmailIdState) ?? emails[0] ?? null;
   const hasActiveFilters =
-    filters.search.trim().length > 0 || filters.selectedStatus !== "all";
+    filters.search.trim().length > 0 ||
+    filters.selectedBucket !== "important" ||
+    filters.selectedStatus !== "all";
   const visibleCountLabel = `${emails.length}/${pagination.totalItems}`;
   const paginationSummary = useMemo(() => {
     if (pagination.totalItems === 0 || emails.length === 0) {
@@ -156,12 +164,20 @@ export function EmailsPage({
           title={
             hasActiveFilters
               ? "Aucun email ne correspond aux filtres"
-              : "Aucun email dans la table emails"
+              : filters.selectedBucket === "promotional"
+                ? "Aucun email publicitaire détecté"
+                : filters.selectedBucket === "to_review"
+                  ? "Aucun email en attente de vérification"
+                  : "Aucun email important dans l’inbox"
           }
           description={
             hasActiveFilters
               ? "Essaie un autre statut, réduis la recherche ou reviens à la première page."
-              : "La table Supabase est accessible mais ne contient encore aucun email métier à traiter."
+              : filters.selectedBucket === "promotional"
+                ? "L’assistant n’a pas encore classé de newsletters ou promotions dans cet onglet."
+                : filters.selectedBucket === "to_review"
+                  ? "Tous les emails visibles ont déjà été classés comme importants ou publicitaires."
+                  : "L’inbox principale est vide pour l’instant ou les nouveaux emails attendent encore un tri assistant."
           }
         />
       </div>
@@ -208,9 +224,12 @@ export function EmailsPage({
           description="Affiner rapidement l’inbox par recherche ou statut de traitement."
         >
           <EmailFilters
+            bucketCounts={bucketCounts}
             search={searchInput}
+            onBucketChange={setSelectedBucket}
             onSearchChange={setSearchInput}
             selectedStatus={selectedStatus}
+            selectedBucket={selectedBucket}
             onStatusChange={setSelectedStatus}
           />
         </MobileFilterSheet>
@@ -218,9 +237,12 @@ export function EmailsPage({
 
       <div className="hidden md:block">
         <EmailFilters
+          bucketCounts={bucketCounts}
           search={searchInput}
+          onBucketChange={setSelectedBucket}
           onSearchChange={setSearchInput}
           selectedStatus={selectedStatus}
+          selectedBucket={selectedBucket}
           onStatusChange={setSelectedStatus}
         />
       </div>
@@ -228,10 +250,10 @@ export function EmailsPage({
       <div className="flex min-w-0 flex-col gap-4">
         <div className="grid gap-3 md:hidden">
           <div className="grid grid-cols-2 gap-3 rounded-[1.25rem] border border-black/[0.06] bg-[#fbf8f2]/95 p-3">
-            <MobileStatCard label="Nouveaux" value={counts.new} />
-            <MobileStatCard label="À revoir" value={counts.review} />
+            <MobileStatCard label="Important" value={bucketCounts.important} />
+            <MobileStatCard label="À vérifier" value={bucketCounts.toReview} />
+            <MobileStatCard label="Pub" value={bucketCounts.promotional} />
             <MobileStatCard label="Traités" value={counts.processed} />
-            <MobileStatCard label="Qualifiés" value={counts.qualified} />
           </div>
 
           <div className="rounded-[1.2rem] border border-black/[0.06] bg-white px-4 py-3">
@@ -317,10 +339,13 @@ export function EmailsPage({
                   {visibleCountLabel} visibles
                 </Badge>
                 <Badge variant="outline" className="bg-white">
-                  {counts.open} ouverts
+                  {bucketCounts.important} importants
                 </Badge>
                 <Badge variant="outline" className="bg-white">
-                  {counts.review} à revoir
+                  {bucketCounts.toReview} à vérifier
+                </Badge>
+                <Badge variant="outline" className="bg-white">
+                  {bucketCounts.promotional} pub
                 </Badge>
               </div>
             </div>
@@ -348,16 +373,28 @@ export function EmailsPage({
 
         <div className="hidden gap-3 rounded-[1.5rem] border border-black/[0.06] bg-[#fbf8f2]/95 p-4 md:grid md:grid-cols-3">
           {([
-            ["new", counts.new],
-            ["review", counts.review],
-            ["processed", counts.processed],
+            ["important", bucketCounts.important],
+            ["to_review", bucketCounts.toReview],
+            ["promotional", bucketCounts.promotional],
           ] as const).map(([status, count]) => (
             <div
               key={status}
               className="rounded-[1.1rem] border border-black/[0.06] bg-white p-4"
             >
-              <Badge variant={status === "review" ? "destructive" : "outline"}>
-                {status}
+              <Badge
+                variant={
+                  status === "to_review"
+                    ? "destructive"
+                    : status === "important"
+                      ? "default"
+                      : "outline"
+                }
+              >
+                {status === "important"
+                  ? "Important"
+                  : status === "to_review"
+                    ? "À vérifier"
+                    : "Pub"}
               </Badge>
               <p className="mt-3 text-2xl font-semibold tracking-tight">{count}</p>
             </div>

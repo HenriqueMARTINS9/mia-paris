@@ -11,6 +11,8 @@ import {
   getTodayUrgencies,
   getUnprocessedEmails,
   prepareReplyDraft,
+  runGmailSync,
+  setEmailInboxBucket,
   searchClientHistory,
   searchModelHistory,
 } from "@/features/assistant-actions/commands";
@@ -22,6 +24,8 @@ import type {
   AssistantAddRequestNoteInput,
   AssistantCreateTaskInput,
   AssistantPrepareReplyDraftInput,
+  AssistantRunGmailSyncInput,
+  AssistantSetEmailInboxBucketInput,
 } from "@/features/assistant-actions/types";
 import type { ServerPermissionOverride } from "@/features/auth/server-authorization";
 import { getCurrentUserContext } from "@/features/auth/queries";
@@ -46,7 +50,9 @@ export type OpenClawSafeWriteActionName =
   | "addNoteToProduction"
   | "addNoteToRequest"
   | "createTask"
-  | "prepareReplyDraft";
+  | "prepareReplyDraft"
+  | "runGmailSync"
+  | "setEmailInboxBucket";
 
 export type OpenClawExposedActionName =
   | OpenClawReadActionName
@@ -98,6 +104,8 @@ export const openClawReadActionNames: OpenClawReadActionName[] = [
 
 export const openClawSafeWriteActionNames: OpenClawSafeWriteActionName[] = [
   "prepareReplyDraft",
+  "runGmailSync",
+  "setEmailInboxBucket",
   "createTask",
   "addNoteToRequest",
   "addNoteToProduction",
@@ -138,6 +146,12 @@ const openClawActionSamples: Record<
     taskType: "internal_review",
     title: "Contrôler les derniers éléments client",
   },
+  setEmailInboxBucket: {
+    bucket: "important",
+    confidence: 0.92,
+    emailId: "email-uuid",
+    reason: "Demande client explicite sur prix et délai.",
+  },
   getBlockedProductions: null,
   getHighRiskProductions: null,
   getRequestsWithoutAssignee: null,
@@ -160,6 +174,9 @@ const openClawActionSamples: Record<
       summary: "Le client demande une révision rapide du target price.",
     },
     replyType: "acknowledgement",
+  },
+  runGmailSync: {
+    limit: 50,
   },
   searchClientHistory: {
     clientName: "Etam",
@@ -395,6 +412,30 @@ async function dispatchOpenClawAction(
           })
         : parsed.result;
     }
+    case "runGmailSync": {
+      const parsed = parseRunGmailSyncInput(input);
+      return parsed.ok
+        ? runGmailSync({
+            ...parsed.value,
+            source: "assistant",
+          }, {
+            authorizationOverride: options?.authorizationOverride,
+            mutationContext: options?.mutationContext ?? null,
+          })
+        : parsed.result;
+    }
+    case "setEmailInboxBucket": {
+      const parsed = parseSetEmailInboxBucketInput(input);
+      return parsed.ok
+        ? setEmailInboxBucket({
+            ...parsed.value,
+            source: "assistant",
+          }, {
+            authorizationOverride: options?.authorizationOverride,
+            mutationContext: options?.mutationContext ?? null,
+          })
+        : parsed.result;
+    }
   }
 }
 
@@ -549,6 +590,64 @@ function parsePrepareReplyDraftInput(input: unknown) {
   };
 }
 
+function parseRunGmailSyncInput(input: unknown) {
+  if (input === undefined || input === null) {
+    return {
+      ok: true as const,
+      value: {
+        limit: null,
+      } satisfies AssistantRunGmailSyncInput,
+    };
+  }
+
+  if (!isRecord(input)) {
+    return invalidPayloadResult("Payload invalide pour runGmailSync.");
+  }
+
+  if (
+    "limit" in input &&
+    (typeof input.limit !== "number" ||
+      !Number.isFinite(input.limit) ||
+      input.limit < 1 ||
+      input.limit > 100)
+  ) {
+    return invalidPayloadResult(
+      "limit invalide pour runGmailSync. Utilise un nombre entre 1 et 100.",
+    );
+  }
+
+  return {
+    ok: true as const,
+    value: {
+      limit: typeof input.limit === "number" ? Math.floor(input.limit) : null,
+    } satisfies AssistantRunGmailSyncInput,
+  };
+}
+
+function parseSetEmailInboxBucketInput(input: unknown) {
+  if (!isRecord(input) || typeof input.emailId !== "string" || typeof input.bucket !== "string") {
+    return invalidPayloadResult(
+      "Les champs emailId et bucket sont requis pour setEmailInboxBucket.",
+    );
+  }
+
+  if (!["important", "promotional", "to_review"].includes(input.bucket)) {
+    return invalidPayloadResult(
+      "bucket invalide pour setEmailInboxBucket. Valeurs supportées: important, promotional, to_review.",
+    );
+  }
+
+  return {
+    ok: true as const,
+    value: {
+      bucket: input.bucket as AssistantSetEmailInboxBucketInput["bucket"],
+      confidence: typeof input.confidence === "number" ? input.confidence : null,
+      emailId: input.emailId,
+      reason: typeof input.reason === "string" ? input.reason : null,
+    } satisfies AssistantSetEmailInboxBucketInput,
+  };
+}
+
 function invalidPayloadResult(message: string) {
   return {
     ok: false as const,
@@ -604,6 +703,18 @@ function sanitizeAuditInput(action: OpenClawExposedActionName, input: unknown) {
                 : null,
           }
         : null;
+    case "runGmailSync":
+      return {
+        limit: typeof input.limit === "number" ? input.limit : null,
+      };
+    case "setEmailInboxBucket":
+      return {
+        bucket: typeof input.bucket === "string" ? input.bucket : null,
+        confidence: typeof input.confidence === "number" ? input.confidence : null,
+        emailId: typeof input.emailId === "string" ? input.emailId : null,
+        reasonPreview:
+          typeof input.reason === "string" ? input.reason.slice(0, 180) : null,
+      };
     default:
       return input;
   }
@@ -624,6 +735,8 @@ function getAuditEntityId(action: OpenClawExposedActionName, input: unknown) {
       return typeof input.requestId === "string" ? input.requestId : null;
     case "addNoteToProduction":
       return typeof input.productionId === "string" ? input.productionId : null;
+    case "setEmailInboxBucket":
+      return typeof input.emailId === "string" ? input.emailId : null;
     case "prepareReplyDraft":
       return isRecord(input.context) &&
         typeof input.context.sourceId === "string" &&
@@ -648,6 +761,10 @@ function getAuditEntityType(action: OpenClawExposedActionName) {
       return "production";
     case "prepareReplyDraft":
       return "reply_draft";
+    case "runGmailSync":
+      return "gmail_sync";
+    case "setEmailInboxBucket":
+      return "email";
     case "searchModelHistory":
       return "model";
     case "getTodayUrgencies":
@@ -669,6 +786,14 @@ function getAuditRequestId(action: OpenClawExposedActionName, input: unknown) {
     typeof input.requestId === "string"
   ) {
     return input.requestId;
+  }
+
+  if (action === "setEmailInboxBucket" && typeof input.emailId === "string") {
+    return null;
+  }
+
+  if (action === "runGmailSync") {
+    return null;
   }
 
   if (

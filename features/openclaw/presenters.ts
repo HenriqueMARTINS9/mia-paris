@@ -41,9 +41,11 @@ export function presentOpenClawData(input: {
       return presentHistorySearch(input.data);
     case "prepareReplyDraft":
       return presentReplyDraft(input.data);
+    case "runGmailSync":
     case "createTask":
     case "addNoteToRequest":
     case "addNoteToProduction":
+    case "setEmailInboxBucket":
       return presentSafeWriteResult({
         action: input.action,
         data: input.data,
@@ -85,6 +87,7 @@ function presentUnprocessedEmails(data: unknown) {
   const signalEmails = emails.filter((email) => !isSystemEmail(email));
   const source = signalEmails.length > 0 ? signalEmails : emails;
   const items = source.slice(0, DEFAULT_COMPACT_LIMIT).map((email) => ({
+    bucket: email.triage.bucket,
     client: email.clientName || null,
     dueAt: email.classification?.suggestedFields?.dueAt ?? null,
     from: email.fromName || email.fromEmail,
@@ -224,6 +227,41 @@ function presentSafeWriteResult(input: {
     };
   }
 
+  if (input.action === "runGmailSync") {
+    const syncResult = isRecord(input.data) ? input.data : {};
+
+    return {
+      format: "compact" as const,
+      recommendedAction:
+        (readNumber(syncResult, "errorCount") ?? 0) > 0
+          ? "Vérifier le statut Gmail partagé ou reconnecter la boîte si besoin."
+          : "Ouvrir ensuite l’inbox CRM pour traiter les nouveaux emails importés.",
+      summary: resultMessage,
+      sync: {
+        connectedInboxEmail: readString(syncResult, "connectedInboxEmail"),
+        errorCount: readNumber(syncResult, "errorCount"),
+        ignoredMessages: readNumber(syncResult, "ignoredMessages"),
+        importedMessages: readNumber(syncResult, "importedMessages"),
+        importedThreads: readNumber(syncResult, "importedThreads"),
+        queryUsed: readString(syncResult, "queryUsed"),
+        syncMode: readString(syncResult, "syncMode"),
+      },
+    };
+  }
+
+  if (input.action === "setEmailInboxBucket") {
+    return {
+      format: "compact" as const,
+      recommendedAction: "Vérifier ensuite l’onglet inbox correspondant dans le CRM.",
+      summary: resultMessage,
+      triage: {
+        bucket: readString(payload, "bucket"),
+        emailId: readString(payload, "emailId"),
+        reasonPreview: readString(payload, "reason")?.slice(0, 220) ?? null,
+      },
+    };
+  }
+
   if (input.action === "addNoteToRequest") {
     return {
       format: "compact" as const,
@@ -293,4 +331,10 @@ function readString(record: Record<string, unknown>, key: string) {
   const value = record[key];
 
   return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function readNumber(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }

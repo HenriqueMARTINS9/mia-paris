@@ -316,6 +316,8 @@ Actions READ exposees:
 
 Actions SAFE WRITE exposees:
 - `prepareReplyDraft`
+- `runGmailSync`
+- `setEmailInboxBucket`
 - `createTask`
 - `addNoteToRequest`
 - `addNoteToProduction`

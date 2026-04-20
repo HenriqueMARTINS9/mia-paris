@@ -1,5 +1,6 @@
 import { mapRawRequestPriorityToUiPriority } from "@/features/requests/metadata";
 import type {
+  EmailInboxBucket,
   EmailQualificationRequestType,
   EmailProcessingStatus,
 } from "@/features/emails/types";
@@ -48,6 +49,24 @@ export const emailStatusMeta: Record<
   processed: {
     label: "Traité",
     description: "Email absorbé dans le CRM ou clôturé.",
+  },
+};
+
+export const emailInboxBucketMeta: Record<
+  EmailInboxBucket,
+  { description: string; label: string }
+> = {
+  important: {
+    label: "Important",
+    description: "Emails métier à traiter en priorité dans l’inbox principale.",
+  },
+  promotional: {
+    label: "Pub",
+    description: "Newsletters, promotions ou bruit commercial non prioritaire.",
+  },
+  to_review: {
+    label: "À vérifier",
+    description: "Emails incertains à relire avant de les classer.",
   },
 };
 

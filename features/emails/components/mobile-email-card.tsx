@@ -5,6 +5,7 @@ import { ChevronRight, Paperclip } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmailInboxBucketBadge } from "@/features/emails/components/email-inbox-bucket-badge";
 import { ProcessingStatusBadge } from "@/features/emails/components/processing-status-badge";
 import type { EmailListItem } from "@/features/emails/types";
 import { cn, formatDateTime } from "@/lib/utils";
@@ -58,6 +59,7 @@ export function MobileEmailCard({
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
+        <EmailInboxBucketBadge bucket={email.triage.bucket} />
         <ProcessingStatusBadge status={email.status} />
         {email.clientName !== "Client non détecté" ? (
           <Badge variant="outline" className="normal-case tracking-normal">

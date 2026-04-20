@@ -20,12 +20,38 @@ import type { Database } from "@/lib/supabase/database.types";
 import { hasSupabaseAdminEnv } from "@/lib/supabase/env";
 import type { EmailRecord, InboxRecord } from "@/types/crm";
 
+interface GmailSyncActorOptions {
+  actorUserId?: string | null;
+  requireAuthenticatedUser?: boolean;
+}
+
 export async function syncLatestGmailMessagesForCurrentUser(
   limit = 50,
 ): Promise<GmailSyncResult> {
-  const currentUser = await getCurrentUserContext();
+  return syncLatestSharedGmailMessages(limit, {
+    requireAuthenticatedUser: true,
+  });
+}
 
-  if (!currentUser?.authUser) {
+export async function syncLatestGmailMessagesForActor(
+  limit = 50,
+  options?: GmailSyncActorOptions,
+): Promise<GmailSyncResult> {
+  return syncLatestSharedGmailMessages(limit, {
+    actorUserId: options?.actorUserId ?? null,
+    requireAuthenticatedUser: false,
+  });
+}
+
+async function syncLatestSharedGmailMessages(
+  limit = 50,
+  options?: GmailSyncActorOptions,
+): Promise<GmailSyncResult> {
+  const currentUser = await getCurrentUserContext();
+  const requireAuthenticatedUser = options?.requireAuthenticatedUser !== false;
+  const actorUserId = options?.actorUserId ?? currentUser?.appUser?.id ?? null;
+
+  if (requireAuthenticatedUser && !currentUser?.authUser) {
     return {
       connectedInboxEmail: null,
       ignoredMessages: 0,
@@ -108,7 +134,7 @@ export async function syncLatestGmailMessagesForCurrentUser(
     });
 
     await recordGmailSyncEvent({
-      actorId: currentUser.appUser?.id ?? null,
+      actorId: actorUserId,
       inbox,
       result: syncResult,
       success: true,
@@ -128,7 +154,7 @@ export async function syncLatestGmailMessagesForCurrentUser(
       ok: syncResult.ok,
       queryUsed: syncResult.queryUsed ?? null,
       syncMode: syncResult.syncMode ?? syncMode,
-      triggeredByUserId: currentUser.appUser?.id ?? null,
+      triggeredByUserId: actorUserId,
     });
 
     await notifyNewUnprocessedEmails({
@@ -159,7 +185,7 @@ export async function syncLatestGmailMessagesForCurrentUser(
       .eq("id", inbox.id);
 
     await recordGmailSyncEvent({
-      actorId: currentUser.appUser?.id ?? null,
+      actorId: actorUserId,
       inbox,
       result: {
         connectedInboxEmail: inbox.email_address ?? null,
@@ -190,7 +216,7 @@ export async function syncLatestGmailMessagesForCurrentUser(
       ok: false,
       queryUsed: syncState.query,
       syncMode,
-      triggeredByUserId: currentUser.appUser?.id ?? null,
+      triggeredByUserId: actorUserId,
     });
 
     await notifyGmailSyncFailure({

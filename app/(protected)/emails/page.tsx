@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 
 interface EmailsRoutePageProps {
   searchParams?: Promise<{
+    bucket?: string;
     email?: string;
     page?: string;
     perPage?: string;
@@ -27,6 +28,8 @@ export default async function EmailsRoutePage({
     Number(resolvedSearchParams.page ?? 1),
     Number(resolvedSearchParams.perPage ?? 15) as 10 | 15,
     resolvedSearchParams.search ?? "",
+    (resolvedSearchParams.bucket as "all" | "important" | "promotional" | "to_review" | undefined) ??
+      "important",
     (resolvedSearchParams.status as "all" | "new" | "review" | "processed" | undefined) ??
       "all",
     resolvedSearchParams.email ?? null,
@@ -34,6 +37,7 @@ export default async function EmailsRoutePage({
 
   return (
     <EmailsPage
+      bucketCounts={data.bucketCounts}
       counts={data.counts}
       documentOptions={data.documentOptions}
       documentOptionsError={data.documentOptionsError}

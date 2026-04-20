@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { authorizeServerAction } from "@/features/auth/server-authorization";
 import { mapUiEmailStatusToDatabaseValues } from "@/features/emails/metadata";
 import type {
+  EmailInboxBucket,
   EmailMutationResult,
   EmailProcessingStatus,
 } from "@/features/emails/types";
@@ -13,8 +14,11 @@ import {
   isMissingSupabaseResourceError,
   supabaseRestInsert,
   supabaseRestPatch,
+  supabaseRestSelectMaybeSingle,
   type SupabaseRestErrorPayload,
 } from "@/lib/supabase/rest";
+import type { EmailRecord } from "@/types/crm";
+import { parseJsonObject, readNumber, readObject, readString } from "@/lib/record-helpers";
 
 interface UpdateEmailStatusInput {
   emailId: string;
@@ -24,6 +28,14 @@ interface UpdateEmailStatusInput {
 interface AttachEmailToRequestInput {
   emailId: string;
   requestId: string;
+}
+
+interface SetEmailInboxBucketInput {
+  bucket: EmailInboxBucket;
+  confidence?: number | null;
+  emailId: string;
+  reason?: string | null;
+  source?: "assistant" | "system" | "ui";
 }
 
 export async function markEmailProcessedAction(
@@ -51,6 +63,101 @@ export async function ignoreEmailForNowAction(
     emailId: input.emailId,
     status: "new",
   });
+}
+
+export async function setEmailInboxBucketAction(
+  input: SetEmailInboxBucketInput,
+): Promise<EmailMutationResult> {
+  const authorization = await authorizeServerAction("emails.qualify");
+
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      field: "inbox_bucket",
+      message: authorization.message,
+    };
+  }
+
+  if (!input.emailId) {
+    return {
+      ok: false,
+      field: "inbox_bucket",
+      message: "Identifiant email manquant.",
+    };
+  }
+
+  const emailResult = await supabaseRestSelectMaybeSingle<EmailRecord>("emails", {
+    id: `eq.${input.emailId}`,
+    select: "*",
+  });
+
+  if (emailResult.error || !emailResult.data) {
+    return {
+      ok: false,
+      field: "inbox_bucket",
+      message: `Impossible de charger l’email à classer: ${emailResult.error ?? "email introuvable."}`,
+    };
+  }
+
+  const classificationPatch = {
+    assistant_bucket: input.bucket,
+    assistant_bucket_confidence: normalizeBucketConfidence(input.confidence),
+    assistant_bucket_reason: input.reason ?? null,
+    triage_source: input.source ?? "assistant",
+    triaged_at: new Date().toISOString(),
+  };
+  const mergedClassification = mergeEmailClassificationPayload(
+    emailResult.data,
+    classificationPatch,
+  );
+  const payloads: Array<Record<string, unknown>> = [
+    {
+      ai_classification: mergedClassification,
+      assistant_bucket: input.bucket,
+      assistant_bucket_confidence: normalizeBucketConfidence(input.confidence),
+      assistant_bucket_reason: input.reason ?? null,
+    },
+    {
+      classification_json: mergedClassification,
+      assistant_bucket: input.bucket,
+      assistant_bucket_confidence: normalizeBucketConfidence(input.confidence),
+      assistant_bucket_reason: input.reason ?? null,
+    },
+    {
+      ai_classification: mergedClassification,
+    },
+    {
+      classification_json: mergedClassification,
+    },
+  ];
+
+  const result = await patchEmailWithPayloads({
+    emailId: input.emailId,
+    field: "inbox_bucket",
+    payloads,
+    successMessage:
+      input.bucket === "important"
+        ? "Email classé comme important."
+        : input.bucket === "promotional"
+          ? "Email classé dans Pub."
+          : "Email déplacé dans À vérifier.",
+  });
+
+  if (result.ok) {
+    await createActivityLogEntry({
+      action: "email_inbox_bucket_updated",
+      actorId: authorization.actorId,
+      description: `Email ${input.emailId} classé dans ${input.bucket}.`,
+      entityId: input.emailId,
+      entityType: "email",
+      payload: classificationPatch,
+      requestId: null,
+      source: input.source ?? "ui",
+      status: "success",
+    });
+  }
+
+  return result;
 }
 
 export async function attachEmailToRequestAction(
@@ -384,6 +491,53 @@ function extractMissingColumnName(error: SupabaseRestErrorPayload | null) {
   const match = haystack.match(/column ["']?([a-zA-Z0-9_]+)["']?/i);
 
   return match?.[1] ?? null;
+}
+
+function normalizeBucketConfidence(value: number | null | undefined) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return null;
+  }
+
+  if (value > 1) {
+    return Math.max(0, Math.min(value / 100, 1));
+  }
+
+  return Math.max(0, Math.min(value, 1));
+}
+
+function mergeEmailClassificationPayload(
+  email: EmailRecord,
+  patch: Record<string, unknown>,
+) {
+  const currentClassification =
+    readObject(email, [
+      "ai_classification",
+      "classification_json",
+      "classification",
+      "analysis",
+    ]) ??
+    parseJsonObject(
+      readString(email, [
+        "ai_classification",
+        "classification_json",
+        "classification",
+        "analysis",
+      ]),
+    ) ??
+    {};
+
+  const merged = {
+    ...currentClassification,
+    ...patch,
+  };
+
+  if (readNumber(currentClassification, ["confidence", "score"]) !== null) {
+    merged.confidence =
+      readNumber(currentClassification, ["confidence", "score"]) ??
+      merged.confidence;
+  }
+
+  return merged;
 }
 
 function getEmailMutationErrorMessage(message: string) {

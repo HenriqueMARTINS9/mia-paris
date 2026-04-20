@@ -1,6 +1,10 @@
 import type { AppPermission } from "@/features/auth/permissions";
 import type { DeadlineListItem, DeadlinePriority } from "@/features/deadlines/types";
-import type { EmailListItem } from "@/features/emails/types";
+import type {
+  EmailInboxBucket,
+  EmailListItem,
+  GmailSyncResult,
+} from "@/features/emails/types";
 import type { ProductionMutationResult } from "@/features/productions/types";
 import type { ProductionListItem } from "@/features/productions/types";
 import type { ReplyDraft, ReplyDraftContext, ReplyDraftType } from "@/features/replies/types";
@@ -35,6 +39,8 @@ export type AssistantActionName =
   | "getTodayUrgencies"
   | "getUnprocessedEmails"
   | "prepareReplyDraft"
+  | "runGmailSync"
+  | "setEmailInboxBucket"
   | "searchClientHistory"
   | "searchModelHistory";
 
@@ -102,6 +108,19 @@ export interface AssistantPrepareReplyDraftInput {
   source?: AssistantActionSource;
 }
 
+export interface AssistantRunGmailSyncInput {
+  limit?: number | null;
+  source?: AssistantActionSource;
+}
+
+export interface AssistantSetEmailInboxBucketInput {
+  bucket: EmailInboxBucket;
+  confidence?: number | null;
+  emailId: string;
+  reason?: string | null;
+  source?: AssistantActionSource;
+}
+
 export interface AssistantPrepareReplyDraftResult {
   draft: ReplyDraft | null;
   message: string;
@@ -131,3 +150,4 @@ export type AssistantCreateTaskResult = RequestMutationResult;
 export type AssistantCreateDeadlineResult = RequestMutationResult;
 export type AssistantAddNoteToRequestResult = RequestMutationResult;
 export type AssistantAddNoteToProductionResult = ProductionMutationResult;
+export type AssistantRunGmailSyncResult = GmailSyncResult;

@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { EmailInboxBucketBadge } from "@/features/emails/components/email-inbox-bucket-badge";
 import { ProcessingStatusBadge } from "@/features/emails/components/processing-status-badge";
 import type { EmailListItem } from "@/features/emails/types";
 import { cn, formatDateTime } from "@/lib/utils";
@@ -75,6 +76,7 @@ export function EmailsTable({
               </p>
 
               <div className="mt-4 flex flex-wrap gap-2">
+                <EmailInboxBucketBadge bucket={email.triage.bucket} />
                 <ProcessingStatusBadge status={email.status} />
                 {email.detectedType ? (
                   <Badge variant="outline" className="gap-1 normal-case tracking-normal">
@@ -194,7 +196,10 @@ export function EmailsTable({
                     <p className="font-semibold">{formatDateTime(email.receivedAt)}</p>
                   </TableCell>
                   <TableCell>
-                    <ProcessingStatusBadge status={email.status} />
+                    <div className="flex flex-wrap gap-2">
+                      <EmailInboxBucketBadge bucket={email.triage.bucket} />
+                      <ProcessingStatusBadge status={email.status} />
+                    </div>
                   </TableCell>
                   <TableCell>
                     <p className="truncate font-semibold">{email.clientName}</p>

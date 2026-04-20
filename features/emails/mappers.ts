@@ -17,6 +17,7 @@ import {
   mergeEmailQualificationDraft,
   normalizeDateInput,
 } from "@/features/emails/lib/qualification";
+import { resolveEmailInboxTriage } from "@/features/emails/lib/inbox-triage";
 import type {
   EmailClassificationResult,
   EmailAttachmentListItem,
@@ -143,6 +144,19 @@ export function mapEmailRecordToListItem({
     readString(threadRecord, ["subject", "title"]) ??
     readString(emailRecord, ["thread_subject"]) ??
     (threadId ? `Thread ${compactIdentifier(threadId, 6)}` : "Thread isolé");
+  const triage = resolveEmailInboxTriage({
+    attachmentCount: attachments.length,
+    classification: classification.raw,
+    clientId,
+    detectedType,
+    emailRecord,
+    fromEmail,
+    fromName,
+    linkedRequestId,
+    previewText,
+    subject,
+    suggestedFields: classification.suggestedFields,
+  });
 
   return {
     attachments,
@@ -189,6 +203,7 @@ export function mapEmailRecordToListItem({
         },
       ),
     },
+    triage,
     isUnread:
       readBoolean(emailRecord, ["is_unread", "unread"]) ??
       mapRawEmailStatusToUiStatus(rawStatus) === "new",

@@ -14,6 +14,7 @@ import {
   mapEmailRecordToListItem,
 } from "@/features/emails/mappers";
 import type {
+  EmailInboxBucket,
   EmailInboxSnapshot,
   EmailPageSize,
   EmailProcessingStatus,
@@ -46,6 +47,7 @@ const DEFAULT_PAGE_SIZE: EmailPageSize = 15;
 const AVAILABLE_PAGE_SIZES: EmailPageSize[] = [10, 15];
 
 type EmailStatusFilter = "all" | EmailProcessingStatus;
+type EmailBucketFilter = "all" | EmailInboxBucket;
 
 interface EmailPageAncillaries {
   documentOptions: EmailsPageData["documentOptions"];
@@ -62,6 +64,7 @@ interface NormalizedEmailQueryInput {
   perPage: EmailPageSize;
   search: string;
   selectedEmailId: string | null;
+  selectedBucket: EmailBucketFilter;
   selectedStatus: EmailStatusFilter;
 }
 
@@ -115,14 +118,17 @@ const getEmailsPageDataInternal = async (): Promise<EmailsPageData> => {
       emailsResult.data ?? [],
       ancillaries.qualificationOptions,
     );
+    const bucketCounts = countEmailBuckets(emails);
 
     return {
       ...ancillaries,
+      bucketCounts,
       counts: countsResult,
       emails,
       error: null,
       filters: {
         search: "",
+        selectedBucket: "all",
         selectedStatus: "all",
       },
       pagination: {
@@ -150,6 +156,7 @@ const getPaginatedEmailsPageDataInternal = async (
   page = 1,
   perPage: EmailPageSize = DEFAULT_PAGE_SIZE,
   search = "",
+  selectedBucket: EmailBucketFilter = "important",
   selectedStatus: EmailStatusFilter = "all",
   selectedEmailId: string | null = null,
 ): Promise<EmailsPageData> => {
@@ -159,6 +166,7 @@ const getPaginatedEmailsPageDataInternal = async (
     page,
     perPage,
     search,
+    selectedBucket,
     selectedEmailId,
     selectedStatus,
   });
@@ -187,36 +195,36 @@ const getPaginatedEmailsPageDataInternal = async (
       };
     }
 
-    const [ancillaries, countsResult, pageResult] = await Promise.all([
+    const [ancillaries, countsResult, rowsResult] = await Promise.all([
       getEmailPageAncillaries(),
       getEmailStatusCounts(supabase),
-      getPaginatedEmailRows(supabase, input),
+      getFilteredEmailRows(supabase, input),
     ]);
 
-    if (pageResult.error) {
+    if (rowsResult.error) {
       return {
         ...emptyData,
         ...ancillaries,
         counts: countsResult,
-        error: `Impossible de charger les emails: ${pageResult.error}`,
+        error: `Impossible de charger les emails: ${rowsResult.error}`,
       };
     }
 
-    const totalPages = Math.max(1, Math.ceil(pageResult.totalItems / input.perPage));
-    const effectivePage =
-      pageResult.totalItems > 0 && input.page > totalPages ? totalPages : input.page;
-    const effectivePageResult =
-      effectivePage === input.page
-        ? pageResult
-        : await getPaginatedEmailRows(supabase, {
-            ...input,
-            page: effectivePage,
-          });
-
-    const emails = await buildMappedEmails(
-      effectivePageResult.rows,
+    const allMatchingEmails = await buildMappedEmails(
+      rowsResult.rows,
       ancillaries.qualificationOptions,
     );
+    const bucketCounts = countEmailBuckets(allMatchingEmails);
+    const bucketFilteredEmails = filterEmailsByBucket(
+      allMatchingEmails,
+      input.selectedBucket,
+    );
+    const totalItems = bucketFilteredEmails.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / input.perPage));
+    const effectivePage =
+      totalItems > 0 && input.page > totalPages ? totalPages : input.page;
+    const from = (effectivePage - 1) * input.perPage;
+    const emails = bucketFilteredEmails.slice(from, from + input.perPage);
     const resolvedSelectedEmailId =
       emails.find((email) => email.id === input.selectedEmailId)?.id ??
       emails[0]?.id ??
@@ -224,17 +232,19 @@ const getPaginatedEmailsPageDataInternal = async (
 
     return {
       ...ancillaries,
+      bucketCounts,
       counts: countsResult,
       emails,
       error: null,
       filters: {
         search: input.search,
+        selectedBucket: input.selectedBucket,
         selectedStatus: input.selectedStatus,
       },
       pagination: {
         page: effectivePage,
         perPage: input.perPage,
-        totalItems: pageResult.totalItems,
+        totalItems,
         totalPages,
       },
       selectedEmailId: resolvedSelectedEmailId,
@@ -258,6 +268,11 @@ const getEmailInboxSnapshotInternal = async (
   noStore();
 
   const emptyData: EmailInboxSnapshot = {
+    bucketCounts: {
+      important: 0,
+      promotional: 0,
+      toReview: 0,
+    },
     counts: {
       open: 0,
       review: 0,
@@ -299,6 +314,11 @@ const getEmailInboxSnapshotInternal = async (
 
     if (latestRowsResult.error) {
       return {
+        bucketCounts: {
+          important: 0,
+          promotional: 0,
+          toReview: 0,
+        },
         counts: {
           open: counts.open,
           review: counts.review,
@@ -311,8 +331,17 @@ const getEmailInboxSnapshotInternal = async (
     }
 
     const latestEmails = await buildMappedEmails(latestRowsResult.rows);
+    const bucketCounts = countEmailBuckets(latestEmails);
+    const signalEmails = latestEmails.filter(
+      (email) => email.triage.bucket !== "promotional",
+    );
 
     return {
+      bucketCounts: {
+        important: bucketCounts.important,
+        promotional: bucketCounts.promotional,
+        toReview: bucketCounts.toReview,
+      },
       counts: {
         open: counts.open,
         review: counts.review,
@@ -320,7 +349,7 @@ const getEmailInboxSnapshotInternal = async (
       },
       error: null,
       gmailInbox,
-      latestEmails,
+      latestEmails: signalEmails.length > 0 ? signalEmails.slice(0, limit) : latestEmails,
     };
   } catch (error) {
     return {
@@ -496,24 +525,20 @@ async function buildMappedEmails(
   ).sort(sortEmails);
 }
 
-async function getPaginatedEmailRows(
+async function getFilteredEmailRows(
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
   input: NormalizedEmailQueryInput,
 ) {
-  const from = (input.page - 1) * input.perPage;
-  const to = from + input.perPage - 1;
-
-  let query = supabase.from("emails").select("*", { count: "exact" });
+  let query = supabase.from("emails").select("*");
   query = applyEmailSearchFilter(query, input.search);
   query = applyEmailStatusFilter(query, input.selectedStatus);
-  query = applyEmailOrdering(query).range(from, to);
+  query = applyEmailOrdering(query);
 
-  const { data, count, error } = await query;
+  const { data, error } = await query;
 
   return {
     error: error?.message ?? null,
     rows: (data ?? []) as EmailRecord[],
-    totalItems: count ?? 0,
   };
 }
 
@@ -660,6 +685,41 @@ function sanitizeEmailSearch(value: string) {
   return value.replace(/[%*,()]/g, " ").trim();
 }
 
+function filterEmailsByBucket(
+  emails: EmailsPageData["emails"],
+  bucket: EmailBucketFilter,
+) {
+  if (bucket === "all") {
+    return emails;
+  }
+
+  return emails.filter((email) => email.triage.bucket === bucket);
+}
+
+function countEmailBuckets(emails: EmailsPageData["emails"]) {
+  return emails.reduce(
+    (counts, email) => {
+      counts.all += 1;
+
+      if (email.triage.bucket === "important") {
+        counts.important += 1;
+      } else if (email.triage.bucket === "promotional") {
+        counts.promotional += 1;
+      } else {
+        counts.toReview += 1;
+      }
+
+      return counts;
+    },
+    {
+      all: 0,
+      important: 0,
+      promotional: 0,
+      toReview: 0,
+    },
+  );
+}
+
 function normalizeEmailQueryInput(
   input?: Partial<NormalizedEmailQueryInput>,
 ): NormalizedEmailQueryInput {
@@ -671,6 +731,11 @@ function normalizeEmailQueryInput(
   const page = Number.isFinite(requestedPage) && requestedPage > 0
     ? Math.floor(requestedPage)
     : 1;
+  const selectedBucket = (["all", "important", "promotional", "to_review"] as const).includes(
+    (input?.selectedBucket ?? "important") as EmailBucketFilter,
+  )
+    ? ((input?.selectedBucket ?? "important") as EmailBucketFilter)
+    : "important";
   const selectedStatus = (["all", "new", "review", "processed"] as const).includes(
     (input?.selectedStatus ?? "all") as EmailStatusFilter,
   )
@@ -685,6 +750,7 @@ function normalizeEmailQueryInput(
       typeof input?.selectedEmailId === "string" && input.selectedEmailId.trim().length > 0
         ? input.selectedEmailId.trim()
         : null,
+    selectedBucket,
     selectedStatus,
   };
 }
@@ -693,6 +759,12 @@ function createEmptyEmailsPageData(
   input: NormalizedEmailQueryInput,
 ): EmailsPageData {
   return {
+    bucketCounts: {
+      all: 0,
+      important: 0,
+      promotional: 0,
+      toReview: 0,
+    },
     counts: createEmptyEmailCounts(),
     documentOptions: {
       models: [],
@@ -705,6 +777,7 @@ function createEmptyEmailsPageData(
     error: null,
     filters: {
       search: input.search,
+      selectedBucket: input.selectedBucket,
       selectedStatus: input.selectedStatus,
     },
     gmailInbox: createDisconnectedGmailInbox(),

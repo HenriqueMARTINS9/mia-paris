@@ -11,6 +11,8 @@ export {
   getTodayUrgencies,
   getUnprocessedEmails,
   prepareReplyDraft,
+  runGmailSync,
+  setEmailInboxBucket,
   searchClientHistory,
   searchModelHistory,
 } from "@/features/assistant-actions/commands";

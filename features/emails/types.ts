@@ -6,6 +6,8 @@ import type {
 import type { RequestAssigneeOption } from "@/features/requests/types";
 
 export type EmailProcessingStatus = "new" | "review" | "processed";
+export type EmailInboxBucket = "important" | "promotional" | "to_review";
+export type EmailInboxBucketSource = "stored" | "rules_v1";
 
 export type EmailPageSize = 10 | 15;
 
@@ -59,6 +61,13 @@ export interface EmailAttachmentListItem {
   storagePath: string | null;
 }
 
+export interface EmailInboxTriage {
+  bucket: EmailInboxBucket;
+  confidence: number | null;
+  reason: string | null;
+  source: EmailInboxBucketSource;
+}
+
 export interface EmailListItem {
   attachments: EmailAttachmentListItem[];
   bodyHtml: string | null;
@@ -81,6 +90,7 @@ export interface EmailListItem {
   summary: string | null;
   confidence: number | null;
   classification: EmailClassificationResult;
+  triage: EmailInboxTriage;
   isUnread: boolean;
 }
 
@@ -123,8 +133,16 @@ export interface EmailStatusCounts {
   total: number;
 }
 
+export interface EmailBucketCounts {
+  all: number;
+  important: number;
+  promotional: number;
+  toReview: number;
+}
+
 export interface EmailsPageFilters {
   search: string;
+  selectedBucket: "all" | EmailInboxBucket;
   selectedStatus: "all" | EmailProcessingStatus;
 }
 
@@ -136,6 +154,7 @@ export interface EmailsPagination {
 }
 
 export interface EmailsPageData {
+  bucketCounts: EmailBucketCounts;
   counts: EmailStatusCounts;
   documentOptions: DocumentFormOptions;
   documentOptionsError: string | null;
@@ -152,6 +171,7 @@ export interface EmailsPageData {
 }
 
 export interface EmailInboxSnapshot {
+  bucketCounts: Pick<EmailBucketCounts, "important" | "promotional" | "toReview">;
   counts: Pick<EmailStatusCounts, "open" | "review" | "total">;
   error: string | null;
   gmailInbox: GmailInboxStatus;
@@ -159,6 +179,7 @@ export interface EmailInboxSnapshot {
 }
 
 export type EmailMutationField =
+  | "inbox_bucket"
   | "status"
   | "request_link"
   | "request_creation";

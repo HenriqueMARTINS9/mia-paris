@@ -112,6 +112,7 @@ Réponse compacte:
   "ignoredSystemEmails": 2,
   "items": [
     {
+      "bucket": "important",
       "client": "Etam",
       "dueAt": null,
       "from": "Camille",
@@ -128,6 +129,12 @@ Réponse compacte:
   "truncated": false
 }
 ```
+
+Notes métier:
+
+- cet endpoint remonte uniquement les emails métier non traités
+- les emails classés `promotional` sont exclus de cette vue
+- les emails ambigus doivent être classés en `to_review`
 
 ### `getRequestsWithoutAssignee`
 
@@ -177,6 +184,43 @@ Payload valide:
 
 Les actions ci-dessous sont ouvertes sur la route HTTP externe, mais doivent être utilisées avec intention explicite. Le bridge ne doit jamais inventer des enums ou fallbacker en “note mémoire” si une vraie action CRM safe existe et a été demandée.
 
+### `runGmailSync`
+
+Champs optionnels:
+
+- `limit`
+
+Valeurs valides:
+
+- `limit`: entier entre `1` et `100`
+
+Payload valide:
+
+```json
+{
+  "limit": 50
+}
+```
+
+Réponse compacte:
+
+```json
+{
+  "format": "compact",
+  "recommendedAction": "Ouvrir ensuite l’inbox CRM pour traiter les nouveaux emails importés.",
+  "summary": "Synchronisation Gmail terminée.",
+  "sync": {
+    "connectedInboxEmail": "directionmiaparis@gmail.com",
+    "errorCount": 0,
+    "ignoredMessages": 12,
+    "importedMessages": 4,
+    "importedThreads": 3,
+    "queryUsed": null,
+    "syncMode": "incremental"
+  }
+}
+```
+
 ### `createTask`
 
 Champs obligatoires:
@@ -221,6 +265,54 @@ Payload valide:
   "requestId": "request-uuid",
   "assignedUserId": "user-uuid",
   "dueAt": "2026-04-04"
+}
+```
+
+### `setEmailInboxBucket`
+
+Champs obligatoires:
+
+- `emailId`
+- `bucket`
+
+Champs optionnels:
+
+- `confidence`
+- `reason`
+
+Valeurs valides:
+
+- `bucket`: `important`, `promotional`, `to_review`
+
+Règle métier:
+
+- `important`: email client ou signal métier à traiter dans l’inbox principale
+- `promotional`: pub, newsletter, bruit marketing
+- `to_review`: cas incertain à vérifier humainement
+
+Payload valide:
+
+```json
+{
+  "emailId": "email-uuid",
+  "bucket": "important",
+  "confidence": 0.92,
+  "reason": "Demande client explicite sur prix et délai."
+}
+```
+
+Réponse compacte:
+
+```json
+{
+  "format": "compact",
+  "recommendedAction": "Vérifier ensuite l’onglet inbox correspondant dans le CRM.",
+  "summary": "Email classé comme important.",
+  "triage": {
+    "bucket": "important",
+    "emailId": "email-uuid",
+    "reasonPreview": "Demande client explicite sur prix et délai."
+  }
 }
 ```
 
