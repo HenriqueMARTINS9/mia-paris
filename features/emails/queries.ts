@@ -6,7 +6,7 @@ import { cache } from "react";
 import { getDocumentFormOptions } from "@/features/documents/queries";
 import { getCurrentUserGmailInboxStatus } from "@/features/emails/lib/gmail-sync";
 import {
-  mapUiEmailStatusToDatabaseValues,
+  mapRawEmailStatusToUiStatus,
 } from "@/features/emails/metadata";
 import {
   getEmailRelatedIds,
@@ -214,9 +214,13 @@ const getPaginatedEmailsPageDataInternal = async (
       rowsResult.rows,
       ancillaries.qualificationOptions,
     );
+    const statusFilteredEmails = filterEmailsByStatus(
+      allMatchingEmails,
+      input.selectedStatus,
+    );
     const bucketCounts = countEmailBuckets(allMatchingEmails);
     const bucketFilteredEmails = filterEmailsByBucket(
-      allMatchingEmails,
+      statusFilteredEmails,
       input.selectedBucket,
     );
     const totalItems = bucketFilteredEmails.length;
@@ -531,7 +535,6 @@ async function getFilteredEmailRows(
 ) {
   let query = supabase.from("emails").select("*");
   query = applyEmailSearchFilter(query, input.search);
-  query = applyEmailStatusFilter(query, input.selectedStatus);
   query = applyEmailOrdering(query);
 
   const { data, error } = await query;
@@ -559,14 +562,40 @@ async function getLatestEmailRows(
 async function getEmailStatusCounts(
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
 ): Promise<EmailStatusCounts> {
-  const [total, newCount, reviewCount, processedCount, qualifiedCount] =
-    await Promise.all([
-      countEmails(supabase),
-      countEmails(supabase, "new"),
-      countEmails(supabase, "review"),
-      countEmails(supabase, "processed"),
-      countQualifiedEmails(supabase),
-    ]);
+  const { data, error } = await supabase
+    .from("emails")
+    .select(
+      "id,processing_status,status,triage_status,is_processed,ai_summary,ai_confidence,ai_classification",
+    );
+
+  if (error) {
+    return createEmptyEmailCounts();
+  }
+
+  let newCount = 0;
+  let reviewCount = 0;
+  let processedCount = 0;
+  let qualifiedCount = 0;
+
+  for (const row of (data ?? []) as EmailRecord[]) {
+    const status = resolveEmailStatusFromRecord(row);
+
+    if (status === "new") {
+      newCount += 1;
+    } else if (status === "review") {
+      reviewCount += 1;
+    } else {
+      processedCount += 1;
+    }
+
+    if (
+      row.ai_summary !== null ||
+      row.ai_confidence !== null ||
+      row.ai_classification !== null
+    ) {
+      qualifiedCount += 1;
+    }
+  }
 
   return {
     new: newCount,
@@ -574,59 +603,8 @@ async function getEmailStatusCounts(
     processed: processedCount,
     qualified: qualifiedCount,
     review: reviewCount,
-    total,
+    total: (data ?? []).length,
   };
-}
-
-async function countEmails(
-  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
-  status?: EmailProcessingStatus,
-) {
-  let query = supabase.from("emails").select("id", { count: "exact", head: true });
-  query = applyEmailStatusFilter(query, status ?? "all");
-
-  const { count, error } = await query;
-
-  if (error) {
-    return 0;
-  }
-
-  return count ?? 0;
-}
-
-async function countQualifiedEmails(
-  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
-) {
-  const aiSummaryCount = await countRowsWhereColumnIsNotNull(
-    supabase,
-    "ai_summary",
-  );
-  const aiConfidenceCount = await countRowsWhereColumnIsNotNull(
-    supabase,
-    "ai_confidence",
-  );
-  const aiClassificationCount = await countRowsWhereColumnIsNotNull(
-    supabase,
-    "ai_classification",
-  );
-
-  return Math.max(aiSummaryCount, aiConfidenceCount, aiClassificationCount);
-}
-
-async function countRowsWhereColumnIsNotNull(
-  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
-  column: "ai_classification" | "ai_confidence" | "ai_summary",
-) {
-  const { count, error } = await supabase
-    .from("emails")
-    .select("id", { count: "exact", head: true })
-    .not(column, "is", "null");
-
-  if (error) {
-    return 0;
-  }
-
-  return count ?? 0;
 }
 
 interface EmailOrderableQuery {
@@ -638,10 +616,6 @@ interface EmailOrderableQuery {
 
 interface EmailSearchableQuery {
   or: (filters: string) => unknown;
-}
-
-interface EmailFilterableQuery {
-  in: (column: string, values: string[]) => unknown;
 }
 
 function applyEmailOrdering<T>(query: T): T {
@@ -670,19 +644,19 @@ function applyEmailSearchFilter<T>(query: T, search: string): T {
   return (query as unknown as EmailSearchableQuery).or(searchExpression) as T;
 }
 
-function applyEmailStatusFilter<T>(query: T, status: EmailStatusFilter): T {
-  if (status === "all") {
-    return query;
-  }
-
-  return (query as unknown as EmailFilterableQuery).in(
-    "processing_status",
-    mapUiEmailStatusToDatabaseValues(status),
-  ) as T;
-}
-
 function sanitizeEmailSearch(value: string) {
   return value.replace(/[%*,()]/g, " ").trim();
+}
+
+function filterEmailsByStatus(
+  emails: EmailsPageData["emails"],
+  status: EmailStatusFilter,
+) {
+  if (status === "all") {
+    return emails;
+  }
+
+  return emails.filter((email) => email.status === status);
 }
 
 function filterEmailsByBucket(
@@ -956,4 +930,15 @@ function sortEmails(
   }
 
   return new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime();
+}
+
+function resolveEmailStatusFromRecord(record: EmailRecord): EmailProcessingStatus {
+  if (record.is_processed === true) {
+    return "processed";
+  }
+
+  const rawStatus =
+    readString(record, ["processing_status", "status", "triage_status"]) ?? null;
+
+  return mapRawEmailStatusToUiStatus(rawStatus);
 }
