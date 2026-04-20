@@ -87,10 +87,11 @@ export async function syncLatestGmailMessagesForCurrentUser(
     };
   }
 
-  const syncMode = resolveSyncMode({
+  const syncState = buildSyncState({
     lastSyncedAt: inbox.last_synced_at ?? null,
     syncCursor: inbox.sync_cursor ?? null,
   });
+  const syncMode = syncState.mode;
 
   try {
     const syncResult = await syncInbox({
@@ -137,11 +138,15 @@ export async function syncLatestGmailMessagesForCurrentUser(
 
     return syncResult;
   } catch (error) {
-    const message = resolveGmailSyncFailureMessage(
+    const baseMessage = resolveGmailSyncFailureMessage(
       error instanceof Error
         ? error.message
         : "Synchronisation Gmail impossible.",
     );
+    const message =
+      baseMessage.toLowerCase().includes("bad request") && syncState.query
+        ? `${baseMessage} Query Gmail utilisée: ${syncState.query}`
+        : baseMessage;
 
     await admin
       .from("inboxes")
@@ -164,7 +169,7 @@ export async function syncLatestGmailMessagesForCurrentUser(
         importedThreads: 0,
         message,
         ok: false,
-        queryUsed: null,
+        queryUsed: syncState.query,
         syncMode,
         syncedAt: new Date().toISOString(),
       },
@@ -183,7 +188,7 @@ export async function syncLatestGmailMessagesForCurrentUser(
         connectedInboxEmail: inbox.email_address ?? null,
       },
       ok: false,
-      queryUsed: null,
+      queryUsed: syncState.query,
       syncMode,
       triggeredByUserId: currentUser.appUser?.id ?? null,
     });
@@ -200,7 +205,7 @@ export async function syncLatestGmailMessagesForCurrentUser(
       importedThreads: 0,
       message,
       ok: false,
-      queryUsed: null,
+      queryUsed: syncState.query,
       syncMode,
       syncedAt: new Date().toISOString(),
     };
@@ -871,6 +876,15 @@ function extractMissingColumnName(error: { message?: string | null } | null) {
   return match?.[1] ?? null;
 }
 
+function formatSyncStorageError(error: {
+  code?: string | null;
+  details?: string | null;
+  hint?: string | null;
+  message?: string | null;
+}) {
+  return [error.message, error.details, error.hint].filter(Boolean).join(" · ");
+}
+
 function stripColumnFromRows<T extends Record<string, unknown>>(rows: T[], column: string) {
   return rows.map((row) => {
     const nextRow = {
@@ -908,7 +922,7 @@ async function upsertEmailThreads(
 
   if (existingResult.error) {
     throw new Error(
-      `Lecture des threads Gmail existants impossible: ${existingResult.error.message}`,
+      `Lecture des threads Gmail existants impossible: ${formatSyncStorageError(existingResult.error)}`,
     );
   }
 
@@ -937,14 +951,11 @@ async function upsertEmailThreads(
   );
 
   if (rowsToInsert.length > 0) {
-    const insertResult = await admin
-      .from("email_threads")
-      .insert(rowsToInsert as never[])
-      .select("id,external_thread_id");
+    const insertResult = await insertEmailThreadsWithFallback(admin, rowsToInsert);
 
     if (insertResult.error) {
       throw new Error(
-        `Insertion des threads Gmail impossible: ${insertResult.error.message}`,
+        `Insertion des threads Gmail impossible: ${formatSyncStorageError(insertResult.error)}`,
       );
     }
   }
@@ -961,14 +972,15 @@ async function upsertEmailThreads(
         ...row,
       };
       delete updatePayload.created_at;
-      const result = await admin
-        .from("email_threads")
-        .update(updatePayload as never)
-        .eq("id", threadId);
+      const result = await updateEmailThreadWithFallback(
+        admin,
+        threadId,
+        updatePayload,
+      );
 
       if (result.error) {
         throw new Error(
-          `Mise a jour d'un thread Gmail impossible: ${result.error.message}`,
+          `Mise a jour d'un thread Gmail impossible: ${formatSyncStorageError(result.error)}`,
         );
       }
 
@@ -986,7 +998,7 @@ async function upsertEmailThreads(
 
   if (finalResult.error) {
     throw new Error(
-      `Relecture des threads Gmail impossible: ${finalResult.error.message}`,
+      `Relecture des threads Gmail impossible: ${formatSyncStorageError(finalResult.error)}`,
     );
   }
 
@@ -1126,6 +1138,67 @@ async function insertEmailsWithFallback(
     .from("emails")
     .insert(rows.map((row) => stripEmailStatusFields(row)) as never[])
     .select("id,external_message_id,external_thread_id");
+}
+
+async function insertEmailThreadsWithFallback(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  rows: Database["public"]["Tables"]["email_threads"]["Insert"][],
+) {
+  let currentRows = rows;
+
+  while (true) {
+    const result = await admin
+      .from("email_threads")
+      .insert(currentRows as never[])
+      .select("id,external_thread_id");
+
+    if (!result.error) {
+      return result;
+    }
+
+    if (!isMissingColumnError(result.error)) {
+      return result;
+    }
+
+    const missingColumn = extractMissingColumnName(result.error);
+
+    if (!missingColumn || !currentRows.some((row) => missingColumn in row)) {
+      return result;
+    }
+
+    currentRows = stripColumnFromRows(currentRows, missingColumn);
+  }
+}
+
+async function updateEmailThreadWithFallback(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  threadId: string,
+  row: Database["public"]["Tables"]["email_threads"]["Insert"],
+) {
+  let currentRow = row as Record<string, unknown>;
+
+  while (true) {
+    const result = await admin
+      .from("email_threads")
+      .update(currentRow as never)
+      .eq("id", threadId);
+
+    if (!result.error) {
+      return result;
+    }
+
+    if (!isMissingColumnError(result.error)) {
+      return result;
+    }
+
+    const missingColumn = extractMissingColumnName(result.error);
+
+    if (!missingColumn || !(missingColumn in currentRow)) {
+      return result;
+    }
+
+    currentRow = stripColumnFromRows([currentRow], missingColumn)[0] ?? currentRow;
+  }
 }
 
 async function updateEmailWithFallback(
