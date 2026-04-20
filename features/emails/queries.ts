@@ -6,9 +6,6 @@ import { cache } from "react";
 import { getDocumentFormOptions } from "@/features/documents/queries";
 import { getCurrentUserGmailInboxStatus } from "@/features/emails/lib/gmail-sync";
 import {
-  mapRawEmailStatusToUiStatus,
-} from "@/features/emails/metadata";
-import {
   getEmailRelatedIds,
   hydrateEmailQualificationFields,
   mapEmailRecordToListItem,
@@ -45,6 +42,28 @@ import type {
 
 const DEFAULT_PAGE_SIZE: EmailPageSize = 15;
 const AVAILABLE_PAGE_SIZES: EmailPageSize[] = [10, 15];
+const EMAIL_SCAN_SELECT = [
+  "id",
+  "inbox_id",
+  "thread_id",
+  "request_id",
+  "client_id",
+  "assigned_user_id",
+  "from_name",
+  "from_email",
+  "subject",
+  "preview_text",
+  "direction",
+  "status",
+  "processing_status",
+  "is_processed",
+  "is_unread",
+  "ai_summary",
+  "ai_classification",
+  "received_at",
+  "created_at",
+  "updated_at",
+].join(",");
 
 type EmailStatusFilter = "all" | EmailProcessingStatus;
 type EmailBucketFilter = "all" | EmailInboxBucket;
@@ -97,11 +116,10 @@ const getEmailsPageDataInternal = async (): Promise<EmailsPageData> => {
       };
     }
 
-    const [ancillaries, countsResult, emailsResult] = await Promise.all([
+    const [ancillaries, emailsResult] = await Promise.all([
       getEmailPageAncillaries(),
-      getEmailStatusCounts(supabase),
       supabaseRestSelectList<EmailRecord>("emails", {
-        select: "*",
+        select: EMAIL_SCAN_SELECT,
       }),
     ]);
 
@@ -109,21 +127,20 @@ const getEmailsPageDataInternal = async (): Promise<EmailsPageData> => {
       return {
         ...emptyData,
         ...ancillaries,
-        counts: countsResult,
         error: `Impossible de charger les emails: ${emailsResult.error}`,
       };
     }
 
-    const emails = await buildMappedEmails(
+    const emails = buildMappedEmailScans(
       emailsResult.data ?? [],
-      ancillaries.qualificationOptions,
     );
     const bucketCounts = countEmailBuckets(emails);
+    const counts = countEmailStatuses(emails);
 
     return {
       ...ancillaries,
       bucketCounts,
-      counts: countsResult,
+      counts,
       emails,
       error: null,
       filters: {
@@ -195,9 +212,8 @@ const getPaginatedEmailsPageDataInternal = async (
       };
     }
 
-    const [ancillaries, countsResult, rowsResult] = await Promise.all([
+    const [ancillaries, rowsResult] = await Promise.all([
       getEmailPageAncillaries(),
-      getEmailStatusCounts(supabase),
       getFilteredEmailRows(supabase, input),
     ]);
 
@@ -205,20 +221,19 @@ const getPaginatedEmailsPageDataInternal = async (
       return {
         ...emptyData,
         ...ancillaries,
-        counts: countsResult,
         error: `Impossible de charger les emails: ${rowsResult.error}`,
       };
     }
 
-    const allMatchingEmails = await buildMappedEmails(
+    const scannedEmails = buildMappedEmailScans(
       rowsResult.rows,
-      ancillaries.qualificationOptions,
     );
+    const counts = countEmailStatuses(scannedEmails);
     const statusFilteredEmails = filterEmailsByStatus(
-      allMatchingEmails,
+      scannedEmails,
       input.selectedStatus,
     );
-    const bucketCounts = countEmailBuckets(allMatchingEmails);
+    const bucketCounts = countEmailBuckets(statusFilteredEmails);
     const bucketFilteredEmails = filterEmailsByBucket(
       statusFilteredEmails,
       input.selectedBucket,
@@ -228,7 +243,25 @@ const getPaginatedEmailsPageDataInternal = async (
     const effectivePage =
       totalItems > 0 && input.page > totalPages ? totalPages : input.page;
     const from = (effectivePage - 1) * input.perPage;
-    const emails = bucketFilteredEmails.slice(from, from + input.perPage);
+    const pageEmailIds = bucketFilteredEmails
+      .slice(from, from + input.perPage)
+      .map((email) => email.id);
+    const pageScanEmails = orderEmailsByIds(
+      bucketFilteredEmails.filter((email) => pageEmailIds.includes(email.id)),
+      pageEmailIds,
+    );
+    const fullRowsResult =
+      pageEmailIds.length > 0 ? await getEmailsByIds(supabase, pageEmailIds) : null;
+    const emails =
+      fullRowsResult && !fullRowsResult.error
+        ? orderEmailsByIds(
+            await buildMappedEmails(
+              fullRowsResult.rows,
+              ancillaries.qualificationOptions,
+            ),
+            pageEmailIds,
+          )
+        : pageScanEmails;
     const resolvedSelectedEmailId =
       emails.find((email) => email.id === input.selectedEmailId)?.id ??
       emails[0]?.id ??
@@ -237,7 +270,7 @@ const getPaginatedEmailsPageDataInternal = async (
     return {
       ...ancillaries,
       bucketCounts,
-      counts: countsResult,
+      counts,
       emails,
       error: null,
       filters: {
@@ -310,9 +343,8 @@ const getEmailInboxSnapshotInternal = async (
       };
     }
 
-    const [gmailInbox, counts, latestRowsResult] = await Promise.all([
+    const [gmailInbox, latestRowsResult] = await Promise.all([
       getCurrentUserGmailInboxStatus(),
-      getEmailStatusCounts(supabase),
       getLatestEmailRows(supabase, limit),
     ]);
 
@@ -324,9 +356,9 @@ const getEmailInboxSnapshotInternal = async (
           toReview: 0,
         },
         counts: {
-          open: counts.open,
-          review: counts.review,
-          total: counts.total,
+          open: 0,
+          review: 0,
+          total: 0,
         },
         error: `Impossible de charger les emails: ${latestRowsResult.error}`,
         gmailInbox,
@@ -334,7 +366,8 @@ const getEmailInboxSnapshotInternal = async (
       };
     }
 
-    const latestEmails = await buildMappedEmails(latestRowsResult.rows);
+    const latestEmails = buildMappedEmailScans(latestRowsResult.rows);
+    const counts = countEmailStatuses(latestEmails);
     const bucketCounts = countEmailBuckets(latestEmails);
     const signalEmails = latestEmails.filter(
       (email) => email.triage.bucket !== "promotional",
@@ -533,7 +566,7 @@ async function getFilteredEmailRows(
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
   input: NormalizedEmailQueryInput,
 ) {
-  let query = supabase.from("emails").select("*");
+  let query = supabase.from("emails").select(EMAIL_SCAN_SELECT);
   query = applyEmailSearchFilter(query, input.search);
   query = applyEmailOrdering(query);
 
@@ -550,60 +583,12 @@ async function getLatestEmailRows(
   limit: number,
 ) {
   const { data, error } = await applyEmailOrdering(
-    supabase.from("emails").select("*"),
+    supabase.from("emails").select(EMAIL_SCAN_SELECT),
   ).limit(limit);
 
   return {
     error: error?.message ?? null,
     rows: (data ?? []) as EmailRecord[],
-  };
-}
-
-async function getEmailStatusCounts(
-  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
-): Promise<EmailStatusCounts> {
-  const { data, error } = await supabase
-    .from("emails")
-    .select(
-      "id,processing_status,status,triage_status,is_processed,ai_summary,ai_confidence,ai_classification",
-    );
-
-  if (error) {
-    return createEmptyEmailCounts();
-  }
-
-  let newCount = 0;
-  let reviewCount = 0;
-  let processedCount = 0;
-  let qualifiedCount = 0;
-
-  for (const row of (data ?? []) as EmailRecord[]) {
-    const status = resolveEmailStatusFromRecord(row);
-
-    if (status === "new") {
-      newCount += 1;
-    } else if (status === "review") {
-      reviewCount += 1;
-    } else {
-      processedCount += 1;
-    }
-
-    if (
-      row.ai_summary !== null ||
-      row.ai_confidence !== null ||
-      row.ai_classification !== null
-    ) {
-      qualifiedCount += 1;
-    }
-  }
-
-  return {
-    new: newCount,
-    open: newCount + reviewCount,
-    processed: processedCount,
-    qualified: qualifiedCount,
-    review: reviewCount,
-    total: (data ?? []).length,
   };
 }
 
@@ -638,7 +623,6 @@ function applyEmailSearchFilter<T>(query: T, search: string): T {
     `from_email.ilike.*${normalizedSearch}*`,
     `subject.ilike.*${normalizedSearch}*`,
     `preview_text.ilike.*${normalizedSearch}*`,
-    `body_text.ilike.*${normalizedSearch}*`,
   ].join(",");
 
   return (query as unknown as EmailSearchableQuery).or(searchExpression) as T;
@@ -670,6 +654,35 @@ function filterEmailsByBucket(
   return emails.filter((email) => email.triage.bucket === bucket);
 }
 
+function countEmailStatuses(emails: EmailsPageData["emails"]): EmailStatusCounts {
+  return emails.reduce(
+    (counts, email) => {
+      counts.total += 1;
+
+      if (email.status === "new") {
+        counts.new += 1;
+      } else if (email.status === "review") {
+        counts.review += 1;
+      } else {
+        counts.processed += 1;
+      }
+
+      if (
+        email.summary !== null ||
+        email.confidence !== null ||
+        email.classification.raw !== null
+      ) {
+        counts.qualified += 1;
+      }
+
+      counts.open = counts.new + counts.review;
+
+      return counts;
+    },
+    createEmptyEmailCounts(),
+  );
+}
+
 function countEmailBuckets(emails: EmailsPageData["emails"]) {
   return emails.reduce(
     (counts, email) => {
@@ -691,6 +704,45 @@ function countEmailBuckets(emails: EmailsPageData["emails"]) {
       promotional: 0,
       toReview: 0,
     },
+  );
+}
+
+function buildMappedEmailScans(emailRows: EmailRecord[]) {
+  const emptyAttachmentRecordsByEmailId = new Map<string, EmailAttachmentRecord[]>();
+  const emptyClientRecordsById = new Map<string, ClientRecord>();
+  const emptyRequestRowsById = new Map<string, RequestOverview>();
+  const emptyThreadRecordsById = new Map<string, EmailThreadRecord>();
+
+  return emailRows
+    .map((emailRecord) =>
+      mapEmailRecordToListItem({
+        attachmentRecordsByEmailId: emptyAttachmentRecordsByEmailId,
+        clientRecordsById: emptyClientRecordsById,
+        emailRecord,
+        requestRowsById: emptyRequestRowsById,
+        threadRecordsById: emptyThreadRecordsById,
+      }),
+    )
+    .sort(sortEmails);
+}
+
+async function getEmailsByIds(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  ids: string[],
+) {
+  const { data, error } = await supabase.from("emails").select("*").in("id", ids);
+
+  return {
+    error: error?.message ?? null,
+    rows: (data ?? []) as EmailRecord[],
+  };
+}
+
+function orderEmailsByIds<T extends { id: string }>(emails: T[], ids: string[]) {
+  const orderById = new Map(ids.map((id, index) => [id, index] as const));
+
+  return [...emails].sort(
+    (left, right) => (orderById.get(left.id) ?? 0) - (orderById.get(right.id) ?? 0),
   );
 }
 
@@ -930,15 +982,4 @@ function sortEmails(
   }
 
   return new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime();
-}
-
-function resolveEmailStatusFromRecord(record: EmailRecord): EmailProcessingStatus {
-  if (record.is_processed === true) {
-    return "processed";
-  }
-
-  const rawStatus =
-    readString(record, ["processing_status", "status", "triage_status"]) ?? null;
-
-  return mapRawEmailStatusToUiStatus(rawStatus);
 }
