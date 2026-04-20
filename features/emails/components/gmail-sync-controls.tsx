@@ -1,7 +1,6 @@
 "use client";
 
 import { useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { RefreshCcw, Settings2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -21,6 +20,7 @@ export function GmailSyncControls({
   const { can } = useAuthorization();
   const canManageSharedGmailInbox = true;
   const canRunSync = can("emails.sync") && gmailInbox.connected;
+  const connectHref = "/api/gmail/connect?redirectTo=/emails";
 
   function handleSync() {
     startTransition(async () => {
@@ -34,6 +34,10 @@ export function GmailSyncControls({
 
       toast.error(result.message);
     });
+  }
+
+  function handleConnectGmail() {
+    window.location.assign(connectHref);
   }
 
   return (
@@ -62,16 +66,14 @@ export function GmailSyncControls({
         <>
           {canManageSharedGmailInbox ? (
             <Button
-              asChild
               variant={gmailInbox.connected ? "outline" : "default"}
               className="w-full sm:w-auto"
+              onClick={handleConnectGmail}
             >
-              <Link href="/api/gmail/connect?redirectTo=/emails">
-                <Settings2 className="h-4 w-4" />
-                {gmailInbox.connected
-                  ? "Reconnecter Gmail partage"
-                  : "Connecter Gmail partage"}
-              </Link>
+              <Settings2 className="h-4 w-4" />
+              {gmailInbox.connected
+                ? "Reconnecter Gmail partage"
+                : "Connecter Gmail partage"}
             </Button>
           ) : null}
 
