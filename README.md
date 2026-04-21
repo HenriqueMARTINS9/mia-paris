@@ -319,13 +319,16 @@ Actions SAFE WRITE exposees:
 - `runEmailOpsCycle`
 - `runGmailSync`
 - `setEmailInboxBucket`
+- `createClient`
+- `assignClientToEmail`
+- `createDeadline`
 - `createRequest`
 - `createTask`
 - `addNoteToRequest`
 - `addNoteToProduction`
 
 Actions sensibles fermees:
-- `createDeadline`
+- aucune actuellement dans la couche assistant-ready exposee
 
 Contrat HTTP externe actuel:
 - `POST /api/openclaw`

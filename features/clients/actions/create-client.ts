@@ -2,9 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 
-import { authorizeServerAction } from "@/features/auth/server-authorization";
+import type { AssistantMutationExecutionContext } from "@/features/assistant-actions/execution-context";
+import { authorizeServerPermissions } from "@/features/auth/server-authorization";
 import type { EmailQualificationOption } from "@/features/emails/types";
-import { insertActivityLogViaRest } from "@/lib/activity-logs";
+import { recordAuditEvent } from "@/lib/action-runtime";
 import {
   isMissingSupabaseColumnError,
   supabaseRestInsert,
@@ -27,8 +28,12 @@ interface CreateClientResult {
 
 export async function createClientAction(
   input: CreateClientInput,
+  context?: AssistantMutationExecutionContext,
 ): Promise<CreateClientResult> {
-  const authorization = await authorizeServerAction("clients.create");
+  const authorization = await authorizeServerPermissions(
+    ["clients.create"],
+    context?.authorizationOverride,
+  );
 
   if (!authorization.ok) {
     return {
@@ -51,9 +56,13 @@ export async function createClientAction(
     };
   }
 
-  const clientsResult = await supabaseRestSelectList<ClientRecord>("clients", {
-    select: "id,name,code",
-  });
+  const clientsResult = await supabaseRestSelectList<ClientRecord>(
+    "clients",
+    {
+      select: "id,name,code",
+    },
+    context?.rest ?? undefined,
+  );
 
   if (!clientsResult.error && clientsResult.data) {
     const existingClient = clientsResult.data.find((client) => {
@@ -89,9 +98,14 @@ export async function createClientAction(
     updated_at: new Date().toISOString(),
   };
 
-  const result = await insertWithMissingColumnFallback("clients", payload, {
-    select: "id,name,code",
-  });
+  const result = await insertWithMissingColumnFallback(
+    "clients",
+    payload,
+    {
+      select: "id,name,code",
+    },
+    context?.rest ?? undefined,
+  );
 
   if (result.error || !result.data || result.data.length === 0) {
     return {
@@ -105,17 +119,18 @@ export async function createClientAction(
   const createdClient = result.data[0] as ClientRecord;
   const clientId = typeof createdClient.id === "string" ? createdClient.id : null;
 
-  await insertActivityLogViaRest({
+  const actor = context?.actor ?? null;
+  await recordAuditEvent({
     action: "client_created_from_email_qualification",
-    actorId: authorization.actorId,
-    actorType: "user",
+    actorId: actor?.actorUserId ?? authorization.actorId,
+    actorType: actor?.actorType ?? authorization.actorType,
     description: "Client créé depuis la qualification email.",
     entityId: clientId,
     entityType: "client",
     payload,
     requestId: null,
     scope: "clients.create",
-    source: "ui",
+    source: actor?.source ?? authorization.source,
   });
 
   revalidatePath("/emails");
@@ -146,6 +161,7 @@ async function insertWithMissingColumnFallback(
   resource: string,
   payload: Record<string, unknown>,
   params?: Record<string, string>,
+  restContext?: { authMode?: "service_role" | "session" } | null,
 ) {
   const currentPayload = { ...payload };
 
@@ -154,6 +170,7 @@ async function insertWithMissingColumnFallback(
       resource,
       cleanPayload(currentPayload),
       params,
+      restContext ?? undefined,
     );
 
     if (!result.error) {

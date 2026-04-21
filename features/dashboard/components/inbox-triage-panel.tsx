@@ -8,23 +8,31 @@ import type { EmailListItem } from "@/features/emails/types";
 import { formatDateTime } from "@/lib/utils";
 
 export function InboxTriagePanel({
+  description = "Derniers messages synchronisés à absorber dans le CRM.",
+  emptyMessage = "Aucun email entrant visible pour le moment.",
   emails,
-}: Readonly<{ emails: EmailListItem[] }>) {
+  href = "/emails",
+  title = "Derniers emails entrants",
+}: Readonly<{
+  description?: string;
+  emptyMessage?: string;
+  emails: EmailListItem[];
+  href?: string;
+  title?: string;
+}>) {
   return (
     <Card>
       <CardHeader className="border-b border-black/[0.06] pb-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Mail className="h-4 w-4 text-muted-foreground" />
-            <CardTitle>Derniers emails entrants</CardTitle>
+            <CardTitle>{title}</CardTitle>
           </div>
           <Badge variant="outline" className="bg-[#fbf8f2]">
             {emails.length}
           </Badge>
         </div>
-        <CardDescription>
-          Derniers messages synchronisés à absorber dans le CRM.
-        </CardDescription>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {emails.length > 0 ? (
@@ -49,7 +57,7 @@ export function InboxTriagePanel({
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
                   <span>{formatDateTime(email.receivedAt)}</span>
                   <Link
-                    href="/emails"
+                    href={href}
                     className="inline-flex items-center gap-1 font-medium text-primary hover:text-primary/80"
                   >
                     Ouvrir l’inbox
@@ -61,7 +69,7 @@ export function InboxTriagePanel({
           ))
         ) : (
           <p className="text-sm text-muted-foreground">
-            Aucun email entrant visible pour le moment.
+            {emptyMessage}
           </p>
         )}
       </CardContent>

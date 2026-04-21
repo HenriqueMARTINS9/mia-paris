@@ -3,6 +3,8 @@ import "server-only";
 export {
   addNoteToProduction,
   addNoteToRequest,
+  assignClientToEmail,
+  createClient,
   createDeadline as createAssistantDeadline,
   createRequest as createAssistantRequest,
   createTask as createAssistantTask,

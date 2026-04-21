@@ -430,6 +430,113 @@ Réponse compacte:
 }
 ```
 
+### `createClient`
+
+Champs obligatoires:
+
+- `name`
+
+Champs optionnels:
+
+- `code`
+
+Payload valide:
+
+```json
+{
+  "name": "Etam",
+  "code": "ETAM"
+}
+```
+
+Réponse compacte:
+
+```json
+{
+  "client": {
+    "clientId": "client-uuid",
+    "code": "ETAM",
+    "label": "Etam"
+  },
+  "format": "compact",
+  "recommendedAction": "Assigner ensuite ce client aux emails ou demandes concernés.",
+  "summary": "Client créé et prêt à être assigné à l’email."
+}
+```
+
+### `assignClientToEmail`
+
+Champs obligatoires:
+
+- `emailId`
+- `clientId`
+
+Payload valide:
+
+```json
+{
+  "emailId": "email-uuid",
+  "clientId": "client-uuid"
+}
+```
+
+Réponse compacte:
+
+```json
+{
+  "assignment": {
+    "clientId": "client-uuid",
+    "emailId": "email-uuid"
+  },
+  "format": "compact",
+  "recommendedAction": "Compléter ensuite la qualification CRM ou créer une demande si le mail est clair.",
+  "summary": "Client assigné à l’email: Etam."
+}
+```
+
+### `createDeadline`
+
+Champs obligatoires:
+
+- `label`
+- `deadlineAt`
+- `priority`
+
+Champs optionnels:
+
+- `requestId`
+
+Valeurs valides:
+
+- `priority`: `critical`, `high`, `normal`
+
+Payload valide:
+
+```json
+{
+  "label": "Valider le dossier avant expédition",
+  "deadlineAt": "2026-04-24",
+  "priority": "high",
+  "requestId": "request-uuid"
+}
+```
+
+Réponse compacte:
+
+```json
+{
+  "deadline": {
+    "deadlineAt": "2026-04-24",
+    "label": "Valider le dossier avant expédition",
+    "priority": "high",
+    "requestId": "request-uuid"
+  },
+  "format": "compact",
+  "recommendedAction": "Vérifier ensuite la demande liée et l'articulation avec les autres échéances.",
+  "summary": "Deadline créée avec succès."
+}
+```
+
 ### `setEmailInboxBucket`
 
 Champs obligatoires:
@@ -573,23 +680,7 @@ Payload valide:
 
 ## Actions sensibles fermées
 
-Ces actions sont reconnues par la couche assistant, mais doivent rester fermées sur la route HTTP externe tant qu’aucun contrôle renforcé supplémentaire n’a été validé:
-
-- `createDeadline`
-
-Réponse attendue:
-
-```json
-{
-  "action": "createDeadline",
-  "auditScope": "openclaw.createDeadline",
-  "code": "forbidden",
-  "data": null,
-  "kind": "write",
-  "message": "L'action createDeadline est classée sensible et reste fermée sur la route HTTP externe OpenClaw.",
-  "ok": false
-}
-```
+À date, aucune action assistant-ready supplémentaire n’est gardée fermée sur la route HTTP externe. Si de nouvelles mutations risquées sont ajoutées plus tard, elles devront revenir dans cette section avant ouverture.
 
 ## Règles de comportement du bridge OpenClaw
 
@@ -600,7 +691,7 @@ Réponse attendue:
 - Ne jamais remplacer une vraie action CRM safe par une simple note mémoire si l’utilisateur demande explicitement la mutation.
 - Utiliser les actions READ sans confirmation.
 - Utiliser les SAFE WRITE uniquement après intention claire.
-- Ne jamais tenter `createDeadline` via l’endpoint externe tant qu’elle reste fermée.
+- Les writes OpenClaw utilisent l’acteur technique serveur et ne dépendent pas d’une session navigateur.
 
 ## Sécurité / audit
 

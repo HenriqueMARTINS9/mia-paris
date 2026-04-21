@@ -18,6 +18,8 @@ import type {
   AssistantActionResult,
   AssistantAddProductionNoteInput,
   AssistantAddRequestNoteInput,
+  AssistantAssignClientToEmailInput,
+  AssistantCreateClientInput,
   AssistantCreateDeadlineInput,
   AssistantCreateRequestInput,
   AssistantCreateTaskInput,
@@ -33,6 +35,7 @@ import type {
   AssistantUrgencyList,
   AssistantWorkspaceData,
 } from "@/features/assistant-actions/types";
+import { createClientAction } from "@/features/clients/actions/create-client";
 import {
   createAssistantActionFailure,
   createAssistantActionSuccess,
@@ -43,7 +46,10 @@ import {
 import { getDeadlinesPageData } from "@/features/deadlines/queries";
 import { runAssistantEmailOpsCycle } from "@/features/emails/lib/assistant-email-ops";
 import { syncLatestGmailMessagesForActor } from "@/features/emails/lib/gmail-sync";
-import { setEmailInboxBucketAction } from "@/features/emails/actions/update-email";
+import {
+  assignClientToEmailAction,
+  setEmailInboxBucketAction,
+} from "@/features/emails/actions/update-email";
 import { getEmailsPageData } from "@/features/emails/queries";
 import { getProductionsPageData } from "@/features/productions/queries";
 import { updateProductionNotesAction } from "@/features/productions/actions/update-production";
@@ -56,6 +62,7 @@ import { getTodayOverviewData } from "@/features/today/queries";
 import { createDeadlineAction } from "@/features/deadlines/actions/create-deadline";
 import { logOperationalError, recordAuditEvent } from "@/lib/action-runtime";
 import { supabaseRestSelectMaybeSingle } from "@/lib/supabase/rest";
+import type { ClientRecord } from "@/types/crm";
 
 interface AssistantCommandExecutionOptions {
   authorizationOverride?: ServerPermissionOverride | null;
@@ -185,6 +192,142 @@ export async function setEmailInboxBucket(
     },
     requestId: null,
     scope: "assistant_actions.set_email_inbox_bucket",
+    source: normalizeAssistantSource(input.source),
+    status: "success",
+  });
+
+  return createAssistantActionSuccess(result, result.message);
+}
+
+export async function createClient(
+  input: AssistantCreateClientInput,
+  options?: AssistantCommandExecutionOptions,
+): Promise<AssistantActionResult<Awaited<ReturnType<typeof createClientAction>>>> {
+  const authorization = await authorizeServerPermissions(
+    ["assistant.write.safe", "clients.create"],
+    options?.authorizationOverride,
+  );
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const nameValidation = validateRequiredText(input.name, "Le nom de client", 2);
+
+  if (!nameValidation.ok) {
+    return createAssistantActionFailure("validation_error", nameValidation.message);
+  }
+
+  const result = await createClientAction(
+    {
+      code: input.code ?? null,
+      name: nameValidation.value,
+    },
+    {
+      actor: options?.mutationContext?.actor ?? null,
+      authorizationOverride:
+        options?.mutationContext?.authorizationOverride ??
+        options?.authorizationOverride ??
+        null,
+      rest: options?.mutationContext?.rest ?? null,
+    },
+  );
+
+  if (!result.ok) {
+    return createAssistantActionFailure("error", result.message);
+  }
+
+  await recordAuditEvent({
+    action: "assistant_create_client",
+    actorId: authorization.actorId,
+    actorType: authorization.actorType,
+    description: result.message,
+    entityId: result.clientId,
+    entityType: "client",
+    payload: {
+      code: input.code ?? null,
+      name: nameValidation.value,
+      source: normalizeAssistantSource(input.source),
+    },
+    requestId: null,
+    scope: "assistant_actions.create_client",
+    source: normalizeAssistantSource(input.source),
+    status: "success",
+  });
+
+  return createAssistantActionSuccess(result, result.message);
+}
+
+export async function assignClientToEmail(
+  input: AssistantAssignClientToEmailInput,
+  options?: AssistantCommandExecutionOptions,
+): Promise<AssistantActionResult<Awaited<ReturnType<typeof assignClientToEmailAction>>>> {
+  const authorization = await authorizeServerPermissions(
+    ["assistant.write.safe", "emails.qualify"],
+    options?.authorizationOverride,
+  );
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const clientResult = await supabaseRestSelectMaybeSingle<ClientRecord>(
+    "clients",
+    {
+      id: `eq.${input.clientId}`,
+      select: "id,name,code",
+    },
+    options?.mutationContext?.rest ?? undefined,
+  );
+
+  if (clientResult.error || !clientResult.data?.id) {
+    return createAssistantActionFailure(
+      "not_found",
+      `Client introuvable pour assignation: ${clientResult.error ?? "client absent."}`,
+    );
+  }
+
+  const clientName =
+    typeof clientResult.data.name === "string" && clientResult.data.name.trim().length > 0
+      ? clientResult.data.name.trim()
+      : null;
+
+  const result = await assignClientToEmailAction(
+    {
+      clientId: input.clientId,
+      clientName,
+      emailId: input.emailId,
+      source: input.source ?? "assistant",
+    },
+    {
+      actor: options?.mutationContext?.actor ?? null,
+      authorizationOverride:
+        options?.mutationContext?.authorizationOverride ??
+        options?.authorizationOverride ??
+        null,
+      rest: options?.mutationContext?.rest ?? null,
+    },
+  );
+
+  if (!result.ok) {
+    return createAssistantActionFailure("error", result.message);
+  }
+
+  await recordAuditEvent({
+    action: "assistant_assign_client_to_email",
+    actorId: authorization.actorId,
+    actorType: authorization.actorType,
+    description: result.message,
+    entityId: input.emailId,
+    entityType: "email",
+    payload: {
+      clientId: input.clientId,
+      clientName,
+      emailId: input.emailId,
+      source: normalizeAssistantSource(input.source),
+    },
+    requestId: null,
+    scope: "assistant_actions.assign_client_to_email",
     source: normalizeAssistantSource(input.source),
     status: "success",
   });
@@ -588,6 +731,13 @@ export async function createDeadline(
     label: labelValidation.value,
     priority: input.priority,
     requestId: input.requestId ?? null,
+  }, {
+    actor: options?.mutationContext?.actor ?? null,
+    authorizationOverride:
+      options?.mutationContext?.authorizationOverride ??
+      options?.authorizationOverride ??
+      null,
+    rest: options?.mutationContext?.rest ?? null,
   });
 
   if (!result.ok) {

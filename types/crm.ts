@@ -295,7 +295,12 @@ export interface EmailRecord {
   is_processed?: boolean | null;
   is_unread?: boolean | null;
   ai_summary?: string | null;
+  classification_confidence?: number | null;
   ai_classification?: JsonValue;
+  classification_json?: JsonValue;
+  assistant_bucket?: string | null;
+  assistant_bucket_confidence?: number | null;
+  assistant_bucket_reason?: string | null;
   received_at?: string | null;
   created_at?: string | null;
   synced_at?: string | null;

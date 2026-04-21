@@ -1,12 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import {
-  ArrowDownToLine,
-  ChevronLeft,
-  ChevronRight,
-  Loader2,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { EmptyState } from "@/components/crm/empty-state";
@@ -16,7 +11,6 @@ import { PageHeader } from "@/components/crm/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select } from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -31,16 +25,13 @@ import { GmailAutoSyncBridge } from "@/features/emails/components/gmail-auto-syn
 import { GmailSyncControls } from "@/features/emails/components/gmail-sync-controls";
 import { MobileEmailDetailSheet } from "@/features/emails/components/mobile-email-detail-sheet";
 import { MobileEmailList } from "@/features/emails/components/mobile-email-list";
-import type {
-  EmailPageSize,
-  EmailsPageData,
-} from "@/features/emails/types";
+import { emailInboxBucketMeta } from "@/features/emails/metadata";
+import type { EmailsPageData } from "@/features/emails/types";
 
 const SEARCH_DEBOUNCE_MS = 280;
 
 export function EmailsPage({
   bucketCounts,
-  counts,
   documentOptions,
   documentOptionsError = null,
   emails,
@@ -93,9 +84,9 @@ export function EmailsPage({
       navigateWithQuery({
         pathname,
         patch: {
-          email: null,
           bucket: selectedBucket === "important" ? null : selectedBucket,
-          page: "1",
+          email: null,
+          page: null,
           search: searchInput.trim() || null,
           status: selectedStatus === "all" ? null : selectedStatus,
         },
@@ -127,10 +118,9 @@ export function EmailsPage({
     filters.search.trim().length > 0 ||
     filters.selectedBucket !== "important" ||
     filters.selectedStatus !== "all";
-  const visibleCountLabel = `${emails.length}/${pagination.totalItems}`;
   const paginationSummary = useMemo(() => {
     if (pagination.totalItems === 0 || emails.length === 0) {
-      return "0 email";
+      return "Aucun email";
     }
 
     const from = (pagination.page - 1) * pagination.perPage + 1;
@@ -153,19 +143,11 @@ export function EmailsPage({
 
   const header = (
     <PageHeader
-      eyebrow="Étape 8 · Emails métier"
+      eyebrow="Flux client"
       title="Emails"
-      badge={`${pagination.totalItems} email${pagination.totalItems > 1 ? "s" : ""}`}
-      description="Inbox métier textile pour absorber le flux entrant, le qualifier vite et le transformer en demandes CRM exploitables."
-      actions={
-        <>
-          <Button variant="outline" className="hidden md:inline-flex">
-            <ArrowDownToLine className="h-4 w-4" />
-            Exporter
-          </Button>
-          <GmailSyncControls gmailInbox={gmailInbox} />
-        </>
-      }
+      badge={`${pagination.totalItems} visibles`}
+      description="Une inbox métier courte et claire : Claw trie, le CRM résume, vous validez ou corrigez si besoin."
+      actions={<GmailSyncControls gmailInbox={gmailInbox} />}
     />
   );
 
@@ -182,19 +164,19 @@ export function EmailsPage({
   }
 
   const emptyStateTitle = hasActiveFilters
-    ? "Aucun email ne correspond aux filtres"
+    ? "Aucun email ne correspond à ce filtre"
     : filters.selectedBucket === "promotional"
-      ? "Aucun email publicitaire détecté"
+      ? "Aucun email publicitaire visible"
       : filters.selectedBucket === "to_review"
-        ? "Aucun email en attente de vérification"
-        : "Aucun email important dans l’inbox";
+        ? "Aucun email à vérifier pour l’instant"
+        : "Aucun email important à vérifier";
   const emptyStateDescription = hasActiveFilters
-    ? "Essaie un autre statut, réduis la recherche ou reviens à la première page."
+    ? "Ajuste la recherche ou reviens à un tri plus large."
     : filters.selectedBucket === "promotional"
-      ? "L’assistant n’a pas encore classé de newsletters ou promotions dans cet onglet."
+      ? "Claw n’a pas laissé de newsletter ou de promotion à cet endroit."
       : filters.selectedBucket === "to_review"
-        ? "Tous les emails visibles ont déjà été classés comme importants ou publicitaires."
-        : "L’inbox principale est vide pour l’instant ou les nouveaux emails attendent encore un tri assistant.";
+        ? "Les cas incertains ont déjà été absorbés ou déplacés."
+        : "L’inbox principale est vide pour le moment.";
 
   return (
     <div className="flex flex-col gap-6">
@@ -208,7 +190,7 @@ export function EmailsPage({
           <div className="md:hidden">
             <MobileFilterSheet
               title="Filtrer les emails"
-              description="Affiner rapidement l’inbox par recherche ou statut de traitement."
+              description="Choisir l’onglet assistant et retrouver vite un message utile."
             >
               <EmailFilters
                 bucketCounts={bucketCounts}
@@ -235,32 +217,21 @@ export function EmailsPage({
           </div>
         </>
       )}
-      <div className="grid gap-4 md:hidden">
-        <div className="grid grid-cols-2 gap-3 rounded-[1.25rem] border border-black/[0.06] bg-[#fbf8f2]/95 p-3">
-          <MobileStatCard label="Important" value={bucketCounts.important} />
-          <MobileStatCard label="À vérifier" value={bucketCounts.toReview} />
-          <MobileStatCard label="Pub" value={bucketCounts.promotional} />
-          <MobileStatCard label="Traités" value={counts.processed} />
-        </div>
 
+      <InboxSummaryCard
+        bucketCounts={bucketCounts}
+        paginationSummary={paginationSummary}
+        selectedBucket={filters.selectedBucket}
+        selectedStatus={filters.selectedStatus}
+      />
+
+      <div className="grid gap-4 md:hidden">
         <Card>
-          <CardHeader className="gap-3 border-b border-black/[0.06] pb-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <Badge variant="outline" className="bg-[#fbf8f2]">
-                  Inbox
-                </Badge>
-                <CardTitle className="mt-2">Emails visibles</CardTitle>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="outline" className="bg-white">
-                  {visibleCountLabel}
-                </Badge>
-                <Badge variant="outline" className="bg-white">
-                  {paginationSummary}
-                </Badge>
-              </div>
-            </div>
+          <CardHeader className="gap-2 border-b border-black/[0.06] pb-4">
+            <CardTitle>Liste des emails</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              10 emails au maximum, pour garder une lecture rapide.
+            </p>
           </CardHeader>
           <CardContent className="space-y-4 p-4">
             {emails.length > 0 ? (
@@ -271,9 +242,7 @@ export function EmailsPage({
                   onSelectEmail={(emailId) => {
                     navigateWithQuery({
                       pathname,
-                      patch: {
-                        email: emailId,
-                      },
+                      patch: { email: emailId },
                       router,
                       searchParams,
                       startTransition: startRoutingTransition,
@@ -296,20 +265,6 @@ export function EmailsPage({
                       startTransition: startRoutingTransition,
                     })
                   }
-                  onPerPageChange={(nextPerPage) =>
-                    navigateWithQuery({
-                      pathname,
-                      patch: {
-                        email: null,
-                        page: "1",
-                        perPage: String(nextPerPage),
-                      },
-                      router,
-                      searchParams,
-                      startTransition: startRoutingTransition,
-                    })
-                  }
-                  perPage={pagination.perPage}
                   totalPages={pagination.totalPages}
                   totalSummary={paginationSummary}
                 />
@@ -345,92 +300,66 @@ export function EmailsPage({
 
       <div className="hidden md:block">
         <Card>
-          <CardHeader className="gap-3 border-b border-black/[0.06] pb-4">
+          <CardHeader className="gap-2 border-b border-black/[0.06] pb-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <Badge variant="outline" className="bg-[#fbf8f2]">
-                  Inbox opérationnelle
+                  Inbox métier
                 </Badge>
                 <CardTitle className="mt-2">Liste des emails</CardTitle>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="outline" className="bg-white">
-                  {visibleCountLabel}
-                </Badge>
-                <Badge variant="outline" className="bg-white">
-                  {bucketCounts.important} importants
-                </Badge>
-                <Badge variant="outline" className="bg-white">
-                  {bucketCounts.toReview} à vérifier
-                </Badge>
-                <Badge variant="outline" className="bg-white">
-                  {bucketCounts.promotional} pub
-                </Badge>
-              </div>
+              <Badge variant="outline" className="bg-white">
+                {paginationSummary}
+              </Badge>
             </div>
+            <p className="text-sm text-muted-foreground">
+              Vue courte et lisible, 10 emails seulement par page.
+            </p>
           </CardHeader>
-          {emails.length > 0 ? (
-            <>
-              <CardContent className="px-0 pb-0">
-                <EmailsTable
-                  emails={emails}
-                  selectedEmailId={highlightedEmailId}
-                  onSelectEmail={(emailId) => {
-                    navigateWithQuery({
-                      pathname,
-                      patch: {
-                        email: emailId,
-                      },
-                      router,
-                      searchParams,
-                      startTransition: startRoutingTransition,
-                    });
-                  }}
-                />
-              </CardContent>
-              <CardContent className="border-t border-black/[0.06] p-4">
-                <EmailPaginationControls
-                  currentPage={pagination.page}
-                  disabled={isRoutingPending}
-                  onPageChange={(nextPage) =>
-                    navigateWithQuery({
-                      pathname,
-                      patch: {
-                        email: null,
-                        page: String(nextPage),
-                      },
-                      router,
-                      searchParams,
-                      startTransition: startRoutingTransition,
-                    })
-                  }
-                  onPerPageChange={(nextPerPage) =>
-                    navigateWithQuery({
-                      pathname,
-                      patch: {
-                        email: null,
-                        page: "1",
-                        perPage: String(nextPerPage),
-                      },
-                      router,
-                      searchParams,
-                      startTransition: startRoutingTransition,
-                    })
-                  }
-                  perPage={pagination.perPage}
-                  totalPages={pagination.totalPages}
-                  totalSummary={paginationSummary}
-                />
-              </CardContent>
-            </>
-          ) : (
-            <CardContent className="p-6">
-              <EmptyState
-                title={emptyStateTitle}
-                description={emptyStateDescription}
+          <CardContent className="px-0 pb-0">
+            {emails.length > 0 ? (
+              <EmailsTable
+                emails={emails}
+                selectedEmailId={highlightedEmailId}
+                onSelectEmail={(emailId) => {
+                  navigateWithQuery({
+                    pathname,
+                    patch: { email: emailId },
+                    router,
+                    searchParams,
+                    startTransition: startRoutingTransition,
+                  });
+                }}
               />
-            </CardContent>
-          )}
+            ) : (
+              <div className="p-6">
+                <EmptyState
+                  title={emptyStateTitle}
+                  description={emptyStateDescription}
+                />
+              </div>
+            )}
+          </CardContent>
+          <CardContent className="border-t border-black/[0.06] p-4">
+            <EmailPaginationControls
+              currentPage={pagination.page}
+              disabled={isRoutingPending}
+              onPageChange={(nextPage) =>
+                navigateWithQuery({
+                  pathname,
+                  patch: {
+                    email: null,
+                    page: String(nextPage),
+                  },
+                  router,
+                  searchParams,
+                  startTransition: startRoutingTransition,
+                })
+              }
+              totalPages={pagination.totalPages}
+              totalSummary={paginationSummary}
+            />
+          </CardContent>
         </Card>
       </div>
 
@@ -443,12 +372,12 @@ export function EmailsPage({
             }
           }}
         >
-          <SheetContent className="hidden w-full max-w-none border-l-0 p-0 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:translate-x-full data-[state=open]:translate-x-0 md:flex md:max-w-[46rem] md:border-l">
+          <SheetContent className="hidden w-full max-w-none border-l-0 p-0 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:translate-x-full data-[state=open]:translate-x-0 md:flex md:max-w-[42rem] md:border-l">
             <div className="flex h-full min-h-0 flex-col">
               <SheetHeader className="border-b border-black/[0.06] px-6 py-5">
                 <SheetTitle>Email métier</SheetTitle>
                 <SheetDescription>
-                  Aperçu complet, qualification, rattachement CRM et pièces jointes sans réduire la largeur de la liste.
+                  Vue courte pour décider vite, avec le fil complet seulement si vous l’ouvrez.
                 </SheetDescription>
               </SheetHeader>
               <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
@@ -471,20 +400,54 @@ export function EmailsPage({
   );
 }
 
-function MobileStatCard({
-  label,
-  value,
+function InboxSummaryCard({
+  bucketCounts,
+  paginationSummary,
+  selectedBucket,
+  selectedStatus,
 }: Readonly<{
-  label: string;
-  value: number;
+  bucketCounts: EmailsPageData["bucketCounts"];
+  paginationSummary: string;
+  selectedBucket: EmailsPageData["filters"]["selectedBucket"];
+  selectedStatus: EmailsPageData["filters"]["selectedStatus"];
 }>) {
+  const selectedBucketLabel =
+    selectedBucket === "all"
+      ? "Tous les emails"
+      : emailInboxBucketMeta[selectedBucket].label;
+
   return (
-    <div className="rounded-[1rem] border border-black/[0.06] bg-white px-3 py-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-2 text-xl font-semibold tracking-tight">{value}</p>
-    </div>
+    <Card>
+      <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-foreground">
+            {selectedBucketLabel}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {selectedStatus === "all"
+              ? "Tous statuts"
+              : selectedStatus === "review"
+                ? "Emails à revoir"
+                : "Emails déjà traités"}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline" className="bg-white">
+            {paginationSummary}
+          </Badge>
+          <Badge variant="outline" className="bg-white">
+            {bucketCounts.important} importants
+          </Badge>
+          <Badge variant="outline" className="bg-white">
+            {bucketCounts.toReview} à vérifier
+          </Badge>
+          <Badge variant="outline" className="bg-white">
+            {bucketCounts.promotional} pub
+          </Badge>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -508,39 +471,22 @@ function EmailPaginationControls({
   currentPage,
   disabled = false,
   onPageChange,
-  onPerPageChange,
-  perPage,
   totalPages,
   totalSummary,
 }: Readonly<{
   currentPage: number;
   disabled?: boolean;
   onPageChange: (page: number) => void;
-  onPerPageChange: (perPage: EmailPageSize) => void;
-  perPage: EmailPageSize;
   totalPages: number;
   totalSummary: string;
 }>) {
   return (
     <div className="flex flex-col gap-3 rounded-[1.25rem] border border-black/[0.06] bg-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+      <div className="space-y-1">
         <p className="text-sm font-medium text-foreground">{totalSummary}</p>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-            Par page
-          </span>
-          <Select
-            value={String(perPage)}
-            onChange={(event) =>
-              onPerPageChange(Number(event.target.value) as EmailPageSize)
-            }
-            className="h-9 w-[92px] rounded-full border-black/[0.06] bg-[#fbf8f2] px-3 py-1 text-xs shadow-none"
-            disabled={disabled}
-          >
-            <option value="10">10</option>
-            <option value="15">15</option>
-          </Select>
-        </div>
+        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+          Pagination fixe 10 / 10
+        </p>
       </div>
 
       <div className="flex items-center justify-between gap-3 sm:justify-end">

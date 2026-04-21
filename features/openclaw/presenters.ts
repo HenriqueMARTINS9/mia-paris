@@ -47,6 +47,9 @@ export function presentOpenClawData(input: {
     case "runEmailOpsCycle":
       return presentEmailOpsCycle(input.data);
     case "runGmailSync":
+    case "createClient":
+    case "assignClientToEmail":
+    case "createDeadline":
     case "createRequest":
     case "createTask":
     case "addNoteToRequest":
@@ -294,6 +297,50 @@ function presentSafeWriteResult(input: {
         status: readString(payload, "status"),
         title: readString(payload, "title"),
       },
+      summary: resultMessage,
+    };
+  }
+
+  if (input.action === "createDeadline") {
+    return {
+      deadline: {
+        deadlineAt: readString(payload, "deadlineAt"),
+        label: readString(payload, "label"),
+        priority: readString(payload, "priority"),
+        requestId: readString(payload, "requestId"),
+      },
+      format: "compact" as const,
+      recommendedAction:
+        "Vérifier ensuite la demande liée et l'articulation avec les autres échéances.",
+      summary: resultMessage,
+    };
+  }
+
+  if (input.action === "createClient") {
+    const result = isRecord(input.data) ? input.data : {};
+    const client = isRecord(result.client) ? result.client : null;
+
+    return {
+      client: {
+        clientId: readString(result, "clientId"),
+        code: client ? readString(client, "secondary") : readString(payload, "code"),
+        label: client ? readString(client, "label") : readString(payload, "name"),
+      },
+      format: "compact" as const,
+      recommendedAction: "Assigner ensuite ce client aux emails ou demandes concernés.",
+      summary: resultMessage,
+    };
+  }
+
+  if (input.action === "assignClientToEmail") {
+    return {
+      assignment: {
+        clientId: readString(payload, "clientId"),
+        emailId: readString(payload, "emailId"),
+      },
+      format: "compact" as const,
+      recommendedAction:
+        "Compléter ensuite la qualification CRM ou créer une demande si le mail est clair.",
       summary: resultMessage,
     };
   }

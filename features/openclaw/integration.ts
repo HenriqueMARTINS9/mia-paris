@@ -4,6 +4,9 @@ import type { AssistantMutationExecutionContext } from "@/features/assistant-act
 import {
   addNoteToProduction,
   addNoteToRequest,
+  assignClientToEmail,
+  createClient,
+  createDeadline,
   createRequest,
   createTask,
   getBlockedProductions,
@@ -24,6 +27,9 @@ import type {
   AssistantActionResult,
   AssistantAddProductionNoteInput,
   AssistantAddRequestNoteInput,
+  AssistantAssignClientToEmailInput,
+  AssistantCreateClientInput,
+  AssistantCreateDeadlineInput,
   AssistantCreateRequestInput,
   AssistantCreateTaskInput,
   AssistantPrepareReplyDraftInput,
@@ -53,6 +59,9 @@ export type OpenClawReadActionName =
 export type OpenClawSafeWriteActionName =
   | "addNoteToProduction"
   | "addNoteToRequest"
+  | "assignClientToEmail"
+  | "createClient"
+  | "createDeadline"
   | "createRequest"
   | "createTask"
   | "prepareReplyDraft"
@@ -64,7 +73,7 @@ export type OpenClawExposedActionName =
   | OpenClawReadActionName
   | OpenClawSafeWriteActionName;
 
-export type OpenClawFutureSensitiveActionName = "createDeadline";
+export type OpenClawFutureSensitiveActionName = never;
 
 export interface OpenClawActionDescriptor {
   action: OpenClawExposedActionName | OpenClawFutureSensitiveActionName;
@@ -113,6 +122,9 @@ export const openClawSafeWriteActionNames: OpenClawSafeWriteActionName[] = [
   "runEmailOpsCycle",
   "runGmailSync",
   "setEmailInboxBucket",
+  "createClient",
+  "assignClientToEmail",
+  "createDeadline",
   "createRequest",
   "createTask",
   "addNoteToRequest",
@@ -125,9 +137,7 @@ const openClawSafeWriteActionSet = new Set<OpenClawSafeWriteActionName>(
   openClawSafeWriteActionNames,
 );
 
-export const openClawFutureSensitiveActionNames: OpenClawFutureSensitiveActionName[] = [
-  "createDeadline",
-];
+export const openClawFutureSensitiveActionNames: OpenClawFutureSensitiveActionName[] = [];
 
 const openClawActionSamples: Record<
   OpenClawExposedActionName | OpenClawFutureSensitiveActionName,
@@ -140,6 +150,14 @@ const openClawActionSamples: Record<
   addNoteToRequest: {
     note: "Le client attend un retour sur le prix avant demain 11h.",
     requestId: "request-uuid",
+  },
+  assignClientToEmail: {
+    clientId: "client-uuid",
+    emailId: "email-uuid",
+  },
+  createClient: {
+    code: "ETAM",
+    name: "Etam",
   },
   createDeadline: {
     deadlineAt: "2026-04-02",
@@ -421,6 +439,42 @@ async function dispatchOpenClawAction(
           })
         : parsed.result;
     }
+    case "createClient": {
+      const parsed = parseCreateClientInput(input);
+      return parsed.ok
+        ? createClient({
+            ...parsed.value,
+            source: "assistant",
+          }, {
+            authorizationOverride: options?.authorizationOverride,
+            mutationContext: options?.mutationContext ?? null,
+          })
+        : parsed.result;
+    }
+    case "assignClientToEmail": {
+      const parsed = parseAssignClientToEmailInput(input);
+      return parsed.ok
+        ? assignClientToEmail({
+            ...parsed.value,
+            source: "assistant",
+          }, {
+            authorizationOverride: options?.authorizationOverride,
+            mutationContext: options?.mutationContext ?? null,
+          })
+        : parsed.result;
+    }
+    case "createDeadline": {
+      const parsed = parseCreateDeadlineInput(input);
+      return parsed.ok
+        ? createDeadline({
+            ...parsed.value,
+            source: "assistant",
+          }, {
+            authorizationOverride: options?.authorizationOverride,
+            mutationContext: options?.mutationContext ?? null,
+          })
+        : parsed.result;
+    }
     case "createTask": {
       const parsed = parseCreateTaskInput(input);
       return parsed.ok
@@ -560,6 +614,80 @@ function parseCreateTaskInput(input: unknown) {
       taskType: input.taskType,
       title: input.title,
     } satisfies AssistantCreateTaskInput,
+  };
+}
+
+function parseCreateDeadlineInput(input: unknown) {
+  if (!isRecord(input)) {
+    return invalidPayloadResult("Payload invalide pour createDeadline.");
+  }
+
+  if (
+    typeof input.label !== "string" ||
+    typeof input.deadlineAt !== "string" ||
+    typeof input.priority !== "string"
+  ) {
+    return invalidPayloadResult(
+      "Les champs label, deadlineAt et priority sont requis pour createDeadline.",
+    );
+  }
+
+  if (
+    !requestPriorityOptions.includes(
+      input.priority as AssistantCreateDeadlineInput["priority"],
+    )
+  ) {
+    return invalidPayloadResult(
+      `priority invalide pour createDeadline. Valeurs supportées: ${requestPriorityOptions.join(", ")}.`,
+    );
+  }
+
+  return {
+    ok: true as const,
+    value: {
+      deadlineAt: input.deadlineAt,
+      label: input.label,
+      priority: input.priority as AssistantCreateDeadlineInput["priority"],
+      requestId: typeof input.requestId === "string" ? input.requestId : null,
+    } satisfies AssistantCreateDeadlineInput,
+  };
+}
+
+function parseCreateClientInput(input: unknown) {
+  if (!isRecord(input)) {
+    return invalidPayloadResult("Payload invalide pour createClient.");
+  }
+
+  if (typeof input.name !== "string") {
+    return invalidPayloadResult("Le champ name est requis pour createClient.");
+  }
+
+  return {
+    ok: true as const,
+    value: {
+      code: typeof input.code === "string" ? input.code : null,
+      name: input.name,
+    } satisfies AssistantCreateClientInput,
+  };
+}
+
+function parseAssignClientToEmailInput(input: unknown) {
+  if (!isRecord(input)) {
+    return invalidPayloadResult("Payload invalide pour assignClientToEmail.");
+  }
+
+  if (typeof input.emailId !== "string" || typeof input.clientId !== "string") {
+    return invalidPayloadResult(
+      "Les champs emailId et clientId sont requis pour assignClientToEmail.",
+    );
+  }
+
+  return {
+    ok: true as const,
+    value: {
+      clientId: input.clientId,
+      emailId: input.emailId,
+    } satisfies AssistantAssignClientToEmailInput,
   };
 }
 
@@ -838,6 +966,16 @@ function sanitizeAuditInput(action: OpenClawExposedActionName, input: unknown) {
         productionId:
           typeof input.productionId === "string" ? input.productionId : null,
       };
+    case "createClient":
+      return {
+        code: typeof input.code === "string" ? input.code : null,
+        name: typeof input.name === "string" ? input.name.slice(0, 120) : null,
+      };
+    case "assignClientToEmail":
+      return {
+        clientId: typeof input.clientId === "string" ? input.clientId : null,
+        emailId: typeof input.emailId === "string" ? input.emailId : null,
+      };
     case "createRequest":
       return {
         clientId: typeof input.clientId === "string" ? input.clientId : null,
@@ -847,6 +985,14 @@ function sanitizeAuditInput(action: OpenClawExposedActionName, input: unknown) {
           typeof input.requestType === "string" ? input.requestType : null,
         status: typeof input.status === "string" ? input.status : null,
         title: typeof input.title === "string" ? input.title.slice(0, 120) : null,
+      };
+    case "createDeadline":
+      return {
+        deadlineAt:
+          typeof input.deadlineAt === "string" ? input.deadlineAt : null,
+        label: typeof input.label === "string" ? input.label.slice(0, 120) : null,
+        priority: typeof input.priority === "string" ? input.priority : null,
+        requestId: typeof input.requestId === "string" ? input.requestId : null,
       };
     case "createTask":
       return {
@@ -903,8 +1049,18 @@ function getAuditEntityId(action: OpenClawExposedActionName, input: unknown) {
       return typeof input.clientName === "string" ? input.clientName : null;
     case "searchModelHistory":
       return typeof input.modelName === "string" ? input.modelName : null;
+    case "createClient":
+      return typeof input.name === "string" ? input.name : null;
+    case "assignClientToEmail":
+      return typeof input.emailId === "string" ? input.emailId : null;
     case "createRequest":
       return typeof input.title === "string" ? input.title : null;
+    case "createDeadline":
+      return typeof input.requestId === "string"
+        ? input.requestId
+        : typeof input.label === "string"
+          ? input.label
+          : null;
     case "createTask":
     case "addNoteToRequest":
       return typeof input.requestId === "string" ? input.requestId : null;
@@ -927,6 +1083,8 @@ function getAuditEntityType(action: OpenClawExposedActionName) {
   switch (action) {
     case "createRequest":
       return "request";
+    case "createDeadline":
+      return "deadline";
     case "createTask":
       return "task";
     case "addNoteToRequest":
@@ -936,6 +1094,10 @@ function getAuditEntityType(action: OpenClawExposedActionName) {
     case "getBlockedProductions":
     case "getHighRiskProductions":
       return "production";
+    case "createClient":
+      return "client";
+    case "assignClientToEmail":
+      return "email";
     case "prepareReplyDraft":
       return "reply_draft";
     case "runGmailSync":
@@ -960,6 +1122,14 @@ function getAuditRequestId(action: OpenClawExposedActionName, input: unknown) {
   }
 
   if (action === "createRequest") {
+    return null;
+  }
+
+  if (action === "createDeadline" && typeof input.requestId === "string") {
+    return input.requestId;
+  }
+
+  if (action === "assignClientToEmail") {
     return null;
   }
 

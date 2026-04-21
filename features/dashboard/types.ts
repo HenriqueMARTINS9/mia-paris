@@ -3,20 +3,31 @@ import type {
   GmailInboxStatus,
   GmailSyncMode,
 } from "@/features/emails/types";
+import type { DeadlineListItem } from "@/features/deadlines/types";
 import type { ProductionListItem } from "@/features/productions/types";
 import type { RequestOverviewListItem } from "@/features/requests/types";
-import type { TaskListItem } from "@/features/tasks/types";
-import type { AutomationOverviewData } from "@/features/automations/types";
 
 export interface DashboardKpis {
   emailsToReview: number;
+  importantEmails: number;
   openEmails: number;
   pendingValidations: number;
   productionsBlocked: number;
+  productionsHighRisk: number;
   requestsCreatedToday: number;
   requestsWithoutOwner: number;
   tasksOverdue: number;
+  urgenciesToday: number;
   urgencies24h: number;
+}
+
+export interface DashboardAssistantActionItem {
+  createdAt: string;
+  description: string;
+  href: string | null;
+  id: string;
+  status: "failure" | "info" | "success";
+  title: string;
 }
 
 export interface GmailSyncSummary {
@@ -35,16 +46,17 @@ export interface GmailSyncSummary {
 }
 
 export interface DashboardPageData {
-  automationOverview: AutomationOverviewData;
+  blockedProductions: ProductionListItem[];
   emailRequestCreationFailures: number;
   emailRequestsCreated: number;
   error: string | null;
   gmailInbox: GmailInboxStatus;
+  highRiskProductions: ProductionListItem[];
+  importantEmails: EmailListItem[];
   kpis: DashboardKpis;
-  latestEmails: EmailListItem[];
   latestSyncs: GmailSyncSummary[];
-  priorityRequests: RequestOverviewListItem[];
-  productionsAtRisk: ProductionListItem[];
+  recentAssistantActions: DashboardAssistantActionItem[];
   syncError: string | null;
-  tasksUrgent: TaskListItem[];
+  unassignedRequests: RequestOverviewListItem[];
+  urgentDeadlines: DeadlineListItem[];
 }

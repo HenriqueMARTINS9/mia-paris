@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
-import { authorizeServerAction } from "@/features/auth/server-authorization";
+import type { AssistantMutationExecutionContext } from "@/features/assistant-actions/execution-context";
+import { authorizeServerPermissions } from "@/features/auth/server-authorization";
 import { notifyUrgentDeadline } from "@/features/notifications/lib/operational-notifications";
 import { mapUiPriorityToDatabasePriority } from "@/features/deadlines/metadata";
 import type { DeadlinePriority } from "@/features/deadlines/types";
@@ -19,8 +20,12 @@ interface CreateDeadlineInput {
 
 export async function createDeadlineAction(
   input: CreateDeadlineInput,
+  context?: AssistantMutationExecutionContext,
 ): Promise<RequestMutationResult> {
-  const authorization = await authorizeServerAction("deadlines.create");
+  const authorization = await authorizeServerPermissions(
+    ["deadlines.create"],
+    context?.authorizationOverride,
+  );
 
   if (!authorization.ok) {
     return {
@@ -57,26 +62,33 @@ export async function createDeadlineAction(
     payload.request_id = input.requestId;
   }
 
+  const actor = context?.actor ?? null;
+  const auditActorId = actor?.actorUserId ?? authorization.actorId;
+  const auditActorType = actor?.actorType ?? authorization.actorType;
+  const auditSource = actor?.source ?? authorization.source;
+  const auditPayload = buildDeadlineAuditPayload(payload, actor);
+
   const result = await supabaseRestInsert<Array<Record<string, unknown>>>(
     "deadlines",
     payload,
     {
       select: "id,label",
     },
+    context?.rest ?? undefined,
   );
 
   if (result.error) {
     await recordAuditEvent({
       action: "create_deadline",
-      actorId: authorization.actorId,
-      actorType: "user",
+      actorId: auditActorId,
+      actorType: auditActorType,
       description: `Création de deadline impossible: ${result.error}`,
       entityId: input.requestId ?? null,
       entityType: "deadline",
-      payload,
+      payload: auditPayload,
       requestId: input.requestId ?? null,
       scope: "deadlines.create",
-      source: "ui",
+      source: auditSource,
       status: "failure",
     });
 
@@ -90,16 +102,16 @@ export async function createDeadlineAction(
   if (!result.data || result.data.length === 0) {
     await recordAuditEvent({
       action: "create_deadline",
-      actorId: authorization.actorId,
-      actorType: "user",
+      actorId: auditActorId,
+      actorType: auditActorType,
       description:
         "Aucune deadline n'a été créée. Vérifie les policies RLS et la structure de la table deadlines.",
       entityId: input.requestId ?? null,
       entityType: "deadline",
-      payload,
+      payload: auditPayload,
       requestId: input.requestId ?? null,
       scope: "deadlines.create",
-      source: "ui",
+      source: auditSource,
       status: "failure",
     });
 
@@ -126,16 +138,16 @@ export async function createDeadlineAction(
 
   await recordAuditEvent({
     action: "create_deadline",
-    actorId: authorization.actorId,
-    actorType: "user",
+    actorId: auditActorId,
+    actorType: auditActorType,
     description: "Deadline créée.",
     entityId:
       typeof result.data[0]?.id === "string" ? result.data[0].id : input.requestId ?? null,
     entityType: "deadline",
-    payload,
+    payload: auditPayload,
     requestId: input.requestId ?? null,
     scope: "deadlines.create",
-    source: "ui",
+    source: auditSource,
     status: "success",
   });
 
@@ -143,5 +155,22 @@ export async function createDeadlineAction(
     ok: true,
     field: "deadline_at",
     message: "Deadline créée avec succès.",
+  };
+}
+
+function buildDeadlineAuditPayload(
+  payload: Record<string, unknown>,
+  actor: AssistantMutationExecutionContext["actor"] | null,
+) {
+  if (!actor) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    actorEmail: actor.actorEmail,
+    actorType: actor.actorType,
+    actorUserId: actor.actorUserId,
+    source: actor.source,
   };
 }

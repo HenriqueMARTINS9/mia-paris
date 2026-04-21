@@ -14,7 +14,6 @@ interface EmailsRoutePageProps {
     bucket?: string;
     email?: string;
     page?: string;
-    perPage?: string;
     search?: string;
     status?: string;
   }>;
@@ -26,11 +25,11 @@ export default async function EmailsRoutePage({
   const resolvedSearchParams = (await searchParams) ?? {};
   const data = await getPaginatedEmailsPageData(
     Number(resolvedSearchParams.page ?? 1),
-    Number(resolvedSearchParams.perPage ?? 15) as 10 | 15,
+    10,
     resolvedSearchParams.search ?? "",
     (resolvedSearchParams.bucket as "all" | "important" | "promotional" | "to_review" | undefined) ??
       "important",
-    (resolvedSearchParams.status as "all" | "new" | "review" | "processed" | undefined) ??
+    (resolvedSearchParams.status as "all" | "review" | "processed" | undefined) ??
       "all",
     resolvedSearchParams.email ?? null,
   );

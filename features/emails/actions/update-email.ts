@@ -50,6 +50,13 @@ interface SaveEmailQualificationInput {
   source?: "assistant" | "system" | "ui";
 }
 
+interface AssignClientToEmailInput {
+  clientId: string;
+  clientName?: string | null;
+  emailId: string;
+  source?: "assistant" | "system" | "ui";
+}
+
 export async function markEmailProcessedAction(
   input: Omit<UpdateEmailStatusInput, "status">,
 ): Promise<EmailMutationResult> {
@@ -198,6 +205,120 @@ export async function saveEmailQualificationAction(
     requestId: null,
     scope: "emails.qualification",
     source: input.source ?? "ui",
+    status: "failure",
+  });
+
+  return result;
+}
+
+export async function assignClientToEmailAction(
+  input: AssignClientToEmailInput,
+  context?: AssistantMutationExecutionContext,
+): Promise<EmailMutationResult> {
+  const authorization = context?.authorizationOverride
+    ? await authorizeServerPermissions(["emails.qualify"], context.authorizationOverride)
+    : await authorizeServerAction("emails.qualify");
+
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      field: "qualification",
+      message: authorization.message,
+    };
+  }
+
+  if (!input.emailId || !input.clientId) {
+    return {
+      ok: false,
+      field: "qualification",
+      message: "Les champs emailId et clientId sont requis.",
+    };
+  }
+
+  const emailResult = await supabaseRestSelectMaybeSingle<EmailRecord>(
+    "emails",
+    {
+      id: `eq.${input.emailId}`,
+      select: "*",
+    },
+    context?.rest ?? undefined,
+  );
+
+  if (emailResult.error || !emailResult.data) {
+    return {
+      ok: false,
+      field: "qualification",
+      message: `Impossible de charger l’email: ${emailResult.error ?? "email introuvable."}`,
+    };
+  }
+
+  const classificationPatch = {
+    client_id: input.clientId,
+    client_name: input.clientName ?? null,
+    qualification_source: input.source ?? "assistant",
+    qualifiedAt: new Date().toISOString(),
+    source: input.source ?? "assistant",
+  };
+  const mergedClassification = mergeEmailClassificationPayload(
+    emailResult.data,
+    classificationPatch,
+  );
+  const payloads: Array<Record<string, unknown>> = [
+    {
+      ai_classification: mergedClassification,
+      client_id: input.clientId,
+      detected_client_name: input.clientName ?? null,
+    },
+    {
+      classification_json: mergedClassification,
+      client_id: input.clientId,
+      detected_client_name: input.clientName ?? null,
+    },
+    {
+      client_id: input.clientId,
+      detected_client_name: input.clientName ?? null,
+    },
+  ];
+
+  const result = await patchEmailWithPayloads(
+    {
+      emailId: input.emailId,
+      field: "qualification",
+      payloads,
+      successMessage: input.clientName
+        ? `Client assigné à l’email: ${input.clientName}.`
+        : "Client assigné à l’email.",
+    },
+    context,
+  );
+
+  if (result.ok) {
+    await createActivityLogEntry({
+      action: "email_client_assigned",
+      actorId: authorization.actorId,
+      description: `Client assigné à l’email ${input.emailId}.`,
+      entityId: input.emailId,
+      entityType: "email",
+      payload: classificationPatch,
+      requestId: null,
+      scope: "emails.client_assignment",
+      source: input.source ?? "assistant",
+      status: "success",
+    });
+
+    return result;
+  }
+
+  await createActivityLogEntry({
+    action: "email_client_assignment_failed",
+    actorId: authorization.actorId,
+    description: result.message,
+    entityId: input.emailId,
+    entityType: "email",
+    payload: classificationPatch,
+    requestId: null,
+    scope: "emails.client_assignment",
+    source: input.source ?? "assistant",
     status: "failure",
   });
 

@@ -75,9 +75,14 @@ export function MobileEmailCard({
       </div>
 
       <div className="mt-4 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          {email.detectedType ? <span>{email.detectedType}</span> : null}
-          {email.isUnread ? <Badge>Non lu</Badge> : null}
+        <div className="min-w-0 text-xs text-muted-foreground">
+          <p className="line-clamp-2">
+            {email.linkedRequestId
+              ? "Déjà relié à une demande"
+              : email.status === "processed"
+                ? "Déjà traité côté CRM"
+                : "À vérifier rapidement"}
+          </p>
         </div>
         <Button
           type="button"

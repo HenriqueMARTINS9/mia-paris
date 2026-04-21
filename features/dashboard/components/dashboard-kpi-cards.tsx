@@ -1,8 +1,9 @@
 import {
-  Clock3,
+  AlertTriangle,
   Factory,
+  FolderKanban,
   Inbox,
-  ListTodo,
+  ShieldAlert,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -14,25 +15,25 @@ export function DashboardKpiCards({
 }: Readonly<{ kpis: DashboardKpis }>) {
   const primaryStats = [
     {
-      label: "Emails non traités",
-      value: kpis.openEmails,
-      helper: "Inbox à absorber",
-      icon: Inbox,
+      label: "Urgences du jour",
+      value: kpis.urgenciesToday,
+      helper: "À arbitrer vite",
+      icon: AlertTriangle,
+      tone: "danger" as const,
+    },
+    {
+      label: "Demandes non assignées",
+      value: kpis.requestsWithoutOwner,
+      helper: "Responsable manquant",
+      icon: FolderKanban,
       tone: "primary" as const,
     },
     {
-      label: "Urgences < 24h",
-      value: kpis.urgencies24h,
-      helper: "À arbitrer",
-      icon: Clock3,
-      tone: "danger" as const,
-    },
-    {
-      label: "Tâches en retard",
-      value: kpis.tasksOverdue,
-      helper: "Actions échues",
-      icon: ListTodo,
-      tone: "danger" as const,
+      label: "Emails importants",
+      value: kpis.importantEmails,
+      helper: "À vérifier",
+      icon: Inbox,
+      tone: "primary" as const,
     },
     {
       label: "Productions bloquées",
@@ -45,24 +46,11 @@ export function DashboardKpiCards({
 
   const secondaryStats = [
     {
-      label: "Demandes créées",
-      value: kpis.requestsCreatedToday,
-      helper: "Aujourd’hui",
-    },
-    {
-      label: "Validations en attente",
-      value: kpis.pendingValidations,
-      helper: "Décisions ouvertes",
-    },
-    {
-      label: "Sans assignation",
-      value: kpis.requestsWithoutOwner,
-      helper: "Owner manquant",
-    },
-    {
-      label: "Emails à revoir",
-      value: kpis.emailsToReview,
-      helper: "Arbitrage humain",
+      label: "Productions à risque",
+      value: kpis.productionsHighRisk,
+      helper: "Sous surveillance",
+      icon: ShieldAlert,
+      tone: "primary" as const,
     },
   ];
 
@@ -88,7 +76,7 @@ export function DashboardKpiCards({
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {secondaryStats.map((item) => (
-            <SecondaryKpiTile key={item.label} {...item} />
+            <PrimaryKpiTile key={item.label} {...item} />
           ))}
         </div>
       </CardContent>
@@ -132,28 +120,6 @@ function PrimaryKpiTile({
         </div>
       </div>
       <p className="mt-3 text-sm text-muted-foreground">{helper}</p>
-    </div>
-  );
-}
-
-function SecondaryKpiTile({
-  helper,
-  label,
-  value,
-}: Readonly<{
-  helper: string;
-  label: string;
-  value: number;
-}>) {
-  return (
-    <div className="rounded-[1.05rem] border border-black/[0.06] bg-white px-4 py-3.5">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-        {label}
-      </p>
-      <div className="mt-2 flex items-end justify-between gap-3">
-        <p className="text-2xl font-semibold tracking-tight text-foreground">{value}</p>
-        <p className="text-sm text-muted-foreground">{helper}</p>
-      </div>
     </div>
   );
 }

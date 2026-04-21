@@ -9,7 +9,8 @@ export type EmailProcessingStatus = "new" | "review" | "processed";
 export type EmailInboxBucket = "important" | "promotional" | "to_review";
 export type EmailInboxBucketSource = "stored" | "rules_v1";
 
-export type EmailPageSize = 10 | 15;
+export type EmailPageSize = 10;
+export type EmailListStatusFilter = "all" | "review" | "processed";
 
 export type EmailQualificationRequestType =
   | "price_request"
@@ -143,7 +144,7 @@ export interface EmailBucketCounts {
 export interface EmailsPageFilters {
   search: string;
   selectedBucket: "all" | EmailInboxBucket;
-  selectedStatus: "all" | EmailProcessingStatus;
+  selectedStatus: EmailListStatusFilter;
 }
 
 export interface EmailsPagination {

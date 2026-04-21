@@ -9,7 +9,7 @@ import { emailInboxBucketMeta, emailStatusMeta } from "@/features/emails/metadat
 import type {
   EmailBucketCounts,
   EmailInboxBucket,
-  EmailProcessingStatus,
+  EmailListStatusFilter,
 } from "@/features/emails/types";
 import { cn } from "@/lib/utils";
 
@@ -17,10 +17,10 @@ interface EmailFiltersProps {
   bucketCounts: EmailBucketCounts;
   onBucketChange: (value: "all" | EmailInboxBucket) => void;
   onSearchChange: (value: string) => void;
-  onStatusChange: (value: "all" | EmailProcessingStatus) => void;
+  onStatusChange: (value: EmailListStatusFilter) => void;
   search: string;
   selectedBucket: "all" | EmailInboxBucket;
-  selectedStatus: "all" | EmailProcessingStatus;
+  selectedStatus: EmailListStatusFilter;
 }
 
 const bucketOptions: Array<"all" | EmailInboxBucket> = [
@@ -30,12 +30,17 @@ const bucketOptions: Array<"all" | EmailInboxBucket> = [
   "all",
 ];
 
-const statusOptions: Array<"all" | EmailProcessingStatus> = [
+const statusOptions: EmailListStatusFilter[] = [
   "all",
-  "new",
   "review",
   "processed",
 ];
+
+const statusLabels: Record<EmailListStatusFilter, string> = {
+  all: "Tous",
+  processed: "Traités",
+  review: "À revoir",
+};
 
 export function EmailFilters({
   bucketCounts,
@@ -48,11 +53,16 @@ export function EmailFilters({
 }: Readonly<EmailFiltersProps>) {
   return (
     <Card>
-      <CardContent className="flex flex-col gap-4 p-4 sm:gap-4 sm:p-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">Inbox</Badge>
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-            Tri assistant
+      <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">Inbox</Badge>
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              Tri assistant
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            10 emails chargés par page, rien de plus.
           </p>
         </div>
 
@@ -95,7 +105,7 @@ export function EmailFilters({
             <Input
               value={search}
               onChange={(event) => onSearchChange(event.target.value)}
-              placeholder="Rechercher un expéditeur, un objet, un client ou un thread"
+              placeholder="Rechercher un expéditeur ou un objet"
               className="h-11 rounded-[1rem] border-black/[0.06] bg-white pl-10 shadow-none"
             />
           </div>
@@ -114,7 +124,7 @@ export function EmailFilters({
                       : "border-black/[0.06] bg-white text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  {status === "all" ? "Tous statuts" : emailStatusMeta[status].label}
+                  {status === "all" ? statusLabels.all : emailStatusMeta[status].label}
                 </button>
               ))}
             </div>

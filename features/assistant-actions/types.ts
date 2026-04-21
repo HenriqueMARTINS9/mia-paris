@@ -3,6 +3,7 @@ import type { DeadlineListItem, DeadlinePriority } from "@/features/deadlines/ty
 import type {
   EmailInboxBucket,
   EmailListItem,
+  EmailQualificationOption,
   GmailSyncResult,
 } from "@/features/emails/types";
 import type { ProductionMutationResult } from "@/features/productions/types";
@@ -32,6 +33,8 @@ export type AssistantActionCode =
 export type AssistantActionName =
   | "addNoteToProduction"
   | "addNoteToRequest"
+  | "assignClientToEmail"
+  | "createClient"
   | "createDeadline"
   | "createRequest"
   | "createTask"
@@ -106,6 +109,18 @@ export interface AssistantCreateDeadlineInput {
   label: string;
   priority: DeadlinePriority;
   requestId?: string | null;
+  source?: AssistantActionSource;
+}
+
+export interface AssistantCreateClientInput {
+  code?: string | null;
+  name: string;
+  source?: AssistantActionSource;
+}
+
+export interface AssistantAssignClientToEmailInput {
+  clientId: string;
+  emailId: string;
   source?: AssistantActionSource;
 }
 
@@ -207,6 +222,12 @@ export type AssistantCreateRequestResult = RequestMutationResult & {
   requestId?: string | null;
 };
 export type AssistantCreateDeadlineResult = RequestMutationResult;
+export type AssistantCreateClientResult = {
+  client: EmailQualificationOption | null;
+  clientId: string | null;
+  message: string;
+  ok: boolean;
+};
 export type AssistantAddNoteToRequestResult = RequestMutationResult;
 export type AssistantAddNoteToProductionResult = ProductionMutationResult;
 export type AssistantRunGmailSyncResult = GmailSyncResult;

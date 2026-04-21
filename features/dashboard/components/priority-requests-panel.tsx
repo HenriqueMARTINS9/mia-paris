@@ -8,23 +8,29 @@ import type { RequestOverviewListItem } from "@/features/requests/types";
 import { formatDateTime } from "@/lib/utils";
 
 export function PriorityRequestsPanel({
+  description = "Dossiers à pousser en premier dans la journée.",
+  emptyMessage = "Aucune demande prioritaire détectée pour l’instant.",
   requests,
-}: Readonly<{ requests: RequestOverviewListItem[] }>) {
+  title = "Demandes prioritaires",
+}: Readonly<{
+  description?: string;
+  emptyMessage?: string;
+  requests: RequestOverviewListItem[];
+  title?: string;
+}>) {
   return (
     <Card>
       <CardHeader className="border-b border-black/[0.06] pb-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <FolderKanban className="h-4 w-4 text-muted-foreground" />
-            <CardTitle>Demandes prioritaires</CardTitle>
+            <CardTitle>{title}</CardTitle>
           </div>
           <Badge variant="outline" className="bg-[#fbf8f2]">
             {requests.length}
           </Badge>
         </div>
-        <CardDescription>
-          Dossiers à pousser en premier dans la journée.
-        </CardDescription>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {requests.length > 0 ? (
@@ -67,7 +73,7 @@ export function PriorityRequestsPanel({
           ))
         ) : (
           <p className="text-sm text-muted-foreground">
-            Aucune demande prioritaire détectée pour l’instant.
+            {emptyMessage}
           </p>
         )}
       </CardContent>

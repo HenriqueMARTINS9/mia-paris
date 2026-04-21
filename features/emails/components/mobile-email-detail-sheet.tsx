@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/sheet";
 import { useAuthorization } from "@/features/auth/components/auth-role-provider";
 import { createClientAction } from "@/features/clients/actions/create-client";
+import { RequestPriorityBadge } from "@/components/crm/request-badges";
 import { createRequestFromEmailAction } from "@/features/emails/actions/create-request-from-email";
 import {
   attachEmailToRequestAction,
@@ -26,6 +27,7 @@ import {
 } from "@/features/emails/actions/update-email";
 import { ClassificationSummaryCard } from "@/features/emails/components/classification-summary-card";
 import { EmailAttachmentsCard } from "@/features/emails/components/email-attachments-card";
+import { EmailInboxBucketBadge } from "@/features/emails/components/email-inbox-bucket-badge";
 import { EmailQualificationFields } from "@/features/emails/components/email-qualification-fields";
 import { ExistingRequestMatcher } from "@/features/emails/components/existing-request-matcher";
 import { MobileEmailActionBar } from "@/features/emails/components/mobile-email-action-bar";
@@ -281,10 +283,15 @@ export function MobileEmailDetailSheet({
           <Card className="rounded-[1.35rem]">
             <CardContent className="p-4">
               <div className="flex flex-wrap items-center gap-2">
+                <EmailInboxBucketBadge bucket={email.triage.bucket} />
                 <ProcessingStatusBadge status={email.status} />
                 {email.detectedType ? (
                   <Badge variant="outline">{email.detectedType}</Badge>
                 ) : null}
+                <RequestPriorityBadge
+                  priority={email.classification.suggestedFields.priority}
+                  className="normal-case tracking-normal"
+                />
                 {email.isUnread ? <Badge>Non lu</Badge> : null}
               </div>
               <p className="mt-4 break-words text-lg font-semibold tracking-tight">
@@ -296,29 +303,79 @@ export function MobileEmailDetailSheet({
               <p className="mt-1 text-xs text-muted-foreground">
                 {formatDateTime(email.receivedAt)}
               </p>
-              <div className="mt-4 rounded-[1.15rem] border border-black/[0.06] bg-[#fbf8f2]/85 p-3.5">
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-[1.35rem] border border-primary/10 bg-primary/[0.04]">
+            <CardContent className="space-y-4 p-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <SummaryPill label="Client détecté" value={email.clientName} />
+                <SummaryPill
+                  label="État CRM"
+                  value={
+                    email.linkedRequestId
+                      ? "Déjà relié à une demande"
+                      : email.status === "review"
+                        ? "À arbitrer"
+                        : email.status === "processed"
+                          ? "Traité"
+                          : "À qualifier"
+                  }
+                />
+              </div>
+              <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Corps du message
+                  Résumé métier
                 </p>
-                <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-foreground/85">
-                  {email.bodyText ?? email.previewText}
+                <p className="mt-3 text-sm leading-6 text-foreground/80">
+                  {email.summary ?? "Aucun résumé IA disponible pour cet email."}
                 </p>
               </div>
+              <SummaryPill
+                label="Action recommandée"
+                value={
+                  email.linkedRequestId
+                    ? "Vérifier la demande liée puis confirmer que le mail est bien absorbé."
+                    : email.triage.bucket === "to_review"
+                      ? "Confirmer rapidement le tri avant de créer quoi que ce soit."
+                      : email.triage.bucket === "promotional"
+                        ? "Laisser dans l’onglet Pub sauf si un vrai signal métier apparaît."
+                        : "Valider le résumé puis rattacher ou créer la bonne demande."
+                }
+              />
             </CardContent>
           </Card>
 
-          <Card className="rounded-[1.35rem]">
-            <CardContent className="p-4">
+          <details className="rounded-[1.35rem] border border-black/[0.06] bg-white">
+            <summary className="cursor-pointer list-none px-4 py-4">
+              <p className="text-sm font-semibold text-foreground">
+                Voir la conversation complète
+              </p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Le corps complet du message reste masqué par défaut.
+              </p>
+            </summary>
+            <div className="border-t border-black/[0.06] px-4 py-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Résumé métier
+                Corps du message
               </p>
-              <p className="mt-3 text-sm leading-6 text-foreground/80">
-                {email.summary ?? "Aucun résumé IA disponible pour cet email."}
+              <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-foreground/85">
+                {email.bodyText ?? email.previewText}
               </p>
-            </CardContent>
-          </Card>
+            </div>
+          </details>
 
-          <ClassificationSummaryCard email={email} />
+          <details className="rounded-[1.35rem] border border-black/[0.06] bg-white">
+            <summary className="cursor-pointer list-none px-4 py-4">
+              <p className="text-sm font-semibold text-foreground">Détails assistant</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                La classification détaillée reste disponible si tu veux la relire.
+              </p>
+            </summary>
+            <div className="border-t border-black/[0.06] px-4 py-4">
+              <ClassificationSummaryCard email={email} />
+            </div>
+          </details>
         </div>
       );
     }
@@ -474,6 +531,23 @@ export function MobileEmailDetailSheet({
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function SummaryPill({
+  label,
+  value,
+}: Readonly<{
+  label: string;
+  value: string;
+}>) {
+  return (
+    <div className="rounded-[1rem] border border-black/[0.06] bg-white/80 px-3.5 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-2 text-sm font-semibold text-foreground">{value}</p>
+    </div>
   );
 }
 

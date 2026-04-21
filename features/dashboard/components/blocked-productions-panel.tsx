@@ -10,23 +10,29 @@ import type { ProductionListItem } from "@/features/productions/types";
 import { formatDateTime } from "@/lib/utils";
 
 export function BlockedProductionsPanel({
+  description = "Commandes bloquées ou sensibles à arbitrer côté atelier.",
+  emptyMessage = "Aucune production sensible à remonter dans le cockpit pour l’instant.",
   productions,
-}: Readonly<{ productions: ProductionListItem[] }>) {
+  title = "Productions à risque",
+}: Readonly<{
+  description?: string;
+  emptyMessage?: string;
+  productions: ProductionListItem[];
+  title?: string;
+}>) {
   return (
     <Card>
       <CardHeader className="border-b border-black/[0.06] pb-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Factory className="h-4 w-4 text-muted-foreground" />
-            <CardTitle>Productions à risque</CardTitle>
+            <CardTitle>{title}</CardTitle>
           </div>
           <Badge variant="outline" className="bg-[#fbf8f2]">
             {productions.length}
           </Badge>
         </div>
-        <CardDescription>
-          Commandes bloquées ou sensibles à arbitrer côté atelier.
-        </CardDescription>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {productions.length > 0 ? (
@@ -68,7 +74,7 @@ export function BlockedProductionsPanel({
           ))
         ) : (
           <p className="text-sm text-muted-foreground">
-            Aucune production sensible à remonter dans le cockpit pour l’instant.
+            {emptyMessage}
           </p>
         )}
       </CardContent>

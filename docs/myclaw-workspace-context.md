@@ -64,6 +64,8 @@ Avec ça, le bot a déjà:
 - le comportement Gmail
 - la logique de tri inbox
 - la routine email capable de classer les clients et de créer des demandes CRM quand le mail est suffisamment clair
+- l’ensemble des writes assistant-ready exposés, y compris la création explicite de deadlines
+- les setters utiles pour créer un client CRM puis l’assigner explicitement à un email
 
 ## Routine recommandée MyClaw
 

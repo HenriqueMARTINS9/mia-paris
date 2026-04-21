@@ -13,8 +13,8 @@ import {
 import type {
   EmailInboxBucket,
   EmailInboxSnapshot,
+  EmailListStatusFilter,
   EmailPageSize,
-  EmailProcessingStatus,
   EmailQualificationOption,
   EmailStatusCounts,
   EmailsPageData,
@@ -40,8 +40,8 @@ import type {
   RequestOverview,
 } from "@/types/crm";
 
-const DEFAULT_PAGE_SIZE: EmailPageSize = 15;
-const AVAILABLE_PAGE_SIZES: EmailPageSize[] = [10, 15];
+const DEFAULT_PAGE_SIZE: EmailPageSize = 10;
+const AVAILABLE_PAGE_SIZES: EmailPageSize[] = [10];
 const EMAIL_SCAN_SELECT = [
   "id",
   "inbox_id",
@@ -63,8 +63,34 @@ const EMAIL_SCAN_SELECT = [
   "created_at",
   "updated_at",
 ].join(",");
+const EMAIL_LIST_SELECT = [
+  "id",
+  "inbox_id",
+  "thread_id",
+  "request_id",
+  "client_id",
+  "assigned_user_id",
+  "from_name",
+  "from_email",
+  "subject",
+  "preview_text",
+  "direction",
+  "status",
+  "processing_status",
+  "is_processed",
+  "is_unread",
+  "ai_summary",
+  "ai_classification",
+  "classification_confidence",
+  "assistant_bucket",
+  "assistant_bucket_confidence",
+  "assistant_bucket_reason",
+  "received_at",
+  "created_at",
+  "updated_at",
+].join(",");
 
-type EmailStatusFilter = "all" | EmailProcessingStatus;
+type EmailStatusFilter = EmailListStatusFilter;
 type EmailBucketFilter = "all" | EmailInboxBucket;
 
 interface EmailPageAncillaries {
@@ -212,45 +238,31 @@ const getPaginatedEmailsPageDataInternal = async (
     }
 
     const shouldLoadDetail = Boolean(input.selectedEmailId);
-    const [ancillaries, rowsResult] = await Promise.all([
+    const [
+      ancillaries,
+      bucketCounts,
+      pageQueryResult,
+    ] = await Promise.all([
       getEmailPageAncillariesForMode(shouldLoadDetail),
-      getFilteredEmailRows(supabase, input),
+      getEmailBucketCounts(supabase, input),
+      getPaginatedEmailRows(supabase, input),
     ]);
 
-    if (rowsResult.error) {
+    if (pageQueryResult.error) {
       return {
         ...emptyData,
         ...ancillaries,
-        error: `Impossible de charger les emails: ${rowsResult.error}`,
+        error: `Impossible de charger les emails: ${pageQueryResult.error}`,
       };
     }
 
-    const scannedEmails = buildMappedEmailScans(
-      rowsResult.rows,
-    );
-    const counts = countEmailStatuses(scannedEmails);
-    const statusFilteredEmails = filterEmailsByStatus(
-      scannedEmails,
-      input.selectedStatus,
-    );
-    const bucketCounts = countEmailBuckets(statusFilteredEmails);
-    const bucketFilteredEmails = filterEmailsByBucket(
-      statusFilteredEmails,
-      input.selectedBucket,
-    );
-    const totalItems = bucketFilteredEmails.length;
+    const totalItems = pageQueryResult.totalItems;
     const totalPages = Math.max(1, Math.ceil(totalItems / input.perPage));
-    const effectivePage =
-      totalItems > 0 && input.page > totalPages ? totalPages : input.page;
-    const from = (effectivePage - 1) * input.perPage;
-    const pageEmailIds = bucketFilteredEmails
-      .slice(from, from + input.perPage)
-      .map((email) => email.id);
+    const effectivePage = pageQueryResult.page;
+    const pageRows = pageQueryResult.rows;
+    const pageEmailIds = pageRows.map((email) => email.id);
     const pageEmailIdSet = new Set(pageEmailIds);
-    const pageScanEmails = orderEmailsByIds(
-      bucketFilteredEmails.filter((email) => pageEmailIdSet.has(email.id)),
-      pageEmailIds,
-    );
+    const pageEmails = await buildMappedEmails(pageRows);
     const selectedEmailResult =
       shouldLoadDetail && input.selectedEmailId && pageEmailIdSet.has(input.selectedEmailId)
         ? await getEmailById(supabase, input.selectedEmailId)
@@ -265,14 +277,13 @@ const getPaginatedEmailsPageDataInternal = async (
           )[0] ?? null
         : null;
     const emails = hydratedSelectedEmail
-      ? pageScanEmails.map((email) =>
+      ? pageEmails.map((email) =>
           email.id === hydratedSelectedEmail.id ? hydratedSelectedEmail : email,
         )
-      : pageScanEmails;
+      : pageEmails;
+    const counts = buildPageStatusCounts(emails, totalItems);
     const resolvedSelectedEmailId =
-      emails.find((email) => email.id === input.selectedEmailId)?.id ??
-      emails[0]?.id ??
-      null;
+      emails.find((email) => email.id === input.selectedEmailId)?.id ?? null;
 
     return {
       ...ancillaries,
@@ -594,20 +605,106 @@ async function buildMappedEmails(
   ).sort(sortEmails);
 }
 
-async function getFilteredEmailRows(
+async function getPaginatedEmailRows(
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
   input: NormalizedEmailQueryInput,
 ) {
-  let query = supabase.from("emails").select(EMAIL_SCAN_SELECT);
+  const initialResult = await fetchEmailPageRows(supabase, input, input.page);
+
+  if (
+    !initialResult.error &&
+    initialResult.totalItems > 0 &&
+    initialResult.page > initialResult.totalPages
+  ) {
+    return fetchEmailPageRows(supabase, input, initialResult.totalPages);
+  }
+
+  return initialResult;
+}
+
+async function fetchEmailPageRows(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  input: NormalizedEmailQueryInput,
+  page: number,
+) {
+  const from = (page - 1) * input.perPage;
+  const to = from + input.perPage - 1;
+  let query = supabase
+    .from("emails")
+    .select(EMAIL_LIST_SELECT, { count: "exact" }) as unknown as EmailFilterableQuery<EmailListQueryResult>;
+
   query = applyEmailSearchFilter(query, input.search);
+  query = applyEmailBucketFilter(query, input.selectedBucket);
+  query = applyEmailStatusFilter(query, input.selectedStatus);
   query = applyEmailOrdering(query);
 
-  const { data, error } = await query;
+  const { count, data, error } = await query.range(from, to);
+  const totalItems = count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalItems / input.perPage));
 
   return {
     error: error?.message ?? null,
+    page,
     rows: (data ?? []) as EmailRecord[],
+    totalItems,
+    totalPages,
   };
+}
+
+async function getEmailBucketCounts(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  input: NormalizedEmailQueryInput,
+) {
+  const [all, important, promotional, toReview] = await Promise.all([
+    countEmailRows(supabase, {
+      search: input.search,
+      selectedBucket: "all",
+      selectedStatus: input.selectedStatus,
+    }),
+    countEmailRows(supabase, {
+      search: input.search,
+      selectedBucket: "important",
+      selectedStatus: input.selectedStatus,
+    }),
+    countEmailRows(supabase, {
+      search: input.search,
+      selectedBucket: "promotional",
+      selectedStatus: input.selectedStatus,
+    }),
+    countEmailRows(supabase, {
+      search: input.search,
+      selectedBucket: "to_review",
+      selectedStatus: input.selectedStatus,
+    }),
+  ]);
+
+  return {
+    all,
+    important,
+    promotional,
+    toReview,
+  };
+}
+
+async function countEmailRows(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  input: Pick<NormalizedEmailQueryInput, "search" | "selectedBucket" | "selectedStatus">,
+) {
+  let query = supabase
+    .from("emails")
+    .select("id", { count: "exact", head: true }) as unknown as EmailFilterableQuery<EmailQueryResult>;
+
+  query = applyEmailSearchFilter(query, input.search);
+  query = applyEmailBucketFilter(query, input.selectedBucket);
+  query = applyEmailStatusFilter(query, input.selectedStatus);
+
+  const { count, error } = await query;
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return count ?? 0;
 }
 
 async function getLatestEmailRows(
@@ -633,6 +730,21 @@ interface EmailOrderableQuery {
 
 interface EmailSearchableQuery {
   or: (filters: string) => unknown;
+}
+
+interface EmailQueryResult {
+  count: number | null;
+  error: { message: string } | null;
+}
+
+interface EmailListQueryResult extends EmailQueryResult {
+  data: unknown[] | null;
+}
+
+interface EmailFilterableQuery<TResult> extends EmailOrderableQuery, EmailSearchableQuery {
+  eq: (column: string, value: string | boolean) => EmailFilterableQuery<TResult>;
+  range: (from: number, to: number) => Promise<TResult>;
+  then: PromiseLike<TResult>["then"];
 }
 
 function applyEmailOrdering<T>(query: T): T {
@@ -664,26 +776,24 @@ function sanitizeEmailSearch(value: string) {
   return value.replace(/[%*,()]/g, " ").trim();
 }
 
-function filterEmailsByStatus(
-  emails: EmailsPageData["emails"],
-  status: EmailStatusFilter,
-) {
-  if (status === "all") {
-    return emails;
+function applyEmailBucketFilter<TResult, T extends EmailFilterableQuery<TResult>>(query: T, bucket: EmailBucketFilter): T {
+  if (bucket === "all") {
+    return query;
   }
 
-  return emails.filter((email) => email.status === status);
+  return query.eq("assistant_bucket", bucket) as T;
 }
 
-function filterEmailsByBucket(
-  emails: EmailsPageData["emails"],
-  bucket: EmailBucketFilter,
-) {
-  if (bucket === "all") {
-    return emails;
+function applyEmailStatusFilter<TResult, T extends EmailFilterableQuery<TResult>>(query: T, status: EmailStatusFilter): T {
+  if (status === "review") {
+    return query.eq("processing_status", "review") as T;
   }
 
-  return emails.filter((email) => email.triage.bucket === bucket);
+  if (status === "processed") {
+    return query.eq("is_processed", true) as T;
+  }
+
+  return query;
 }
 
 function countEmailStatuses(emails: EmailsPageData["emails"]): EmailStatusCounts {
@@ -770,14 +880,6 @@ async function getEmailById(
   };
 }
 
-function orderEmailsByIds<T extends { id: string }>(emails: T[], ids: string[]) {
-  const orderById = new Map(ids.map((id, index) => [id, index] as const));
-
-  return [...emails].sort(
-    (left, right) => (orderById.get(left.id) ?? 0) - (orderById.get(right.id) ?? 0),
-  );
-}
-
 function normalizeEmailQueryInput(
   input?: Partial<NormalizedEmailQueryInput>,
 ): NormalizedEmailQueryInput {
@@ -794,7 +896,7 @@ function normalizeEmailQueryInput(
   )
     ? ((input?.selectedBucket ?? "important") as EmailBucketFilter)
     : "important";
-  const selectedStatus = (["all", "new", "review", "processed"] as const).includes(
+  const selectedStatus = (["all", "review", "processed"] as const).includes(
     (input?.selectedStatus ?? "all") as EmailStatusFilter,
   )
     ? ((input?.selectedStatus ?? "all") as EmailStatusFilter)
@@ -877,6 +979,18 @@ function createEmptyEmailCounts(): EmailStatusCounts {
     qualified: 0,
     review: 0,
     total: 0,
+  };
+}
+
+function buildPageStatusCounts(
+  emails: EmailsPageData["emails"],
+  totalItems: number,
+): EmailStatusCounts {
+  const pageCounts = countEmailStatuses(emails);
+
+  return {
+    ...pageCounts,
+    total: totalItems,
   };
 }
 

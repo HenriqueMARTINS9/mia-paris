@@ -44,6 +44,11 @@ export const openClawHttpReadActions = [...openClawReadActionNames];
 export const openClawHttpSafeWriteActions = [...openClawSafeWriteActionNames];
 export const openClawHttpSensitiveActions = [...openClawFutureSensitiveActionNames];
 
+const openClawSensitiveActionsLabel =
+  openClawHttpSensitiveActions.length > 0
+    ? openClawHttpSensitiveActions.join(", ")
+    : "aucune actuellement";
+
 export type OpenClawHttpActionName =
   | OpenClawExposedActionName
   | OpenClawFutureSensitiveActionName;
@@ -256,7 +261,7 @@ export function validateOpenClawHttpBody(value: unknown):
         `Action OpenClaw inconnue: ${value.action}.`,
         `Actions lecture: ${openClawHttpReadActions.join(", ")}.`,
         `Actions safe write: ${openClawHttpSafeWriteActions.join(", ")}.`,
-        `Actions sensibles fermées: ${openClawHttpSensitiveActions.join(", ")}.`,
+        `Actions sensibles fermées: ${openClawSensitiveActionsLabel}.`,
       ].join(" "),
     };
   }
