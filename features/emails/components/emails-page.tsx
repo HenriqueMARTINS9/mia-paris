@@ -5,6 +5,7 @@ import {
   ArrowDownToLine,
   ChevronLeft,
   ChevronRight,
+  Loader2,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -60,12 +61,18 @@ export function EmailsPage({
   const [searchInput, setSearchInput] = useState(filters.search);
   const [selectedBucket, setSelectedBucket] = useState(filters.selectedBucket);
   const [selectedStatus, setSelectedStatus] = useState(filters.selectedStatus);
-  const [isDesktopViewport, setIsDesktopViewport] = useState(false);
+  const [viewportMode, setViewportMode] = useState<"desktop" | "mobile" | "unknown">(
+    "unknown",
+  );
   const selectedEmailQueryId = searchParams.get("email");
+  const isDesktopViewport = viewportMode === "desktop";
+  const isMobileViewport = viewportMode === "mobile";
+  const areFiltersLoading = viewportMode === "unknown";
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 768px)");
-    const handleChange = () => setIsDesktopViewport(mediaQuery.matches);
+    const handleChange = () =>
+      setViewportMode(mediaQuery.matches ? "desktop" : "mobile");
 
     handleChange();
     mediaQuery.addEventListener("change", handleChange);
@@ -206,34 +213,40 @@ export function EmailsPage({
       <GmailAutoSyncBridge gmailInbox={gmailInbox} />
       {header}
 
-      <div className="md:hidden">
-        <MobileFilterSheet
-          title="Filtrer les emails"
-          description="Affiner rapidement l’inbox par recherche ou statut de traitement."
-        >
-          <EmailFilters
-            bucketCounts={bucketCounts}
-            search={searchInput}
-            onBucketChange={setSelectedBucket}
-            onSearchChange={setSearchInput}
-            selectedStatus={selectedStatus}
-            selectedBucket={selectedBucket}
-            onStatusChange={setSelectedStatus}
-          />
-        </MobileFilterSheet>
-      </div>
+      {areFiltersLoading ? (
+        <FiltersLoadingCard />
+      ) : (
+        <>
+          <div className="md:hidden">
+            <MobileFilterSheet
+              title="Filtrer les emails"
+              description="Affiner rapidement l’inbox par recherche ou statut de traitement."
+            >
+              <EmailFilters
+                bucketCounts={bucketCounts}
+                search={searchInput}
+                onBucketChange={setSelectedBucket}
+                onSearchChange={setSearchInput}
+                selectedStatus={selectedStatus}
+                selectedBucket={selectedBucket}
+                onStatusChange={setSelectedStatus}
+              />
+            </MobileFilterSheet>
+          </div>
 
-      <div className="hidden md:block">
-        <EmailFilters
-          bucketCounts={bucketCounts}
-          search={searchInput}
-          onBucketChange={setSelectedBucket}
-          onSearchChange={setSearchInput}
-          selectedStatus={selectedStatus}
-          selectedBucket={selectedBucket}
-          onStatusChange={setSelectedStatus}
-        />
-      </div>
+          <div className="hidden md:block">
+            <EmailFilters
+              bucketCounts={bucketCounts}
+              search={searchInput}
+              onBucketChange={setSelectedBucket}
+              onSearchChange={setSearchInput}
+              selectedStatus={selectedStatus}
+              selectedBucket={selectedBucket}
+              onStatusChange={setSelectedStatus}
+            />
+          </div>
+        </>
+      )}
       <div className="grid gap-4 md:hidden">
         <div className="grid grid-cols-2 gap-3 rounded-[1.25rem] border border-black/[0.06] bg-[#fbf8f2]/95 p-3">
           <MobileStatCard label="Important" value={bucketCounts.important} />
@@ -313,22 +326,24 @@ export function EmailsPage({
           </CardContent>
         </Card>
 
-        <MobileEmailDetailSheet
-          key={selectedEmail?.id ?? "mobile-email-sheet"}
-          documentOptions={documentOptions}
-          documentOptionsError={documentOptionsError}
-          email={selectedEmail}
-          open={!isDesktopViewport && Boolean(selectedEmail)}
-          onOpenChange={(open) => {
-            if (!open) {
-              closeEmailDetail();
-            }
-          }}
-          qualificationOptions={qualificationOptions}
-          qualificationOptionsError={qualificationOptionsError}
-          requestOptions={requestOptions}
-          requestOptionsError={requestOptionsError}
-        />
+        {isMobileViewport ? (
+          <MobileEmailDetailSheet
+            key={selectedEmail?.id ?? "mobile-email-sheet"}
+            documentOptions={documentOptions}
+            documentOptionsError={documentOptionsError}
+            email={selectedEmail}
+            open={Boolean(selectedEmail)}
+            onOpenChange={(open) => {
+              if (!open) {
+                closeEmailDetail();
+              }
+            }}
+            qualificationOptions={qualificationOptions}
+            qualificationOptionsError={qualificationOptionsError}
+            requestOptions={requestOptions}
+            requestOptionsError={requestOptionsError}
+          />
+        ) : null}
       </div>
 
       <div className="hidden md:block">
@@ -460,6 +475,22 @@ function MobileStatCard({
       </p>
       <p className="mt-2 text-xl font-semibold tracking-tight">{value}</p>
     </div>
+  );
+}
+
+function FiltersLoadingCard() {
+  return (
+    <Card>
+      <CardContent className="flex min-h-32 flex-col items-center justify-center gap-3 p-5 text-center">
+        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-foreground">Chargement des filtres emails</p>
+          <p className="text-xs text-muted-foreground">
+            On prépare l’inbox et ses contrôles de tri.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
