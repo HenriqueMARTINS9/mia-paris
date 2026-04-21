@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import type { AssistantMutationExecutionContext } from "@/features/assistant-actions/execution-context";
 import type {
   CreateRequestInput,
   RequestMutationResult,
@@ -10,18 +11,25 @@ import {
   mapUiPriorityToDatabasePriority,
   mapUiStatusToDatabaseStatus,
 } from "@/features/requests/metadata";
-import { authorizeServerAction } from "@/features/auth/server-authorization";
-import { insertActivityLogViaRest } from "@/lib/activity-logs";
+import {
+  authorizeServerAction,
+  authorizeServerPermissions,
+} from "@/features/auth/server-authorization";
+import { recordAuditEvent } from "@/lib/action-runtime";
 import {
   isMissingSupabaseColumnError,
   supabaseRestInsert,
+  type SupabaseRestExecutionContext,
   type SupabaseRestErrorPayload,
 } from "@/lib/supabase/rest";
 
 export async function createRequestAction(
   input: CreateRequestInput,
+  context?: AssistantMutationExecutionContext,
 ): Promise<RequestMutationResult & { requestId?: string | null }> {
-  const authorization = await authorizeServerAction("requests.create");
+  const authorization = context?.authorizationOverride
+    ? await authorizeServerPermissions(["requests.create"], context.authorizationOverride)
+    : await authorizeServerAction("requests.create");
 
   if (!authorization.ok) {
     return {
@@ -67,7 +75,11 @@ export async function createRequestAction(
     updated_at: new Date().toISOString(),
   };
 
-  const result = await insertWithMissingColumnFallback("requests", payload);
+  const result = await insertWithMissingColumnFallback(
+    "requests",
+    payload,
+    context?.rest ?? undefined,
+  );
 
   if (result.error || !result.data || result.data.length === 0) {
     return {
@@ -81,15 +93,25 @@ export async function createRequestAction(
   const requestId =
     typeof result.data[0]?.id === "string" ? result.data[0].id : null;
 
-  await insertActivityLogViaRest({
+  await recordAuditEvent({
     action: "request_created_manually",
-    actorId: authorization.actorId,
-    actorType: "user",
-    description: "Demande créée manuellement depuis le cockpit.",
+    actorId: context?.actor?.actorUserId ?? authorization.actorId,
+    actorType: context?.actor?.actorType ?? authorization.actorType,
+    description:
+      context?.actor?.source === "assistant"
+        ? "Demande créée depuis OpenClaw."
+        : "Demande créée manuellement depuis le cockpit.",
     entityId: requestId,
     entityType: "request",
-    payload,
+    payload: {
+      ...payload,
+      actorEmail: context?.actor?.actorEmail ?? null,
+      source: context?.actor?.source ?? authorization.source,
+    },
     requestId,
+    scope: "requests.create",
+    source: context?.actor?.source ?? authorization.source,
+    status: "success",
   });
 
   revalidatePath("/dashboard");
@@ -110,6 +132,7 @@ export async function createRequestAction(
 async function insertWithMissingColumnFallback(
   resource: string,
   payload: Record<string, unknown>,
+  restContext?: SupabaseRestExecutionContext,
 ) {
   const currentPayload = { ...payload };
 
@@ -120,6 +143,7 @@ async function insertWithMissingColumnFallback(
       {
         select: "id",
       },
+      restContext,
     );
 
     if (!result.error) {

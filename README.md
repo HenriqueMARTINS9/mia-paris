@@ -319,6 +319,7 @@ Actions SAFE WRITE exposees:
 - `runEmailOpsCycle`
 - `runGmailSync`
 - `setEmailInboxBucket`
+- `createRequest`
 - `createTask`
 - `addNoteToRequest`
 - `addNoteToProduction`

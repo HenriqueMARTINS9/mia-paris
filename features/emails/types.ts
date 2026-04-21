@@ -180,6 +180,7 @@ export interface EmailInboxSnapshot {
 
 export type EmailMutationField =
   | "inbox_bucket"
+  | "qualification"
   | "status"
   | "request_link"
   | "request_creation";

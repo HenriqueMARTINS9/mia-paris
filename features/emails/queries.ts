@@ -59,7 +59,6 @@ const EMAIL_SCAN_SELECT = [
   "is_processed",
   "is_unread",
   "ai_summary",
-  "ai_classification",
   "received_at",
   "created_at",
   "updated_at",
@@ -117,7 +116,7 @@ const getEmailsPageDataInternal = async (): Promise<EmailsPageData> => {
     }
 
     const [ancillaries, emailsResult] = await Promise.all([
-      getEmailPageAncillaries(),
+      getEmailPageAncillariesForMode(false),
       supabaseRestSelectList<EmailRecord>("emails", {
         select: EMAIL_SCAN_SELECT,
       }),
@@ -212,8 +211,9 @@ const getPaginatedEmailsPageDataInternal = async (
       };
     }
 
+    const shouldLoadDetail = Boolean(input.selectedEmailId);
     const [ancillaries, rowsResult] = await Promise.all([
-      getEmailPageAncillaries(),
+      getEmailPageAncillariesForMode(shouldLoadDetail),
       getFilteredEmailRows(supabase, input),
     ]);
 
@@ -246,22 +246,29 @@ const getPaginatedEmailsPageDataInternal = async (
     const pageEmailIds = bucketFilteredEmails
       .slice(from, from + input.perPage)
       .map((email) => email.id);
+    const pageEmailIdSet = new Set(pageEmailIds);
     const pageScanEmails = orderEmailsByIds(
-      bucketFilteredEmails.filter((email) => pageEmailIds.includes(email.id)),
+      bucketFilteredEmails.filter((email) => pageEmailIdSet.has(email.id)),
       pageEmailIds,
     );
-    const fullRowsResult =
-      pageEmailIds.length > 0 ? await getEmailsByIds(supabase, pageEmailIds) : null;
-    const emails =
-      fullRowsResult && !fullRowsResult.error
-        ? orderEmailsByIds(
+    const selectedEmailResult =
+      shouldLoadDetail && input.selectedEmailId && pageEmailIdSet.has(input.selectedEmailId)
+        ? await getEmailById(supabase, input.selectedEmailId)
+        : null;
+    const hydratedSelectedEmail =
+      selectedEmailResult?.row && !selectedEmailResult.error
+        ? (
             await buildMappedEmails(
-              fullRowsResult.rows,
+              [selectedEmailResult.row],
               ancillaries.qualificationOptions,
-            ),
-            pageEmailIds,
-          )
-        : pageScanEmails;
+            )
+          )[0] ?? null
+        : null;
+    const emails = hydratedSelectedEmail
+      ? pageScanEmails.map((email) =>
+          email.id === hydratedSelectedEmail.id ? hydratedSelectedEmail : email,
+        )
+      : pageScanEmails;
     const resolvedSelectedEmailId =
       emails.find((email) => email.id === input.selectedEmailId)?.id ??
       emails[0]?.id ??
@@ -473,18 +480,43 @@ const getEmailQualificationOptions = cache(async (): Promise<{
   };
 });
 
-const getEmailPageAncillaries = cache(async (): Promise<EmailPageAncillaries> => {
+async function getEmailPageAncillariesForMode(
+  includeDetailOptions: boolean,
+): Promise<EmailPageAncillaries> {
+  const gmailInbox = await getCurrentUserGmailInboxStatus();
+
+  if (!includeDetailOptions) {
+    return {
+      documentOptions: {
+        models: [],
+        orders: [],
+        productions: [],
+        requests: [],
+      },
+      documentOptionsError: null,
+      gmailInbox,
+      qualificationOptions: {
+        assignees: [],
+        clients: [],
+        contacts: [],
+        models: [],
+        productDepartments: [],
+      },
+      qualificationOptionsError: null,
+      requestOptions: [],
+      requestOptionsError: null,
+    };
+  }
+
   const [
     requestOptionsResult,
     qualificationOptionsResult,
     assigneesResult,
-    gmailInbox,
     documentOptionsResult,
   ] = await Promise.all([
     getRequestLinkOptions(),
     getEmailQualificationOptions(),
     getRequestAssigneeOptions(),
-    getCurrentUserGmailInboxStatus(),
     getDocumentFormOptions(),
   ]);
 
@@ -503,7 +535,7 @@ const getEmailPageAncillaries = cache(async (): Promise<EmailPageAncillaries> =>
     requestOptions: requestOptionsResult.options,
     requestOptionsError: requestOptionsResult.error,
   };
-});
+}
 
 async function buildMappedEmails(
   emailRows: EmailRecord[],
@@ -726,15 +758,15 @@ function buildMappedEmailScans(emailRows: EmailRecord[]) {
     .sort(sortEmails);
 }
 
-async function getEmailsByIds(
+async function getEmailById(
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
-  ids: string[],
+  id: string,
 ) {
-  const { data, error } = await supabase.from("emails").select("*").in("id", ids);
+  const { data, error } = await supabase.from("emails").select("*").eq("id", id).maybeSingle();
 
   return {
     error: error?.message ?? null,
-    rows: (data ?? []) as EmailRecord[],
+    row: (data as EmailRecord | null) ?? null,
   };
 }
 

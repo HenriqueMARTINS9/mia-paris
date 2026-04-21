@@ -5,6 +5,7 @@ export type AppPermission =
   | "assistant.read"
   | "assistant.write.safe"
   | "automations.run"
+  | "clients.create"
   | "deadlines.create"
   | "deadlines.update"
   | "documents.create"
@@ -37,6 +38,7 @@ const rolePermissions: Record<AppUserRole, AppPermission[]> = {
     "assistant.read",
     "assistant.write.safe",
     "automations.run",
+    "clients.create",
     "deadlines.create",
     "deadlines.update",
     "documents.create",
@@ -58,6 +60,7 @@ const rolePermissions: Record<AppUserRole, AppPermission[]> = {
     "assistant.read",
     "assistant.write.safe",
     "automations.run",
+    "clients.create",
     "deadlines.create",
     "deadlines.update",
     "documents.create",
@@ -101,6 +104,7 @@ const rolePermissions: Record<AppUserRole, AppPermission[]> = {
     "assistant.read",
     "assistant.write.safe",
     "automations.run",
+    "clients.create",
     "deadlines.create",
     "deadlines.update",
     "documents.create",

@@ -19,6 +19,7 @@ import type {
   AssistantAddProductionNoteInput,
   AssistantAddRequestNoteInput,
   AssistantCreateDeadlineInput,
+  AssistantCreateRequestInput,
   AssistantCreateTaskInput,
   AssistantHistorySearchResult,
   AssistantPrepareReplyDraftInput,
@@ -48,6 +49,7 @@ import { getProductionsPageData } from "@/features/productions/queries";
 import { updateProductionNotesAction } from "@/features/productions/actions/update-production";
 import { buildReplyDraft } from "@/features/replies/lib/build-reply-draft";
 import { appendRequestNoteAction } from "@/features/requests/actions/update-request";
+import { createRequestAction } from "@/features/requests/actions/create-request";
 import { getRequestsOverviewPageData } from "@/features/requests/queries";
 import { createTaskAction } from "@/features/tasks/actions/create-request-task";
 import { getTodayOverviewData } from "@/features/today/queries";
@@ -450,6 +452,95 @@ export async function createTask(
     },
     requestId: input.requestId ?? null,
     scope: "assistant_actions.create_task",
+    source: normalizeAssistantSource(input.source),
+    status: "success",
+  });
+
+  return createAssistantActionSuccess(result, result.message);
+}
+
+export async function createRequest(
+  input: AssistantCreateRequestInput,
+  options?: AssistantCommandExecutionOptions,
+): Promise<AssistantActionResult<Awaited<ReturnType<typeof createRequestAction>>>> {
+  const authorization = await authorizeServerPermissions(
+    ["assistant.write.safe", "requests.create"],
+    options?.authorizationOverride,
+  );
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const titleValidation = validateRequiredText(input.title, "Le titre de demande", 3);
+
+  if (!titleValidation.ok) {
+    return createAssistantActionFailure("validation_error", titleValidation.message);
+  }
+
+  const requestTypeValidation = validateRequiredText(
+    input.requestType,
+    "Le type de demande",
+    2,
+  );
+
+  if (!requestTypeValidation.ok) {
+    return createAssistantActionFailure("validation_error", requestTypeValidation.message);
+  }
+
+  const result = await createRequestAction(
+    {
+      assignedUserId: input.assignedUserId ?? null,
+      clientId: input.clientId ?? null,
+      contactId: input.contactId ?? null,
+      dueAt: input.dueAt ?? null,
+      modelId: input.modelId ?? null,
+      priority: input.priority,
+      productDepartmentId: input.productDepartmentId ?? null,
+      requestType: requestTypeValidation.value,
+      requestedAction: input.requestedAction ?? null,
+      status: input.status ?? "qualification",
+      summary: input.summary ?? null,
+      title: titleValidation.value,
+    },
+    {
+      actor: options?.mutationContext?.actor ?? null,
+      authorizationOverride:
+        options?.mutationContext?.authorizationOverride ??
+        options?.authorizationOverride ??
+        null,
+      rest: options?.mutationContext?.rest ?? null,
+    },
+  );
+
+  if (!result.ok) {
+    return createAssistantActionFailure("error", result.message);
+  }
+
+  await recordAuditEvent({
+    action: "assistant_create_request",
+    actorId: authorization.actorId,
+    actorType: authorization.actorType,
+    description: result.message,
+    entityId: result.requestId ?? null,
+    entityType: "request",
+    payload: {
+      assignedUserId: input.assignedUserId ?? null,
+      clientId: input.clientId ?? null,
+      contactId: input.contactId ?? null,
+      dueAt: input.dueAt ?? null,
+      modelId: input.modelId ?? null,
+      priority: input.priority,
+      productDepartmentId: input.productDepartmentId ?? null,
+      requestType: requestTypeValidation.value,
+      requestedAction: input.requestedAction ?? null,
+      source: normalizeAssistantSource(input.source),
+      status: input.status ?? "qualification",
+      summaryPreview: input.summary?.slice(0, 220) ?? null,
+      title: titleValidation.value,
+    },
+    requestId: result.requestId ?? null,
+    scope: "assistant_actions.create_request",
     source: normalizeAssistantSource(input.source),
     status: "success",
   });

@@ -12,6 +12,7 @@ import type {
   RequestMutationResult,
   RequestOverviewListItem,
   RequestPriority,
+  RequestStatus,
 } from "@/features/requests/types";
 import type { AssistantTaskType } from "@/features/tasks/task-types";
 
@@ -32,6 +33,7 @@ export type AssistantActionName =
   | "addNoteToProduction"
   | "addNoteToRequest"
   | "createDeadline"
+  | "createRequest"
   | "createTask"
   | "getBlockedProductions"
   | "getHighRiskProductions"
@@ -80,6 +82,22 @@ export interface AssistantCreateTaskInput {
   requestId?: string | null;
   source?: AssistantActionSource;
   taskType: AssistantTaskType;
+  title: string;
+}
+
+export interface AssistantCreateRequestInput {
+  assignedUserId?: string | null;
+  clientId?: string | null;
+  contactId?: string | null;
+  dueAt?: string | null;
+  modelId?: string | null;
+  priority: RequestPriority;
+  productDepartmentId?: string | null;
+  requestType: string;
+  requestedAction?: string | null;
+  source?: AssistantActionSource;
+  status?: RequestStatus;
+  summary?: string | null;
   title: string;
 }
 
@@ -180,6 +198,9 @@ export type AssistantRequestBacklogList = RequestOverviewListItem[];
 export type AssistantProductionList = ProductionListItem[];
 
 export type AssistantCreateTaskResult = RequestMutationResult;
+export type AssistantCreateRequestResult = RequestMutationResult & {
+  requestId?: string | null;
+};
 export type AssistantCreateDeadlineResult = RequestMutationResult;
 export type AssistantAddNoteToRequestResult = RequestMutationResult;
 export type AssistantAddNoteToProductionResult = ProductionMutationResult;

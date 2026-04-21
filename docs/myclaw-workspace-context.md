@@ -63,6 +63,7 @@ Avec ça, le bot a déjà:
 - les garde-fous
 - le comportement Gmail
 - la logique de tri inbox
+- la création de tâches et de demandes CRM
 
 ## Routine recommandée MyClaw
 

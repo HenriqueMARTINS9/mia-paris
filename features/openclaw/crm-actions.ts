@@ -4,6 +4,7 @@ export {
   addNoteToProduction,
   addNoteToRequest,
   createDeadline as createAssistantDeadline,
+  createRequest as createAssistantRequest,
   createTask as createAssistantTask,
   getBlockedProductions,
   getHighRiskProductions,

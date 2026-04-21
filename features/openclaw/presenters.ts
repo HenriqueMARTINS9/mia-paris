@@ -47,6 +47,7 @@ export function presentOpenClawData(input: {
     case "runEmailOpsCycle":
       return presentEmailOpsCycle(input.data);
     case "runGmailSync":
+    case "createRequest":
     case "createTask":
     case "addNoteToRequest":
     case "addNoteToProduction":
@@ -269,6 +270,25 @@ function presentSafeWriteResult(input: {
         taskType: readString(payload, "taskType"),
         title: readString(payload, "title"),
       },
+    };
+  }
+
+  if (input.action === "createRequest") {
+    const result = isRecord(input.data) ? input.data : {};
+
+    return {
+      format: "compact" as const,
+      recommendedAction:
+        "Ouvrir ensuite la demande pour compléter les tâches, deadlines ou pièces jointes.",
+      request: {
+        dueAt: readString(payload, "dueAt"),
+        priority: readString(payload, "priority"),
+        requestId: readString(result, "requestId"),
+        requestType: readString(payload, "requestType"),
+        status: readString(payload, "status"),
+        title: readString(payload, "title"),
+      },
+      summary: resultMessage,
     };
   }
 

@@ -346,6 +346,69 @@ Payload valide:
 }
 ```
 
+### `createRequest`
+
+Champs obligatoires:
+
+- `title`
+- `requestType`
+- `priority`
+
+Champs optionnels:
+
+- `status`
+- `clientId`
+- `contactId`
+- `productDepartmentId`
+- `modelId`
+- `assignedUserId`
+- `dueAt`
+- `summary`
+- `requestedAction`
+
+Valeurs valides:
+
+- `priority`: `critical`, `high`, `normal`
+- `status`: `new`, `qualification`, `costing`, `awaiting_validation`, `approved`, `in_production`
+
+Valeur par défaut métier:
+
+- `status` par défaut forcé à `qualification`
+
+Payload valide:
+
+```json
+{
+  "title": "Mise à jour target price Etam",
+  "requestType": "price_request",
+  "priority": "high",
+  "status": "qualification",
+  "clientId": "client-uuid",
+  "assignedUserId": "user-uuid",
+  "dueAt": "2026-04-22",
+  "summary": "Le client demande une mise à jour prix avec délai court.",
+  "requestedAction": "Envoyer le chiffrage révisé"
+}
+```
+
+Réponse compacte:
+
+```json
+{
+  "format": "compact",
+  "recommendedAction": "Ouvrir ensuite la demande pour compléter les tâches, deadlines ou pièces jointes.",
+  "summary": "Demande créée avec succès.",
+  "request": {
+    "dueAt": "2026-04-22",
+    "priority": "high",
+    "requestId": "request-uuid",
+    "requestType": "price_request",
+    "status": "qualification",
+    "title": "Mise à jour target price Etam"
+  }
+}
+```
+
 ### `setEmailInboxBucket`
 
 Champs obligatoires:

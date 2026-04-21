@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { emailRequestTypeMeta } from "@/features/emails/metadata";
 import { CreateRequestFromEmailButton } from "@/features/emails/components/create-request-from-email-button";
@@ -6,20 +7,26 @@ import { OpenCreatedRequestLink } from "@/features/emails/components/open-create
 
 interface QualificationActionsBarProps {
   canCreate: boolean;
+  canSave: boolean;
   currentPriority: string;
   currentRequestType: string | null;
   isPending: boolean;
+  isSavePending: boolean;
   linkedRequestId: string | null;
   onCreateRequest: () => void;
+  onSaveQualification: () => void;
 }
 
 export function QualificationActionsBar({
   canCreate,
+  canSave,
   currentPriority,
   currentRequestType,
   isPending,
+  isSavePending,
   linkedRequestId,
   onCreateRequest,
+  onSaveQualification,
 }: Readonly<QualificationActionsBarProps>) {
   const requestTypeLabel =
     currentRequestType && currentRequestType in emailRequestTypeMeta
@@ -35,10 +42,10 @@ export function QualificationActionsBar({
             <Badge variant="outline">{requestTypeLabel}</Badge>
           </div>
           <p className="mt-3 text-sm font-semibold">
-            Créer une demande depuis cet email
+            Enregistrer la qualification puis créer une demande si nécessaire
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            La demande reprend le titre, le type, la priorité, le résumé, le responsable et les champs métier validés dans le panneau.
+            Enregistre d’abord le client et les champs métier sur l’email, puis transforme-le en demande au bon moment.
           </p>
           <p className="mt-2 text-xs uppercase tracking-[0.16em] text-muted-foreground">
             Priorité · {currentPriority}
@@ -47,6 +54,14 @@ export function QualificationActionsBar({
 
         <div className="grid w-full gap-2 md:w-auto md:flex md:flex-wrap">
           {linkedRequestId ? <OpenCreatedRequestLink requestId={linkedRequestId} /> : null}
+          <Button
+            variant="outline"
+            onClick={onSaveQualification}
+            disabled={!canSave || isSavePending}
+            className="w-full md:w-auto"
+          >
+            {isSavePending ? "Enregistrement..." : "Enregistrer sur l’email"}
+          </Button>
           <CreateRequestFromEmailButton
             disabled={!canCreate}
             isPending={isPending}

@@ -7,7 +7,9 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuthorization } from "@/features/auth/components/auth-role-provider";
+import { createClientAction } from "@/features/clients/actions/create-client";
 import { createRequestFromEmailAction } from "@/features/emails/actions/create-request-from-email";
+import { saveEmailQualificationAction } from "@/features/emails/actions/update-email";
 import { EmailQualificationFields } from "@/features/emails/components/email-qualification-fields";
 import { QualificationActionsBar } from "@/features/emails/components/qualification-actions-bar";
 import { SuggestedFieldsCard } from "@/features/emails/components/suggested-fields-card";
@@ -29,9 +31,12 @@ export function EmailQualificationPanel({
   const router = useRouter();
   const { can } = useAuthorization();
   const [isCreatePending, startCreateTransition] = useTransition();
+  const [isSavePending, startSaveTransition] = useTransition();
   const [currentLinkedRequestId, setCurrentLinkedRequestId] = useState<string | null>(
     email.linkedRequestId,
   );
+  const [optionsState, setOptionsState] =
+    useState<EmailQualificationOptions>(qualificationOptions);
   const [formState, setFormState] = useState<EmailQualificationDraft>(
     email.classification.suggestedFields,
   );
@@ -61,11 +66,63 @@ export function EmailQualificationPanel({
     });
   }
 
+  async function handleCreateClient(input: {
+    code: string | null;
+    name: string;
+  }) {
+    const result = await createClientAction(input);
+
+    if (!result.ok || !result.client) {
+      toast.error(result.message);
+      return false;
+    }
+
+    const createdClient = result.client;
+
+    setOptionsState((current) => ({
+      ...current,
+      clients: sortQualificationOptions([
+        ...current.clients.filter((client) => client.id !== createdClient.id),
+        createdClient,
+      ]),
+    }));
+    patchDraft({
+      clientId: createdClient.id,
+      clientName: createdClient.label,
+      contactId: null,
+      contactName: null,
+      modelId: null,
+      modelName: null,
+    });
+    toast.success(result.message);
+
+    return true;
+  }
+
+  function handleSaveQualification() {
+    startSaveTransition(async () => {
+      const result = await saveEmailQualificationAction({
+        emailId: email.id,
+        qualification: formState,
+      });
+
+      if (result.ok) {
+        toast.success(result.message);
+        router.refresh();
+        return;
+      }
+
+      toast.error(result.message);
+    });
+  }
+
   const qualificationSourceLabel =
     email.classification.source === "stored"
       ? "Qualification existante"
       : "Préremplissage métier V1";
   const canCreateRequest = can("emails.qualify") && can("requests.create");
+  const canCreateClient = can("clients.create");
+  const canSaveQualification = can("emails.qualify");
 
   return (
     <div className="space-y-4">
@@ -93,9 +150,11 @@ export function EmailQualificationPanel({
         </CardHeader>
 
         <EmailQualificationFields
+          canCreateClient={canCreateClient}
           draft={formState}
           onChange={patchDraft}
-          options={qualificationOptions}
+          onCreateClient={handleCreateClient}
+          options={optionsState}
           optionsError={qualificationOptionsError}
         />
       </Card>
@@ -107,12 +166,19 @@ export function EmailQualificationPanel({
           formState.title.trim().length > 0 &&
           !currentLinkedRequestId
         }
+        canSave={canSaveQualification}
         currentPriority={formState.priority}
         currentRequestType={formState.requestType}
         linkedRequestId={currentLinkedRequestId}
         isPending={isCreatePending}
+        isSavePending={isSavePending}
         onCreateRequest={handleCreateRequest}
+        onSaveQualification={handleSaveQualification}
       />
     </div>
   );
+}
+
+function sortQualificationOptions(options: EmailQualificationOptions["clients"]) {
+  return [...options].sort((left, right) => left.label.localeCompare(right.label, "fr"));
 }

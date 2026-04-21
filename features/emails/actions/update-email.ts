@@ -10,6 +10,7 @@ import {
 import { mapUiEmailStatusToDatabaseValues } from "@/features/emails/metadata";
 import type {
   EmailInboxBucket,
+  EmailQualificationDraft,
   EmailMutationResult,
   EmailProcessingStatus,
 } from "@/features/emails/types";
@@ -43,6 +44,12 @@ interface SetEmailInboxBucketInput {
   source?: "assistant" | "system" | "ui";
 }
 
+interface SaveEmailQualificationInput {
+  emailId: string;
+  qualification: EmailQualificationDraft;
+  source?: "assistant" | "system" | "ui";
+}
+
 export async function markEmailProcessedAction(
   input: Omit<UpdateEmailStatusInput, "status">,
 ): Promise<EmailMutationResult> {
@@ -68,6 +75,133 @@ export async function ignoreEmailForNowAction(
     emailId: input.emailId,
     status: "new",
   });
+}
+
+export async function saveEmailQualificationAction(
+  input: SaveEmailQualificationInput,
+  context?: AssistantMutationExecutionContext,
+): Promise<EmailMutationResult> {
+  const authorization = context?.authorizationOverride
+    ? await authorizeServerPermissions(["emails.qualify"], context.authorizationOverride)
+    : await authorizeServerAction("emails.qualify");
+
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      field: "qualification",
+      message: authorization.message,
+    };
+  }
+
+  if (!input.emailId) {
+    return {
+      ok: false,
+      field: "qualification",
+      message: "Identifiant email manquant.",
+    };
+  }
+
+  const emailResult = await supabaseRestSelectMaybeSingle<EmailRecord>(
+    "emails",
+    {
+      id: `eq.${input.emailId}`,
+      select: "*",
+    },
+    context?.rest ?? undefined,
+  );
+
+  if (emailResult.error || !emailResult.data) {
+    return {
+      ok: false,
+      field: "qualification",
+      message: `Impossible de charger l’email à qualifier: ${emailResult.error ?? "email introuvable."}`,
+    };
+  }
+
+  const qualificationPayload = buildEmailQualificationPayload(
+    emailResult.data,
+    input.emailId,
+    input.qualification,
+    input.source ?? "ui",
+  );
+  const payloads: Array<Record<string, unknown>> = [
+    {
+      ai_classification: qualificationPayload,
+      ai_summary: input.qualification.summary,
+      assigned_user_id: input.qualification.assignedUserId,
+      classification_confidence: input.qualification.aiConfidence,
+      client_id: input.qualification.clientId,
+      contact_id: input.qualification.contactId,
+      detected_client_name: input.qualification.clientName,
+      model_id: input.qualification.modelId,
+      product_department_id: input.qualification.productDepartmentId,
+    },
+    {
+      classification_json: qualificationPayload,
+      ai_summary: input.qualification.summary,
+      assigned_user_id: input.qualification.assignedUserId,
+      classification_confidence: input.qualification.aiConfidence,
+      client_id: input.qualification.clientId,
+      contact_id: input.qualification.contactId,
+      detected_client_name: input.qualification.clientName,
+      model_id: input.qualification.modelId,
+      product_department_id: input.qualification.productDepartmentId,
+    },
+    {
+      ai_classification: qualificationPayload,
+      client_id: input.qualification.clientId,
+      detected_client_name: input.qualification.clientName,
+    },
+    {
+      classification_json: qualificationPayload,
+      client_id: input.qualification.clientId,
+      detected_client_name: input.qualification.clientName,
+    },
+  ];
+
+  const result = await patchEmailWithPayloads(
+    {
+      emailId: input.emailId,
+      field: "qualification",
+      payloads,
+      successMessage: input.qualification.clientName
+        ? `Qualification enregistrée. Client assigné: ${input.qualification.clientName}.`
+        : "Qualification enregistrée sur l’email.",
+    },
+    context,
+  );
+
+  if (result.ok) {
+    await createActivityLogEntry({
+      action: "email_qualification_saved",
+      actorId: authorization.actorId,
+      description: `Qualification enregistrée sur l’email ${input.emailId}.`,
+      entityId: input.emailId,
+      entityType: "email",
+      payload: qualificationPayload,
+      requestId: null,
+      scope: "emails.qualification",
+      source: input.source ?? "ui",
+      status: "success",
+    });
+
+    return result;
+  }
+
+  await createActivityLogEntry({
+    action: "email_qualification_save_failed",
+    actorId: authorization.actorId,
+    description: result.message,
+    entityId: input.emailId,
+    entityType: "email",
+    payload: qualificationPayload,
+    requestId: null,
+    scope: "emails.qualification",
+    source: input.source ?? "ui",
+    status: "failure",
+  });
+
+  return result;
 }
 
 export async function setEmailInboxBucketAction(
@@ -275,6 +409,7 @@ async function createActivityLogEntry(input: {
   entityType: string;
   payload: Record<string, unknown>;
   requestId: string | null;
+  scope?: string;
   source?: "assistant" | "system" | "ui";
   status?: "failure" | "success";
 }) {
@@ -292,7 +427,7 @@ async function createActivityLogEntry(input: {
     metadata: input.payload,
     payload: input.payload,
     request_id: input.requestId,
-    scope: "emails.link_to_request",
+    scope: input.scope ?? "emails.link_to_request",
     source: input.source ?? "system",
     status: input.status ?? "success",
   };
@@ -551,6 +686,39 @@ function mergeEmailClassificationPayload(
   }
 
   return merged;
+}
+
+function buildEmailQualificationPayload(
+  email: EmailRecord,
+  emailId: string,
+  qualification: EmailQualificationDraft,
+  source: "assistant" | "system" | "ui",
+) {
+  return mergeEmailClassificationPayload(email, {
+    assigned_user_id: qualification.assignedUserId,
+    assigned_user_name: qualification.assignedUserName,
+    classificationEngine: "qualification_panel_v1",
+    client_id: qualification.clientId,
+    client_name: qualification.clientName,
+    confidence: qualification.aiConfidence,
+    contact_id: qualification.contactId,
+    contact_name: qualification.contactName,
+    due_at: qualification.dueAt,
+    emailId,
+    model_id: qualification.modelId,
+    model_name: qualification.modelName,
+    priority: qualification.priority,
+    product_department: qualification.productDepartmentName,
+    product_department_id: qualification.productDepartmentId,
+    qualification,
+    qualifiedAt: new Date().toISOString(),
+    request_type: qualification.requestType,
+    requested_action: qualification.requestedAction,
+    requires_human_validation: qualification.requiresHumanValidation,
+    source,
+    summary: qualification.summary,
+    title: qualification.title,
+  });
 }
 
 function getEmailMutationErrorMessage(message: string) {

@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { Link2, Mail, Paperclip, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Sheet,
@@ -15,11 +16,13 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useAuthorization } from "@/features/auth/components/auth-role-provider";
+import { createClientAction } from "@/features/clients/actions/create-client";
 import { createRequestFromEmailAction } from "@/features/emails/actions/create-request-from-email";
 import {
   attachEmailToRequestAction,
   ignoreEmailForNowAction,
   markEmailForReviewAction,
+  saveEmailQualificationAction,
 } from "@/features/emails/actions/update-email";
 import { ClassificationSummaryCard } from "@/features/emails/components/classification-summary-card";
 import { EmailAttachmentsCard } from "@/features/emails/components/email-attachments-card";
@@ -82,17 +85,22 @@ export function MobileEmailDetailSheet({
   const [currentLinkedRequestId, setCurrentLinkedRequestId] = useState<string | null>(
     email?.linkedRequestId ?? null,
   );
+  const [qualificationOptionsState, setQualificationOptionsState] =
+    useState<EmailQualificationOptions>(qualificationOptions);
   const [formState, setFormState] = useState<EmailQualificationDraft | null>(
     email?.classification.suggestedFields ?? null,
   );
 
   const [isCreatePending, startCreateTransition] = useTransition();
+  const [isSavePending, startSaveTransition] = useTransition();
   const [isAttachPending, startAttachTransition] = useTransition();
   const [isReviewPending, startReviewTransition] = useTransition();
   const [isIgnorePending, startIgnoreTransition] = useTransition();
 
   const canCreateRequest = can("emails.qualify") && can("requests.create");
   const canAttachRequest = can("emails.qualify");
+  const canCreateClient = can("clients.create");
+  const canSaveQualification = can("emails.qualify");
 
   const canCreate =
     email !== null &&
@@ -119,6 +127,44 @@ export function MobileEmailDetailSheet({
     );
   }
 
+  const handleCreateClient = useCallback(async (input: {
+    code: string | null;
+    name: string;
+  }) => {
+    const result = await createClientAction(input);
+
+    if (!result.ok || !result.client) {
+      toast.error(result.message);
+      return false;
+    }
+
+    const createdClient = result.client;
+
+    setQualificationOptionsState((current) => ({
+      ...current,
+      clients: sortQualificationOptions([
+        ...current.clients.filter((client) => client.id !== createdClient.id),
+        createdClient,
+      ]),
+    }));
+    setFormState((current) =>
+      current
+        ? {
+            ...current,
+            clientId: createdClient.id,
+            clientName: createdClient.label,
+            contactId: null,
+            contactName: null,
+            modelId: null,
+            modelName: null,
+          }
+        : current,
+    );
+    toast.success(result.message);
+
+    return true;
+  }, []);
+
   function handleCreateRequest() {
     if (!email || !formState) {
       return;
@@ -140,6 +186,27 @@ export function MobileEmailDetailSheet({
       toast.error(result.message);
     });
   }
+
+  const handleSaveQualification = useCallback(() => {
+    if (!email || !formState) {
+      return;
+    }
+
+    startSaveTransition(async () => {
+      const result = await saveEmailQualificationAction({
+        emailId: email.id,
+        qualification: formState,
+      });
+
+      if (result.ok) {
+        toast.success(result.message);
+        router.refresh();
+        return;
+      }
+
+      toast.error(result.message);
+    });
+  }, [email, formState, router]);
 
   function handleAttach() {
     if (!email) {
@@ -261,11 +328,24 @@ export function MobileEmailDetailSheet({
         <Card className="rounded-[1.35rem]">
           <CardContent className="p-4">
             <EmailQualificationFields
+              canCreateClient={canCreateClient}
               draft={formState}
               onChange={patchDraft}
-              options={qualificationOptions}
+              onCreateClient={handleCreateClient}
+              options={qualificationOptionsState}
               optionsError={qualificationOptionsError}
             />
+            <div className="mt-4">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={handleSaveQualification}
+                disabled={!canSaveQualification || isSavePending}
+              >
+                {isSavePending ? "Enregistrement..." : "Enregistrer sur l’email"}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       );
@@ -314,14 +394,19 @@ export function MobileEmailDetailSheet({
     );
   }, [
     activeSection,
+    canCreateClient,
+    canSaveQualification,
     currentLinkedRequestId,
     documentOptions,
     documentOptionsError,
     email,
     formState,
+    handleCreateClient,
+    handleSaveQualification,
     isAttachPending,
+    isSavePending,
     linkedRequestValue,
-    qualificationOptions,
+    qualificationOptionsState,
     qualificationOptionsError,
     requestOptions,
     requestOptionsError,
@@ -390,4 +475,8 @@ export function MobileEmailDetailSheet({
       </SheetContent>
     </Sheet>
   );
+}
+
+function sortQualificationOptions(options: EmailQualificationOptions["clients"]) {
+  return [...options].sort((left, right) => left.label.localeCompare(right.label, "fr"));
 }

@@ -13,15 +13,19 @@ import type {
 } from "@/features/emails/types";
 
 interface EmailQualificationFieldsProps {
+  canCreateClient?: boolean;
   draft: EmailQualificationDraft;
   onChange: (nextDraft: Partial<EmailQualificationDraft>) => void;
+  onCreateClient?: (input: { code: string | null; name: string }) => Promise<boolean>;
   options: EmailQualificationOptions;
   optionsError?: string | null;
 }
 
 export function EmailQualificationFields({
+  canCreateClient = false,
   draft,
   onChange,
+  onCreateClient,
   options,
   optionsError = null,
 }: Readonly<EmailQualificationFieldsProps>) {
@@ -65,8 +69,10 @@ export function EmailQualificationFields({
         </QualificationFieldGroup>
 
         <ClientDepartmentModelSelectors
+          canCreateClient={canCreateClient}
           draft={draft}
           onChange={onChange}
+          onCreateClient={onCreateClient}
           options={options}
         />
 

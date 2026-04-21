@@ -4,6 +4,7 @@ import type { AssistantMutationExecutionContext } from "@/features/assistant-act
 import {
   addNoteToProduction,
   addNoteToRequest,
+  createRequest,
   createTask,
   getBlockedProductions,
   getHighRiskProductions,
@@ -23,6 +24,7 @@ import type {
   AssistantActionResult,
   AssistantAddProductionNoteInput,
   AssistantAddRequestNoteInput,
+  AssistantCreateRequestInput,
   AssistantCreateTaskInput,
   AssistantPrepareReplyDraftInput,
   AssistantRunEmailOpsCycleInput,
@@ -31,7 +33,7 @@ import type {
 } from "@/features/assistant-actions/types";
 import type { ServerPermissionOverride } from "@/features/auth/server-authorization";
 import { getCurrentUserContext } from "@/features/auth/queries";
-import { requestPriorityOptions } from "@/features/requests/metadata";
+import { requestPriorityOptions, requestStatusMeta } from "@/features/requests/metadata";
 import { replyTemplateOrder } from "@/features/replies/lib/reply-templates";
 import {
   assistantTaskTypeValues,
@@ -51,6 +53,7 @@ export type OpenClawReadActionName =
 export type OpenClawSafeWriteActionName =
   | "addNoteToProduction"
   | "addNoteToRequest"
+  | "createRequest"
   | "createTask"
   | "prepareReplyDraft"
   | "runEmailOpsCycle"
@@ -110,6 +113,7 @@ export const openClawSafeWriteActionNames: OpenClawSafeWriteActionName[] = [
   "runEmailOpsCycle",
   "runGmailSync",
   "setEmailInboxBucket",
+  "createRequest",
   "createTask",
   "addNoteToRequest",
   "addNoteToProduction",
@@ -142,6 +146,14 @@ const openClawActionSamples: Record<
     label: "Valider le dossier avant expédition",
     priority: "high",
     requestId: "request-uuid",
+  },
+  createRequest: {
+    dueAt: "2026-04-22",
+    priority: "high",
+    requestType: "price_request",
+    status: "qualification",
+    summary: "Le client demande une mise à jour prix avec délai court.",
+    title: "Mise à jour target price Etam",
   },
   createTask: {
     dueAt: "2026-04-02",
@@ -396,6 +408,18 @@ async function dispatchOpenClawAction(
           })
         : parsed.result;
     }
+    case "createRequest": {
+      const parsed = parseCreateRequestInput(input);
+      return parsed.ok
+        ? createRequest({
+            ...parsed.value,
+            source: "assistant",
+          }, {
+            authorizationOverride: options?.authorizationOverride,
+            mutationContext: options?.mutationContext ?? null,
+          })
+        : parsed.result;
+    }
     case "createTask": {
       const parsed = parseCreateTaskInput(input);
       return parsed.ok
@@ -535,6 +559,68 @@ function parseCreateTaskInput(input: unknown) {
       taskType: input.taskType,
       title: input.title,
     } satisfies AssistantCreateTaskInput,
+  };
+}
+
+function parseCreateRequestInput(input: unknown) {
+  if (!isRecord(input)) {
+    return invalidPayloadResult("Payload invalide pour createRequest.");
+  }
+
+  if (
+    typeof input.title !== "string" ||
+    typeof input.requestType !== "string" ||
+    typeof input.priority !== "string"
+  ) {
+    return invalidPayloadResult(
+      "Les champs title, requestType et priority sont requis pour createRequest.",
+    );
+  }
+
+  if (
+    !requestPriorityOptions.includes(
+      input.priority as AssistantCreateRequestInput["priority"],
+    )
+  ) {
+    return invalidPayloadResult(
+      `priority invalide pour createRequest. Valeurs supportées: ${requestPriorityOptions.join(", ")}.`,
+    );
+  }
+
+  if (
+    "status" in input &&
+    typeof input.status === "string" &&
+    !(input.status in requestStatusMeta)
+  ) {
+    return invalidPayloadResult(
+      `status invalide pour createRequest. Valeurs supportées: ${Object.keys(requestStatusMeta).join(", ")}.`,
+    );
+  }
+
+  return {
+    ok: true as const,
+    value: {
+      assignedUserId:
+        typeof input.assignedUserId === "string" ? input.assignedUserId : null,
+      clientId: typeof input.clientId === "string" ? input.clientId : null,
+      contactId: typeof input.contactId === "string" ? input.contactId : null,
+      dueAt: typeof input.dueAt === "string" ? input.dueAt : null,
+      modelId: typeof input.modelId === "string" ? input.modelId : null,
+      priority: input.priority as AssistantCreateRequestInput["priority"],
+      productDepartmentId:
+        typeof input.productDepartmentId === "string"
+          ? input.productDepartmentId
+          : null,
+      requestType: input.requestType,
+      requestedAction:
+        typeof input.requestedAction === "string" ? input.requestedAction : null,
+      status:
+        typeof input.status === "string"
+          ? (input.status as AssistantCreateRequestInput["status"])
+          : "qualification",
+      summary: typeof input.summary === "string" ? input.summary : null,
+      title: input.title,
+    } satisfies AssistantCreateRequestInput,
   };
 }
 
@@ -748,6 +834,16 @@ function sanitizeAuditInput(action: OpenClawExposedActionName, input: unknown) {
         productionId:
           typeof input.productionId === "string" ? input.productionId : null,
       };
+    case "createRequest":
+      return {
+        clientId: typeof input.clientId === "string" ? input.clientId : null,
+        dueAt: typeof input.dueAt === "string" ? input.dueAt : null,
+        priority: typeof input.priority === "string" ? input.priority : null,
+        requestType:
+          typeof input.requestType === "string" ? input.requestType : null,
+        status: typeof input.status === "string" ? input.status : null,
+        title: typeof input.title === "string" ? input.title.slice(0, 120) : null,
+      };
     case "createTask":
       return {
         dueAt: typeof input.dueAt === "string" ? input.dueAt : null,
@@ -801,6 +897,8 @@ function getAuditEntityId(action: OpenClawExposedActionName, input: unknown) {
       return typeof input.clientName === "string" ? input.clientName : null;
     case "searchModelHistory":
       return typeof input.modelName === "string" ? input.modelName : null;
+    case "createRequest":
+      return typeof input.title === "string" ? input.title : null;
     case "createTask":
     case "addNoteToRequest":
       return typeof input.requestId === "string" ? input.requestId : null;
@@ -821,6 +919,8 @@ function getAuditEntityId(action: OpenClawExposedActionName, input: unknown) {
 
 function getAuditEntityType(action: OpenClawExposedActionName) {
   switch (action) {
+    case "createRequest":
+      return "request";
     case "createTask":
       return "task";
     case "addNoteToRequest":
@@ -850,6 +950,10 @@ function getAuditEntityType(action: OpenClawExposedActionName) {
 
 function getAuditRequestId(action: OpenClawExposedActionName, input: unknown) {
   if (!isRecord(input)) {
+    return null;
+  }
+
+  if (action === "createRequest") {
     return null;
   }
 

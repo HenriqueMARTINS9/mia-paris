@@ -123,6 +123,17 @@ export const assistantActionCatalog: AssistantActionDefinition[] = [
     safeForOpenClaw: true,
   },
   {
+    command: "createRequest",
+    description: "Crée une demande CRM structurée avec type, priorité et contexte métier.",
+    example: "Crée une demande price_request pour Etam",
+    exposure: "safe",
+    key: "request-create",
+    kind: "write",
+    label: "Créer une demande",
+    permission: "assistant.write.safe",
+    safeForOpenClaw: true,
+  },
+  {
     command: "createTask",
     description: "Crée une tâche CRM reliée à une demande si nécessaire.",
     example: "Crée une task deadline_check sur la demande X",
