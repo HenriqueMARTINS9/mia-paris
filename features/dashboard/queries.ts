@@ -95,7 +95,7 @@ const getDashboardPageDataInternal = async (): Promise<DashboardPageData> => {
       supabase
         .from("activity_logs")
         .select(
-          "id,action,action_type,description,entity_id,entity_type,request_id,status,action_status,created_at,source",
+          "id,action_type,description,entity_id,entity_type,request_id,status,action_status,created_at,source",
         )
         .eq("source", "assistant")
         .order("created_at", { ascending: false })
@@ -104,9 +104,9 @@ const getDashboardPageDataInternal = async (): Promise<DashboardPageData> => {
         select: "id,status",
       }),
       supabaseRestSelectList<ActivityLogRecord>("activity_logs", {
-        action: "in.(request_created_from_email,request_creation_failed_from_email)",
+        action_type: "in.(request_created_from_email,request_creation_failed_from_email)",
         order: "created_at.desc.nullslast",
-        select: "id,action,action_type,created_at",
+        select: "id,action_type,created_at",
       }),
       supabase
         .from("v_requests_overview")

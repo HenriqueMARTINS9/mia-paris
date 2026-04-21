@@ -44,7 +44,12 @@ export function EmailsPage({
   requestOptions,
   requestOptionsError = null,
   selectedEmailId,
-}: Readonly<EmailsPageData>) {
+  oauthFeedbackMessage = null,
+}: Readonly<
+  EmailsPageData & {
+    oauthFeedbackMessage?: string | null;
+  }
+>) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -182,6 +187,12 @@ export function EmailsPage({
     <div className="flex flex-col gap-6">
       <GmailAutoSyncBridge gmailInbox={gmailInbox} />
       {header}
+      {oauthFeedbackMessage ? (
+        <ErrorState
+          title="Connexion Gmail partagée"
+          description={oauthFeedbackMessage}
+        />
+      ) : null}
 
       {areFiltersLoading ? (
         <FiltersLoadingCard />
