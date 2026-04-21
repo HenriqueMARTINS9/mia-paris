@@ -227,13 +227,17 @@ function presentEmailOpsCycle(data: unknown) {
 
   return {
     cycle: {
+      clientClassifiedCount: result?.clientClassifiedCount ?? 0,
       crmEnrichedCount: result?.crmEnrichedCount ?? 0,
+      deadlineCreatedCount: result?.deadlineCreatedCount ?? 0,
       errorCount: result?.errorCount ?? 0,
       importantCount: result?.importantCount ?? 0,
       processedCount: result?.processedCount ?? 0,
       promotionalCount: result?.promotionalCount ?? 0,
+      requestCreatedCount: result?.requestCreatedCount ?? 0,
       syncImportedMessages: result?.sync.importedMessages ?? 0,
       syncOk: result?.sync.ok ?? false,
+      taskCreatedCount: result?.taskCreatedCount ?? 0,
       toReviewCount: result?.toReviewCount ?? 0,
     },
     format: "compact" as const,
@@ -241,7 +245,9 @@ function presentEmailOpsCycle(data: unknown) {
     recommendedAction:
       result && result.toReviewCount > 0
         ? "Ouvrir ensuite l’onglet À vérifier pour arbitrer les emails incertains."
-        : "Traiter ensuite les emails classés Important dans le CRM.",
+        : result && result.requestCreatedCount > 0
+          ? "Contrôler ensuite les nouvelles demandes créées et leurs tâches auto."
+          : "Traiter ensuite les emails classés Important dans le CRM.",
     summary:
       result?.sync.ok === false
         ? "Cycle assistant exécuté, mais la sync Gmail doit être vérifiée."

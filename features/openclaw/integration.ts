@@ -192,6 +192,7 @@ const openClawActionSamples: Record<
     replyType: "acknowledgement",
   },
   runEmailOpsCycle: {
+    createRequests: true,
     limit: 15,
     syncLimit: 50,
   },
@@ -735,6 +736,7 @@ function parseRunEmailOpsCycleInput(input: unknown) {
     return {
       ok: true as const,
       value: {
+        createRequests: null,
         limit: null,
         syncLimit: null,
       } satisfies AssistantRunEmailOpsCycleInput,
@@ -772,6 +774,8 @@ function parseRunEmailOpsCycleInput(input: unknown) {
   return {
     ok: true as const,
     value: {
+      createRequests:
+        typeof input.createRequests === "boolean" ? input.createRequests : null,
       limit: typeof input.limit === "number" ? Math.floor(input.limit) : null,
       syncLimit:
         typeof input.syncLimit === "number" ? Math.floor(input.syncLimit) : null,
@@ -871,6 +875,8 @@ function sanitizeAuditInput(action: OpenClawExposedActionName, input: unknown) {
     case "runGmailSync":
     case "runEmailOpsCycle":
       return {
+        createRequests:
+          typeof input.createRequests === "boolean" ? input.createRequests : null,
         limit: typeof input.limit === "number" ? input.limit : null,
         syncLimit: typeof input.syncLimit === "number" ? input.syncLimit : null,
       };

@@ -133,6 +133,7 @@ export interface AssistantRunGmailSyncInput {
 }
 
 export interface AssistantRunEmailOpsCycleInput {
+  createRequests?: boolean | null;
   limit?: number | null;
   source?: AssistantActionSource;
   syncLimit?: number | null;
@@ -167,14 +168,18 @@ export interface AssistantEmailOpsCycleItem {
 }
 
 export interface AssistantRunEmailOpsCycleResult {
+  clientClassifiedCount: number;
   crmEnrichedCount: number;
+  deadlineCreatedCount: number;
   errorCount: number;
   importantCount: number;
   items: AssistantEmailOpsCycleItem[];
   processedCount: number;
   promotionalCount: number;
+  requestCreatedCount: number;
   skippedCount: number;
   sync: GmailSyncResult;
+  taskCreatedCount: number;
   toReviewCount: number;
 }
 

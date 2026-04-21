@@ -263,6 +263,11 @@ export async function runEmailOpsCycle(
 
   const cycle = await runAssistantEmailOpsCycle({
     actor: options?.mutationContext?.actor ?? null,
+    authorizationOverride:
+      options?.mutationContext?.authorizationOverride ??
+      options?.authorizationOverride ??
+      null,
+    createRequests: input.createRequests ?? null,
     limit: input.limit ?? null,
     rest: options?.mutationContext?.rest ?? null,
     syncLimit: input.syncLimit ?? null,
@@ -276,17 +281,22 @@ export async function runEmailOpsCycle(
     entityId: cycle.result.sync.connectedInboxEmail,
     entityType: "email_ops",
     payload: {
+      clientClassifiedCount: cycle.result.clientClassifiedCount,
       crmEnrichedCount: cycle.result.crmEnrichedCount,
+      createRequests: input.createRequests ?? null,
+      deadlineCreatedCount: cycle.result.deadlineCreatedCount,
       errorCount: cycle.result.errorCount,
       importantCount: cycle.result.importantCount,
       limit: input.limit ?? null,
       preview: cycle.result.items.slice(0, 5),
       processedCount: cycle.result.processedCount,
       promotionalCount: cycle.result.promotionalCount,
+      requestCreatedCount: cycle.result.requestCreatedCount,
       skippedCount: cycle.result.skippedCount,
       source: normalizeAssistantSource(input.source),
       syncLimit: input.syncLimit ?? null,
       syncMessage: cycle.result.sync.message,
+      taskCreatedCount: cycle.result.taskCreatedCount,
       toReviewCount: cycle.result.toReviewCount,
     },
     requestId: null,

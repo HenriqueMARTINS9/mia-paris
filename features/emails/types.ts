@@ -211,8 +211,11 @@ export interface GmailSyncResult {
 }
 
 export interface EmailMutationResult {
+  deadlineCreated?: boolean;
   ok: boolean;
   field: EmailMutationField;
   message: string;
   requestId?: string | null;
+  requestCreated?: boolean;
+  taskCreated?: boolean;
 }

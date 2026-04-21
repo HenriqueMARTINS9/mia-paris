@@ -63,7 +63,7 @@ Avec ça, le bot a déjà:
 - les garde-fous
 - le comportement Gmail
 - la logique de tri inbox
-- la création de tâches et de demandes CRM
+- la routine email capable de classer les clients et de créer des demandes CRM quand le mail est suffisamment clair
 
 ## Routine recommandée MyClaw
 
@@ -71,9 +71,9 @@ Pour la gestion quotidienne des emails, préférer `runEmailOpsCycle` plutôt qu
 
 Routine simple conseillée:
 
-1. `08:30` -> `runEmailOpsCycle` avec `{ "limit": 15, "syncLimit": 50 }`
-2. `13:00` -> `runEmailOpsCycle` avec `{ "limit": 15, "syncLimit": 50 }`
-3. `17:30` -> `runEmailOpsCycle` avec `{ "limit": 15, "syncLimit": 50 }`
+1. `08:30` -> `runEmailOpsCycle` avec `{ "createRequests": true, "limit": 15, "syncLimit": 50 }`
+2. `13:00` -> `runEmailOpsCycle` avec `{ "createRequests": true, "limit": 15, "syncLimit": 50 }`
+3. `17:30` -> `runEmailOpsCycle` avec `{ "createRequests": true, "limit": 15, "syncLimit": 50 }`
 
 Comportement attendu:
 
@@ -81,5 +81,8 @@ Comportement attendu:
 - lecture email par email
 - classement `important / promotional / to_review`
 - enrichissement des données CRM détectables
+- classification du client quand le signal est suffisamment net
+- création d’une demande si l’email important est clair et prêt à être structuré
+- création des tâches et deadlines automatiques via le flux standard `email -> request`
 - priorité aux emails `important`
 - relecture humaine des emails `to_review`

@@ -121,6 +121,7 @@ export function EmailsPage({
   const selectedEmail = selectedEmailQueryId
     ? emails.find((email) => email.id === selectedEmailQueryId) ?? null
     : null;
+  const shouldRenderDesktopSheet = isDesktopViewport && Boolean(selectedEmail);
   const highlightedEmailId = selectedEmail?.id ?? selectedEmailId ?? null;
   const hasActiveFilters =
     filters.search.trim().length > 0 ||
@@ -180,33 +181,20 @@ export function EmailsPage({
     );
   }
 
-  if (emails.length === 0) {
-    return (
-      <div className="flex flex-col gap-6">
-        {header}
-        <EmptyState
-          title={
-            hasActiveFilters
-              ? "Aucun email ne correspond aux filtres"
-              : filters.selectedBucket === "promotional"
-                ? "Aucun email publicitaire détecté"
-                : filters.selectedBucket === "to_review"
-                  ? "Aucun email en attente de vérification"
-                  : "Aucun email important dans l’inbox"
-          }
-          description={
-            hasActiveFilters
-              ? "Essaie un autre statut, réduis la recherche ou reviens à la première page."
-              : filters.selectedBucket === "promotional"
-                ? "L’assistant n’a pas encore classé de newsletters ou promotions dans cet onglet."
-                : filters.selectedBucket === "to_review"
-                  ? "Tous les emails visibles ont déjà été classés comme importants ou publicitaires."
-                  : "L’inbox principale est vide pour l’instant ou les nouveaux emails attendent encore un tri assistant."
-          }
-        />
-      </div>
-    );
-  }
+  const emptyStateTitle = hasActiveFilters
+    ? "Aucun email ne correspond aux filtres"
+    : filters.selectedBucket === "promotional"
+      ? "Aucun email publicitaire détecté"
+      : filters.selectedBucket === "to_review"
+        ? "Aucun email en attente de vérification"
+        : "Aucun email important dans l’inbox";
+  const emptyStateDescription = hasActiveFilters
+    ? "Essaie un autre statut, réduis la recherche ou reviens à la première page."
+    : filters.selectedBucket === "promotional"
+      ? "L’assistant n’a pas encore classé de newsletters ou promotions dans cet onglet."
+      : filters.selectedBucket === "to_review"
+        ? "Tous les emails visibles ont déjà été classés comme importants ou publicitaires."
+        : "L’inbox principale est vide pour l’instant ou les nouveaux emails attendent encore un tri assistant.";
 
   return (
     <div className="flex flex-col gap-6">
@@ -275,54 +263,63 @@ export function EmailsPage({
             </div>
           </CardHeader>
           <CardContent className="space-y-4 p-4">
-            <MobileEmailList
-              emails={emails}
-              selectedEmailId={highlightedEmailId}
-              onSelectEmail={(emailId) => {
-                navigateWithQuery({
-                  pathname,
-                  patch: {
-                    email: emailId,
-                  },
-                  router,
-                  searchParams,
-                  startTransition: startRoutingTransition,
-                });
-              }}
-            />
+            {emails.length > 0 ? (
+              <>
+                <MobileEmailList
+                  emails={emails}
+                  selectedEmailId={highlightedEmailId}
+                  onSelectEmail={(emailId) => {
+                    navigateWithQuery({
+                      pathname,
+                      patch: {
+                        email: emailId,
+                      },
+                      router,
+                      searchParams,
+                      startTransition: startRoutingTransition,
+                    });
+                  }}
+                />
 
-            <EmailPaginationControls
-              currentPage={pagination.page}
-              disabled={isRoutingPending}
-              onPageChange={(nextPage) =>
-                navigateWithQuery({
-                  pathname,
-                  patch: {
-                    email: null,
-                    page: String(nextPage),
-                  },
-                  router,
-                  searchParams,
-                  startTransition: startRoutingTransition,
-                })
-              }
-              onPerPageChange={(nextPerPage) =>
-                navigateWithQuery({
-                  pathname,
-                  patch: {
-                    email: null,
-                    page: "1",
-                    perPage: String(nextPerPage),
-                  },
-                  router,
-                  searchParams,
-                  startTransition: startRoutingTransition,
-                })
-              }
-              perPage={pagination.perPage}
-              totalPages={pagination.totalPages}
-              totalSummary={paginationSummary}
-            />
+                <EmailPaginationControls
+                  currentPage={pagination.page}
+                  disabled={isRoutingPending}
+                  onPageChange={(nextPage) =>
+                    navigateWithQuery({
+                      pathname,
+                      patch: {
+                        email: null,
+                        page: String(nextPage),
+                      },
+                      router,
+                      searchParams,
+                      startTransition: startRoutingTransition,
+                    })
+                  }
+                  onPerPageChange={(nextPerPage) =>
+                    navigateWithQuery({
+                      pathname,
+                      patch: {
+                        email: null,
+                        page: "1",
+                        perPage: String(nextPerPage),
+                      },
+                      router,
+                      searchParams,
+                      startTransition: startRoutingTransition,
+                    })
+                  }
+                  perPage={pagination.perPage}
+                  totalPages={pagination.totalPages}
+                  totalSummary={paginationSummary}
+                />
+              </>
+            ) : (
+              <EmptyState
+                title={emptyStateTitle}
+                description={emptyStateDescription}
+              />
+            )}
           </CardContent>
         </Card>
 
@@ -372,91 +369,104 @@ export function EmailsPage({
               </div>
             </div>
           </CardHeader>
-          <CardContent className="px-0 pb-0">
-            <EmailsTable
-              emails={emails}
-              selectedEmailId={highlightedEmailId}
-              onSelectEmail={(emailId) => {
-                navigateWithQuery({
-                  pathname,
-                  patch: {
-                    email: emailId,
-                  },
-                  router,
-                  searchParams,
-                  startTransition: startRoutingTransition,
-                });
-              }}
-            />
-          </CardContent>
-          <CardContent className="border-t border-black/[0.06] p-4">
-            <EmailPaginationControls
-              currentPage={pagination.page}
-              disabled={isRoutingPending}
-              onPageChange={(nextPage) =>
-                navigateWithQuery({
-                  pathname,
-                  patch: {
-                    email: null,
-                    page: String(nextPage),
-                  },
-                  router,
-                  searchParams,
-                  startTransition: startRoutingTransition,
-                })
-              }
-              onPerPageChange={(nextPerPage) =>
-                navigateWithQuery({
-                  pathname,
-                  patch: {
-                    email: null,
-                    page: "1",
-                    perPage: String(nextPerPage),
-                  },
-                  router,
-                  searchParams,
-                  startTransition: startRoutingTransition,
-                })
-              }
-              perPage={pagination.perPage}
-              totalPages={pagination.totalPages}
-              totalSummary={paginationSummary}
-            />
-          </CardContent>
+          {emails.length > 0 ? (
+            <>
+              <CardContent className="px-0 pb-0">
+                <EmailsTable
+                  emails={emails}
+                  selectedEmailId={highlightedEmailId}
+                  onSelectEmail={(emailId) => {
+                    navigateWithQuery({
+                      pathname,
+                      patch: {
+                        email: emailId,
+                      },
+                      router,
+                      searchParams,
+                      startTransition: startRoutingTransition,
+                    });
+                  }}
+                />
+              </CardContent>
+              <CardContent className="border-t border-black/[0.06] p-4">
+                <EmailPaginationControls
+                  currentPage={pagination.page}
+                  disabled={isRoutingPending}
+                  onPageChange={(nextPage) =>
+                    navigateWithQuery({
+                      pathname,
+                      patch: {
+                        email: null,
+                        page: String(nextPage),
+                      },
+                      router,
+                      searchParams,
+                      startTransition: startRoutingTransition,
+                    })
+                  }
+                  onPerPageChange={(nextPerPage) =>
+                    navigateWithQuery({
+                      pathname,
+                      patch: {
+                        email: null,
+                        page: "1",
+                        perPage: String(nextPerPage),
+                      },
+                      router,
+                      searchParams,
+                      startTransition: startRoutingTransition,
+                    })
+                  }
+                  perPage={pagination.perPage}
+                  totalPages={pagination.totalPages}
+                  totalSummary={paginationSummary}
+                />
+              </CardContent>
+            </>
+          ) : (
+            <CardContent className="p-6">
+              <EmptyState
+                title={emptyStateTitle}
+                description={emptyStateDescription}
+              />
+            </CardContent>
+          )}
         </Card>
       </div>
 
-      <Sheet
-        open={isDesktopViewport && Boolean(selectedEmail)}
-        onOpenChange={(open) => {
-          if (!open) {
-            closeEmailDetail();
-          }
-        }}
-      >
-        <SheetContent className="hidden w-full max-w-none border-l-0 p-0 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:translate-x-full data-[state=open]:translate-x-0 md:flex md:max-w-[46rem] md:border-l">
-          <div className="flex h-full min-h-0 flex-col">
-            <SheetHeader className="border-b border-black/[0.06] px-6 py-5">
-              <SheetTitle>Email métier</SheetTitle>
-              <SheetDescription>
-                Aperçu complet, qualification, rattachement CRM et pièces jointes sans réduire la largeur de la liste.
-              </SheetDescription>
-            </SheetHeader>
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-              <EmailPreviewPanel
-                documentOptions={documentOptions}
-                documentOptionsError={documentOptionsError}
-                email={selectedEmail}
-                mode="sheet"
-                qualificationOptions={qualificationOptions}
-                qualificationOptionsError={qualificationOptionsError}
-                requestOptions={requestOptions}
-                requestOptionsError={requestOptionsError}
-              />
+      {shouldRenderDesktopSheet ? (
+        <Sheet
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              closeEmailDetail();
+            }
+          }}
+        >
+          <SheetContent className="hidden w-full max-w-none border-l-0 p-0 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=closed]:translate-x-full data-[state=open]:translate-x-0 md:flex md:max-w-[46rem] md:border-l">
+            <div className="flex h-full min-h-0 flex-col">
+              <SheetHeader className="border-b border-black/[0.06] px-6 py-5">
+                <SheetTitle>Email métier</SheetTitle>
+                <SheetDescription>
+                  Aperçu complet, qualification, rattachement CRM et pièces jointes sans réduire la largeur de la liste.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+                <EmailPreviewPanel
+                  documentOptions={documentOptions}
+                  documentOptionsError={documentOptionsError}
+                  email={selectedEmail}
+                  mode="sheet"
+                  qualificationOptions={qualificationOptions}
+                  qualificationOptionsError={qualificationOptionsError}
+                  requestOptions={requestOptions}
+                  requestOptionsError={requestOptionsError}
+                />
+              </div>
             </div>
-          </div>
-        </SheetContent>
-      </Sheet>
+          </SheetContent>
+        </Sheet>
+      ) : null}
     </div>
   );
 }

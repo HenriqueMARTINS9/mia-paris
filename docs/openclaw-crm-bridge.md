@@ -192,14 +192,19 @@ But métier:
 - lire les emails un par un
 - classer chaque email en `important`, `promotional` ou `to_review`
 - remplir les données CRM détectables sur l’email
+- classifier le client quand il est reconnaissable
+- créer une demande CRM quand l’email important est suffisamment clair
+- laisser le flux métier existant créer les tâches et deadlines automatiques associées
 
 Champs optionnels:
 
+- `createRequests`
 - `limit`
 - `syncLimit`
 
 Valeurs valides:
 
+- `createRequests`: `true` ou `false`
 - `limit`: entier entre `1` et `40`
 - `syncLimit`: entier entre `1` et `100`
 
@@ -207,6 +212,7 @@ Payload valide:
 
 ```json
 {
+  "createRequests": true,
   "limit": 15,
   "syncLimit": 50
 }
@@ -217,13 +223,17 @@ Réponse compacte:
 ```json
 {
   "cycle": {
+    "clientClassifiedCount": 7,
     "crmEnrichedCount": 8,
+    "deadlineCreatedCount": 2,
     "errorCount": 0,
     "importantCount": 6,
     "processedCount": 10,
     "promotionalCount": 2,
+    "requestCreatedCount": 3,
     "syncImportedMessages": 4,
     "syncOk": true,
+    "taskCreatedCount": 3,
     "toReviewCount": 2
   },
   "format": "compact",
@@ -234,13 +244,13 @@ Réponse compacte:
       "dueAt": "2026-04-20",
       "from": "Camille",
       "priority": "high",
-      "recommendedAction": "Qualifier puis créer ou rattacher une demande dans le CRM.",
+      "recommendedAction": "Demande, tâche et suivi ont été créés automatiquement dans le CRM.",
       "requestType": "price_request",
       "status": "classified",
       "subject": "Need updated target price"
     }
   ],
-  "recommendedAction": "Traiter ensuite les emails classés Important dans le CRM.",
+  "recommendedAction": "Contrôler ensuite les nouvelles demandes créées et leurs tâches auto.",
   "summary": "Cycle assistant emails terminé.",
   "truncated": true
 }
@@ -253,6 +263,8 @@ Règles métier:
 - `to_review`: cas ambigu à vérifier humainement
 - les emails déjà qualifiés proprement sont ignorés au run suivant
 - les emails incertains passent en statut `review` côté CRM quand le schéma le permet
+- `createRequests: true` ne crée une demande que si l’email est `important`, qu’un client est identifié, que le type de demande est clair et que la qualification ne réclame pas une validation humaine préalable
+- quand une demande est créée via cette routine, elle réutilise le flux métier standard `email -> request`, donc les tâches et deadlines automatiques suivent les mêmes règles que dans l’UI
 
 Routine recommandée MyClaw:
 
@@ -261,6 +273,15 @@ Routine recommandée MyClaw:
   - `08:30`
   - `13:00`
   - `17:30`
+- payload recommandé:
+
+```json
+{
+  "createRequests": true,
+  "limit": 15,
+  "syncLimit": 50
+}
+```
 
 ### `runGmailSync`
 

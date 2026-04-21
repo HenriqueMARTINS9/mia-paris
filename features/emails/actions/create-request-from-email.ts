@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 
-import { authorizeServerAction } from "@/features/auth/server-authorization";
+import type { AssistantMutationExecutionContext } from "@/features/assistant-actions/execution-context";
+import {
+  authorizeServerAction,
+  authorizeServerPermissions,
+} from "@/features/auth/server-authorization";
 import {
   buildEmailQualificationDraft,
   buildRawSourceExcerpt,
@@ -26,6 +30,7 @@ import {
   supabaseRestInsert,
   supabaseRestPatch,
   supabaseRestSelectMaybeSingle,
+  type SupabaseRestExecutionContext,
   type SupabaseRestErrorPayload,
 } from "@/lib/supabase/rest";
 import { parseJsonObject, readObject, readString } from "@/lib/record-helpers";
@@ -81,8 +86,14 @@ const requestAutoTaskRules: RequestAutoTaskRule[] = [
 
 export async function createRequestFromEmailAction(
   input: CreateRequestFromEmailPayload,
+  context?: AssistantMutationExecutionContext,
 ): Promise<EmailMutationResult> {
-  const authorization = await authorizeServerAction("emails.qualify");
+  const authorization = context?.authorizationOverride
+    ? await authorizeServerPermissions(
+        ["emails.qualify", "requests.create"],
+        context.authorizationOverride,
+      )
+    : await authorizeServerAction("emails.qualify");
 
   if (!authorization.ok) {
     return {
@@ -122,12 +133,19 @@ export async function createRequestFromEmailAction(
     };
   }
 
-  const requestResult = await insertRequestFromEmail(emailResult.email, qualification);
+  const requestResult = await insertRequestFromEmail(
+    emailResult.email,
+    qualification,
+    context?.rest ?? undefined,
+  );
 
   if (!requestResult.ok || !requestResult.requestId) {
     await createActivityLogEntry({
       action: "request_creation_failed_from_email",
-      actorId: authorization.actorId,
+      actorId: context?.actor?.actorUserId ?? authorization.actorId,
+      actorType: normalizeActivityActorType(
+        context?.actor?.actorType ?? authorization.actorType,
+      ),
       description: requestResult.message,
       entityId: emailResult.email.id,
       entityType: "email",
@@ -136,9 +154,9 @@ export async function createRequestFromEmailAction(
         qualification,
       },
       requestId: null,
-      source: "ui",
+      source: context?.actor?.source ?? "ui",
       status: "failure",
-    });
+    }, context?.rest ?? undefined);
 
     return requestResult;
   }
@@ -148,21 +166,26 @@ export async function createRequestFromEmailAction(
     email: emailResult.email,
     qualification,
     requestId,
-  });
+  }, context?.rest ?? undefined);
 
   await createActivityLogEntry({
     action: "request_created_from_email",
-    actorId: authorization.actorId,
+    actorId: context?.actor?.actorUserId ?? authorization.actorId,
+    actorType: normalizeActivityActorType(
+      context?.actor?.actorType ?? authorization.actorType,
+    ),
     description: `Demande créée depuis l’email ${input.emailId}.`,
     entityId: requestId,
     entityType: "request",
     payload: buildClassificationPayload(input.emailId, qualification, requestId),
     requestId,
-    source: "ui",
+    source: context?.actor?.source ?? "ui",
     status: "success",
-  });
+  }, context?.rest ?? undefined);
 
   const automationSummary = await runEmailAutomationRules({
+    actor: context?.actor ?? null,
+    rest: context?.rest ?? null,
     email: emailResult.email,
     qualification,
     requestId,
@@ -198,10 +221,13 @@ export async function createRequestFromEmailAction(
   }
 
   return {
+    deadlineCreated: automationSummary.deadlineCreated,
     ok: true,
     field: "request_creation",
     message: messages.join(" "),
+    requestCreated: true,
     requestId,
+    taskCreated: automationSummary.taskCreated,
   };
 }
 
@@ -340,6 +366,7 @@ async function findExistingRequestForEmail(
 async function insertRequestFromEmail(
   email: EmailRecord,
   qualification: EmailQualificationDraft,
+  restContext?: SupabaseRestExecutionContext,
 ): Promise<EmailMutationResult> {
   const bodyText =
     readString(email, ["body_text", "text_content", "plain_text", "body"]) ?? null;
@@ -367,9 +394,14 @@ async function insertRequestFromEmail(
     urgency_score: computeUrgencyScore(qualification.priority, qualification.dueAt),
   };
 
-  const result = await insertWithMissingColumnFallback("requests", payload, {
-    select: "id,title",
-  });
+  const result = await insertWithMissingColumnFallback(
+    "requests",
+    payload,
+    {
+      select: "id,title",
+    },
+    restContext,
+  );
 
   if (result.error) {
     return {
@@ -402,7 +434,7 @@ async function syncEmailAfterRequestCreation(input: {
   email: EmailRecord;
   qualification: EmailQualificationDraft;
   requestId: string;
-}) {
+}, restContext?: SupabaseRestExecutionContext) {
   const classificationPayload = buildClassificationPayload(
     input.email.id,
     input.qualification,
@@ -441,6 +473,7 @@ async function syncEmailAfterRequestCreation(input: {
         select: "id,request_id",
       },
       ["linked_request_id", "crm_request_id"],
+      restContext,
     );
 
     if (!result.error) {
@@ -456,6 +489,8 @@ async function syncEmailAfterRequestCreation(input: {
 }
 
 async function runEmailAutomationRules(input: {
+  actor: AssistantMutationExecutionContext["actor"] | null;
+  rest: SupabaseRestExecutionContext | null;
   email: EmailRecord;
   qualification: EmailQualificationDraft;
   requestId: string;
@@ -469,6 +504,8 @@ async function runEmailAutomationRules(input: {
 
   if (automationRule) {
     const taskResult = await createAutoTask({
+      actor: input.actor,
+      rest: input.rest,
       clientId: input.qualification.clientId,
       dueAt: input.qualification.dueAt,
       modelId: input.qualification.modelId,
@@ -488,6 +525,8 @@ async function runEmailAutomationRules(input: {
 
   if (input.qualification.dueAt) {
     const deadlineResult = await createAutoDeadline({
+      actor: input.actor,
+      rest: input.rest,
       deadlineAt: input.qualification.dueAt,
       label: buildDeadlineLabel(
         input.qualification.requestedAction,
@@ -512,12 +551,14 @@ async function runEmailAutomationRules(input: {
 }
 
 async function createAutoTask(input: {
+  actor: AssistantMutationExecutionContext["actor"] | null;
   assignedUserId: string | null;
   clientId: string | null;
   dueAt: string | null;
   modelId: string | null;
   priority: EmailQualificationDraft["priority"];
   requestId: string;
+  rest: SupabaseRestExecutionContext | null;
   taskTitle: string;
   taskType: string;
 }) {
@@ -534,9 +575,14 @@ async function createAutoTask(input: {
     title: input.taskTitle,
   };
 
-  const result = await insertWithMissingColumnFallback("tasks", payload, {
-    select: "id,title",
-  });
+  const result = await insertWithMissingColumnFallback(
+    "tasks",
+    payload,
+    {
+      select: "id,title",
+    },
+    input.rest ?? undefined,
+  );
 
   if (result.error || !result.data || result.data.length === 0) {
     return {
@@ -551,7 +597,8 @@ async function createAutoTask(input: {
 
   await createActivityLogEntry({
     action: "auto_task_created",
-    actorId: null,
+    actorId: input.actor?.actorUserId ?? null,
+    actorType: input.actor?.actorType ?? "system",
     description: `Tâche automatique créée (${input.taskType}).`,
     entityId: typeof taskId === "string" ? taskId : null,
     entityType: "task",
@@ -560,9 +607,9 @@ async function createAutoTask(input: {
       title: input.taskTitle,
     },
     requestId: input.requestId,
-    source: "system",
+    source: input.actor?.source ?? "system",
     status: "success",
-  });
+  }, input.rest ?? undefined);
 
   if (input.priority === "critical") {
     await notifyCriticalTask({
@@ -579,10 +626,12 @@ async function createAutoTask(input: {
 }
 
 async function createAutoDeadline(input: {
+  actor: AssistantMutationExecutionContext["actor"] | null;
   deadlineAt: string;
   label: string;
   priority: EmailQualificationDraft["priority"];
   requestId: string;
+  rest: SupabaseRestExecutionContext | null;
 }) {
   const payload: Record<string, unknown> = {
     deadline_at: toIsoDate(input.deadlineAt),
@@ -592,9 +641,14 @@ async function createAutoDeadline(input: {
     status: "open",
   };
 
-  const result = await insertWithMissingColumnFallback("deadlines", payload, {
-    select: "id,label",
-  });
+  const result = await insertWithMissingColumnFallback(
+    "deadlines",
+    payload,
+    {
+      select: "id,label",
+    },
+    input.rest ?? undefined,
+  );
 
   if (result.error || !result.data || result.data.length === 0) {
     return {
@@ -609,7 +663,8 @@ async function createAutoDeadline(input: {
 
   await createActivityLogEntry({
     action: "auto_deadline_created",
-    actorId: null,
+    actorId: input.actor?.actorUserId ?? null,
+    actorType: input.actor?.actorType ?? "system",
     description: "Deadline automatique créée depuis la qualification email.",
     entityId: typeof deadlineId === "string" ? deadlineId : null,
     entityType: "deadline",
@@ -618,9 +673,9 @@ async function createAutoDeadline(input: {
       label: input.label,
     },
     requestId: input.requestId,
-    source: "system",
+    source: input.actor?.source ?? "system",
     status: "success",
-  });
+  }, input.rest ?? undefined);
 
   await notifyUrgentDeadline({
     deadlineAt: toIsoDate(input.deadlineAt),
@@ -637,6 +692,7 @@ async function createAutoDeadline(input: {
 async function createActivityLogEntry(input: {
   action: string;
   actorId?: string | null;
+  actorType?: "assistant" | "system" | "user";
   description: string;
   entityId: string | null;
   entityType: string;
@@ -644,14 +700,14 @@ async function createActivityLogEntry(input: {
   requestId: string | null;
   source?: "assistant" | "system" | "ui";
   status?: "failure" | "success";
-}) {
+}, restContext?: SupabaseRestExecutionContext) {
   const payload: Record<string, unknown> = {
     action: input.action,
     action_source: input.source ?? "system",
     action_status: input.status ?? "success",
     action_type: input.action,
     actor_id: input.actorId ?? null,
-    actor_type: input.actorId ? "user" : "system",
+    actor_type: input.actorType ?? (input.actorId ? "user" : "system"),
     created_at: new Date().toISOString(),
     description: input.description,
     entity_id: input.entityId,
@@ -664,9 +720,14 @@ async function createActivityLogEntry(input: {
     status: input.status ?? "success",
   };
 
-  const result = await insertWithMissingColumnFallback("activity_logs", payload, {
-    select: "id",
-  });
+  const result = await insertWithMissingColumnFallback(
+    "activity_logs",
+    payload,
+    {
+      select: "id",
+    },
+    restContext,
+  );
 
   if (result.error && !isMissingSupabaseResourceError(result.rawError)) {
     return {
@@ -685,6 +746,7 @@ async function insertWithMissingColumnFallback(
   resource: string,
   payload: Record<string, unknown>,
   params?: Record<string, string>,
+  restContext?: SupabaseRestExecutionContext,
 ) {
   const currentPayload = { ...payload };
 
@@ -693,6 +755,7 @@ async function insertWithMissingColumnFallback(
       resource,
       cleanPayload(currentPayload),
       params,
+      restContext,
     );
 
     if (!result.error) {
@@ -718,6 +781,7 @@ async function patchWithMissingColumnFallback(
   payload: Record<string, unknown>,
   params: Record<string, string>,
   extraRequestColumns: string[] = [],
+  restContext?: SupabaseRestExecutionContext,
 ) {
   const currentPayload = { ...payload };
 
@@ -730,6 +794,7 @@ async function patchWithMissingColumnFallback(
       resource,
       cleanPayload(currentPayload),
       params,
+      restContext,
     );
 
     if (!result.error) {
@@ -804,4 +869,12 @@ function extractMissingColumnName(error: SupabaseRestErrorPayload | null) {
   const match = haystack.match(/column ["']?([a-zA-Z0-9_]+)["']?/i);
 
   return match?.[1] ?? null;
+}
+
+function normalizeActivityActorType(value: string | null | undefined) {
+  if (value === "assistant" || value === "system" || value === "user") {
+    return value;
+  }
+
+  return "system" as const;
 }

@@ -5,6 +5,8 @@ import type {
   AssistantRunEmailOpsCycleResult,
 } from "@/features/assistant-actions/types";
 import type { AssistantMutationActorContext } from "@/features/assistant-actions/execution-context";
+import type { ServerPermissionOverride } from "@/features/auth/server-authorization";
+import { createRequestFromEmailAction } from "@/features/emails/actions/create-request-from-email";
 import type { EmailInboxBucket, EmailQualificationDraft } from "@/features/emails/types";
 import { resolveEmailInboxTriage } from "@/features/emails/lib/inbox-triage";
 import {
@@ -53,6 +55,8 @@ interface EmailOpsReferenceData {
 
 export interface RunAssistantEmailOpsCycleOptions {
   actor?: AssistantMutationActorContext | null;
+  authorizationOverride?: ServerPermissionOverride | null;
+  createRequests?: boolean | null;
   limit?: number | null;
   rest?: SupabaseRestExecutionContext | null;
   syncLimit?: number | null;
@@ -85,14 +89,18 @@ export async function runAssistantEmailOpsCycle(
     candidates.map((candidate) => candidate.id),
   );
   const result: AssistantRunEmailOpsCycleResult = {
+    clientClassifiedCount: 0,
     crmEnrichedCount: 0,
+    deadlineCreatedCount: 0,
     errorCount: 0,
     importantCount: 0,
     items: [],
     processedCount: 0,
     promotionalCount: 0,
+    requestCreatedCount: 0,
     skippedCount: 0,
     sync,
+    taskCreatedCount: 0,
     toReviewCount: 0,
   };
 
@@ -100,6 +108,8 @@ export async function runAssistantEmailOpsCycle(
   for (const email of candidates) {
     const emailResult = await classifySingleEmail(email, references, {
       actor: options?.actor ?? null,
+      authorizationOverride: options?.authorizationOverride ?? null,
+      createRequests: options?.createRequests ?? null,
       rest: options?.rest ?? null,
     });
 
@@ -110,6 +120,22 @@ export async function runAssistantEmailOpsCycle(
 
       if (emailResult.enrichedCrm) {
         result.crmEnrichedCount += 1;
+      }
+
+      if (emailResult.clientClassified) {
+        result.clientClassifiedCount += 1;
+      }
+
+      if (emailResult.requestCreated) {
+        result.requestCreatedCount += 1;
+      }
+
+      if (emailResult.taskCreated) {
+        result.taskCreatedCount += 1;
+      }
+
+      if (emailResult.deadlineCreated) {
+        result.deadlineCreatedCount += 1;
       }
 
       if (emailResult.item.bucket === "important") {
@@ -149,11 +175,17 @@ async function classifySingleEmail(
   references: EmailOpsReferenceData,
   options: {
     actor: AssistantMutationActorContext | null;
+    authorizationOverride: ServerPermissionOverride | null;
+    createRequests: boolean | null;
     rest: SupabaseRestExecutionContext | null;
   },
 ): Promise<{
+  clientClassified: boolean;
+  deadlineCreated: boolean;
   enrichedCrm: boolean;
   item: AssistantEmailOpsCycleItem;
+  requestCreated: boolean;
+  taskCreated: boolean;
 }> {
   const subject = readString(email, ["subject"]) ?? "Sans objet";
   const fromEmail = readString(email, ["from_email"]) ?? "";
@@ -164,6 +196,11 @@ async function classifySingleEmail(
 
   if (!needsAssistantHandling(email, storedClassification)) {
     return {
+      clientClassified: Boolean(
+        readString(storedClassification, ["client_id", "client_name"]) ??
+          readString(email, ["client_id", "detected_client_name"]),
+      ),
+      deadlineCreated: false,
       enrichedCrm: false,
       item: {
         bucket:
@@ -194,6 +231,8 @@ async function classifySingleEmail(
         status: "skipped",
         subject,
       },
+      requestCreated: false,
+      taskCreated: false,
     };
   }
 
@@ -301,6 +340,8 @@ async function classifySingleEmail(
 
     if (!patchResult.ok) {
       return {
+        clientClassified: Boolean(enrichedDraft.clientId || enrichedDraft.clientName),
+        deadlineCreated: false,
         enrichedCrm: false,
         item: {
           bucket: triage.bucket,
@@ -315,10 +356,24 @@ async function classifySingleEmail(
           status: "error",
           subject,
         },
+        requestCreated: false,
+        taskCreated: false,
       };
     }
 
+    const automation = await maybeAutomateQualifiedEmail({
+      actor: options.actor,
+      authorizationOverride: options.authorizationOverride,
+      createRequests: options.createRequests,
+      draft: enrichedDraft,
+      email,
+      rest: options.rest,
+      triage,
+    });
+
     return {
+      clientClassified: Boolean(enrichedDraft.clientId || enrichedDraft.clientName),
+      deadlineCreated: automation.deadlineCreated,
       enrichedCrm: hasCrmEnrichment(enrichedDraft),
       item: {
         bucket: triage.bucket,
@@ -328,11 +383,15 @@ async function classifySingleEmail(
         from: fromName || fromEmail,
         priority: enrichedDraft.priority,
         reason: triage.reason,
-        recommendedAction: buildRecommendedAction(triage.bucket, enrichedDraft),
+        recommendedAction:
+          automation.recommendedAction ??
+          buildRecommendedAction(triage.bucket, enrichedDraft),
         requestType: enrichedDraft.requestType,
         status: "classified",
         subject,
       },
+      requestCreated: automation.requestCreated,
+      taskCreated: automation.taskCreated,
     };
   } catch (error) {
     await logOperationalError({
@@ -351,6 +410,8 @@ async function classifySingleEmail(
     });
 
     return {
+      clientClassified: false,
+      deadlineCreated: false,
       enrichedCrm: false,
       item: {
         bucket: null,
@@ -365,8 +426,90 @@ async function classifySingleEmail(
         status: "error",
         subject,
       },
+      requestCreated: false,
+      taskCreated: false,
     };
   }
+}
+
+async function maybeAutomateQualifiedEmail(input: {
+  actor: AssistantMutationActorContext | null;
+  authorizationOverride: ServerPermissionOverride | null;
+  createRequests: boolean | null;
+  draft: EmailQualificationDraft;
+  email: EmailRecord;
+  rest: SupabaseRestExecutionContext | null;
+  triage: {
+    bucket: EmailInboxBucket;
+    confidence: number | null;
+    reason: string | null;
+    source: string;
+  };
+}) {
+  const linkedRequestId =
+    readString(input.email, ["request_id", "linked_request_id", "crm_request_id"]) ??
+    readString(readStoredClassification(input.email), [
+      "linkedRequestId",
+      "linked_request_id",
+      "request_id",
+    ]) ??
+    null;
+
+  if (!input.createRequests) {
+    return createEmptyAutomationResult();
+  }
+
+  if (input.triage.bucket !== "important") {
+    return createEmptyAutomationResult();
+  }
+
+  if (linkedRequestId) {
+    return {
+      ...createEmptyAutomationResult(),
+      recommendedAction: "Demande déjà liée. Compléter ou traiter le dossier existant.",
+    };
+  }
+
+  if (
+    !input.draft.clientId ||
+    !input.draft.requestType ||
+    input.draft.title.trim().length < 3 ||
+    input.draft.requiresHumanValidation
+  ) {
+    return createEmptyAutomationResult();
+  }
+
+  if (typeof input.draft.aiConfidence === "number" && input.draft.aiConfidence < 0.62) {
+    return createEmptyAutomationResult();
+  }
+
+  const creationResult = await createRequestFromEmailAction(
+    {
+      emailId: input.email.id,
+      qualification: input.draft,
+    },
+    {
+      actor: input.actor,
+      authorizationOverride: input.authorizationOverride,
+      rest: input.rest,
+    },
+  );
+
+  if (!creationResult.ok) {
+    return {
+      ...createEmptyAutomationResult(),
+      recommendedAction: creationResult.message,
+    };
+  }
+
+  return {
+    deadlineCreated: creationResult.deadlineCreated === true,
+    recommendedAction: creationResult.taskCreated || creationResult.deadlineCreated
+      ? "Demande, tâche et suivi ont été créés automatiquement dans le CRM."
+      : "Demande CRM créée automatiquement depuis cet email.",
+    requestCreated: creationResult.requestCreated === true || Boolean(creationResult.requestId),
+    taskCreated: creationResult.taskCreated === true,
+  };
 }
 
 async function loadEmailOpsCandidates(limit: number) {
@@ -697,6 +840,22 @@ function buildEmailOpsMessage(result: AssistantRunEmailOpsCycleResult) {
     `${result.toReviewCount} à vérifier.`,
   ];
 
+  if (result.clientClassifiedCount > 0) {
+    segments.push(`${result.clientClassifiedCount} client(s) classifié(s).`);
+  }
+
+  if (result.requestCreatedCount > 0) {
+    segments.push(`${result.requestCreatedCount} demande(s) créée(s).`);
+  }
+
+  if (result.taskCreatedCount > 0) {
+    segments.push(`${result.taskCreatedCount} tâche(s) automatique(s) créée(s).`);
+  }
+
+  if (result.deadlineCreatedCount > 0) {
+    segments.push(`${result.deadlineCreatedCount} deadline(s) créée(s).`);
+  }
+
   if (!result.sync.ok) {
     segments.push("La sync Gmail a échoué, mais le backlog local a quand même été traité.");
   } else {
@@ -914,4 +1073,13 @@ function normalizeBucket(value: string | null | undefined) {
   }
 
   return null;
+}
+
+function createEmptyAutomationResult() {
+  return {
+    deadlineCreated: false,
+    recommendedAction: null as string | null,
+    requestCreated: false,
+    taskCreated: false,
+  };
 }
