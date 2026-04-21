@@ -154,6 +154,13 @@ export async function setEmailInboxBucket(
     emailId: input.emailId,
     reason: input.reason ?? null,
     source: input.source ?? "assistant",
+  }, {
+    actor: options?.mutationContext?.actor ?? null,
+    authorizationOverride:
+      options?.mutationContext?.authorizationOverride ??
+      options?.authorizationOverride ??
+      null,
+    rest: options?.mutationContext?.rest ?? null,
   });
 
   if (!result.ok) {

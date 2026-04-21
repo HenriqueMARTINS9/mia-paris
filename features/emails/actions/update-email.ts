@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 
-import { authorizeServerAction } from "@/features/auth/server-authorization";
+import type { AssistantMutationExecutionContext } from "@/features/assistant-actions/execution-context";
+import {
+  authorizeServerAction,
+  authorizeServerPermissions,
+} from "@/features/auth/server-authorization";
 import { mapUiEmailStatusToDatabaseValues } from "@/features/emails/metadata";
 import type {
   EmailInboxBucket,
@@ -15,6 +19,7 @@ import {
   supabaseRestInsert,
   supabaseRestPatch,
   supabaseRestSelectMaybeSingle,
+  type SupabaseRestExecutionContext,
   type SupabaseRestErrorPayload,
 } from "@/lib/supabase/rest";
 import type { EmailRecord } from "@/types/crm";
@@ -67,8 +72,11 @@ export async function ignoreEmailForNowAction(
 
 export async function setEmailInboxBucketAction(
   input: SetEmailInboxBucketInput,
+  context?: AssistantMutationExecutionContext,
 ): Promise<EmailMutationResult> {
-  const authorization = await authorizeServerAction("emails.qualify");
+  const authorization = context?.authorizationOverride
+    ? await authorizeServerPermissions(["emails.qualify"], context.authorizationOverride)
+    : await authorizeServerAction("emails.qualify");
 
   if (!authorization.ok) {
     return {
@@ -89,7 +97,7 @@ export async function setEmailInboxBucketAction(
   const emailResult = await supabaseRestSelectMaybeSingle<EmailRecord>("emails", {
     id: `eq.${input.emailId}`,
     select: "*",
-  });
+  }, context?.rest ?? undefined);
 
   if (emailResult.error || !emailResult.data) {
     return {
@@ -139,9 +147,9 @@ export async function setEmailInboxBucketAction(
       input.bucket === "important"
         ? "Email classé comme important."
         : input.bucket === "promotional"
-          ? "Email classé dans Pub."
-          : "Email déplacé dans À vérifier.",
-  });
+        ? "Email classé dans Pub."
+        : "Email déplacé dans À vérifier.",
+  }, context);
 
   if (result.ok) {
     await createActivityLogEntry({
@@ -336,8 +344,10 @@ async function patchEmailWithPayloads(options: {
   field: EmailMutationResult["field"];
   payloads: Array<Record<string, unknown>>;
   successMessage: string;
-}): Promise<EmailMutationResult> {
-  const authorization = await authorizeServerAction("emails.qualify");
+}, context?: AssistantMutationExecutionContext): Promise<EmailMutationResult> {
+  const authorization = context?.authorizationOverride
+    ? await authorizeServerPermissions(["emails.qualify"], context.authorizationOverride)
+    : await authorizeServerAction("emails.qualify");
 
   if (!authorization.ok) {
     return {
@@ -368,6 +378,7 @@ async function patchEmailWithPayloads(options: {
         id: `eq.${options.emailId}`,
         select: "id",
       },
+      context?.rest ?? undefined,
     );
 
     if (!result.error && result.data && result.data.length > 0) {
@@ -409,6 +420,7 @@ async function patchWithMissingColumnFallback(
   resource: string,
   payload: Record<string, unknown>,
   params: Record<string, string>,
+  restContext?: SupabaseRestExecutionContext | null,
 ) {
   const currentPayload = { ...payload };
 
@@ -417,6 +429,7 @@ async function patchWithMissingColumnFallback(
       resource,
       cleanPayload(currentPayload),
       params,
+      restContext ?? undefined,
     );
 
     if (!result.error) {

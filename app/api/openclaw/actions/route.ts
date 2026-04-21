@@ -5,6 +5,7 @@ import {
   getOpenClawActionDescriptors,
   type OpenClawActionEnvelope,
 } from "@/features/openclaw/integration";
+import { getOpenClawAssistantExecutionContext } from "@/features/openclaw/server-context";
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as OpenClawActionEnvelope | null;
@@ -43,7 +44,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const result = await executeOpenClawAction(body);
+  const openClawExecutionContext = getOpenClawAssistantExecutionContext();
+  const result = await executeOpenClawAction(body, {
+    auditActorId: openClawExecutionContext.actor?.actorUserId ?? null,
+    auditActorType: openClawExecutionContext.actor?.actorType ?? "assistant",
+    auditSource: openClawExecutionContext.actor?.source ?? "assistant",
+    authorizationOverride: openClawExecutionContext.authorizationOverride ?? null,
+    mutationContext: openClawExecutionContext,
+  });
 
   return NextResponse.json(result, {
     status: result.ok
