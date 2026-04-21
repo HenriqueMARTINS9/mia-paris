@@ -37,14 +37,6 @@ export default async function EmailsRoutePage({
 
   return (
     <EmailsPage
-      key={[
-        data.pagination.page,
-        data.pagination.perPage,
-        data.filters.search,
-        data.filters.selectedBucket,
-        data.filters.selectedStatus,
-        data.selectedEmailId ?? "none",
-      ].join(":")}
       bucketCounts={data.bucketCounts}
       counts={data.counts}
       documentOptions={data.documentOptions}
