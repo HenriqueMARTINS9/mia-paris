@@ -129,14 +129,18 @@ export function EmailsTable({
       </div>
 
       <div className="hidden md:block">
-        <Table className="table-fixed">
+        <Table className="min-w-[1460px]">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="w-[24%] min-w-[220px]">Expéditeur</TableHead>
-              <TableHead className="w-[36%] min-w-[280px]">Message</TableHead>
-              <TableHead className="w-[15%] min-w-[150px]">Reçu</TableHead>
-              <TableHead className="w-[15%] min-w-[170px]">Inbox</TableHead>
-              <TableHead className="w-[10%] min-w-[140px]">Client</TableHead>
+              <TableHead className="min-w-[240px] whitespace-nowrap">Expéditeur</TableHead>
+              <TableHead className="min-w-[420px] whitespace-nowrap">Objet et aperçu</TableHead>
+              <TableHead className="min-w-[170px] whitespace-nowrap">Reçu</TableHead>
+              <TableHead className="min-w-[220px] whitespace-nowrap">Traitement</TableHead>
+              <TableHead className="min-w-[170px] whitespace-nowrap">Type</TableHead>
+              <TableHead className="min-w-[170px] whitespace-nowrap">Client</TableHead>
+              <TableHead className="min-w-[170px] whitespace-nowrap">Thread</TableHead>
+              <TableHead className="min-w-[190px] whitespace-nowrap">Demande liée</TableHead>
+              <TableHead className="min-w-[120px] whitespace-nowrap">Confiance</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -158,66 +162,73 @@ export function EmailsTable({
                       <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/[0.08] text-primary">
                         <MailOpen className="h-4 w-4" />
                       </div>
-                      <div className="min-w-0 overflow-hidden">
+                      <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="truncate font-semibold tracking-tight">{email.fromName}</p>
+                          <p className="font-semibold tracking-tight">{email.fromName}</p>
                           {email.isUnread ? <Badge>Non lu</Badge> : null}
                         </div>
-                        <p className="mt-1 truncate text-sm text-muted-foreground">
+                        <p className="mt-1 break-all text-sm text-muted-foreground">
                           {email.fromEmail}
                         </p>
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <p className="line-clamp-1 break-words font-semibold">
+                    <p className="break-words font-semibold">
                       {email.subject}
                     </p>
-                    <p className="mt-1 line-clamp-1 break-words text-sm text-muted-foreground">
+                    <p className="mt-1 max-w-[460px] break-words text-sm text-muted-foreground">
                       {getEmailSnippet(email)}
                     </p>
-                    <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                      {email.detectedType ? (
-                        <span className="inline-flex items-center gap-1 truncate">
-                          <Sparkles className="h-3.5 w-3.5 text-primary" />
-                          {email.detectedType}
-                        </span>
-                      ) : (
-                        <span className="truncate">{email.threadLabel}</span>
-                      )}
-                      {email.linkedRequestId ? (
-                        <Link
-                          href={`/requests/${email.linkedRequestId}`}
-                          className="inline-flex items-center gap-1 hover:text-foreground"
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          Voir demande
-                          <ArrowUpRight className="h-3.5 w-3.5" />
-                        </Link>
-                      ) : null}
-                    </div>
                   </TableCell>
                   <TableCell>
-                    <p className="font-semibold">{formatDateTime(email.receivedAt)}</p>
+                    <p className="whitespace-nowrap font-semibold">{formatDateTime(email.receivedAt)}</p>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap items-center gap-2">
                       <EmailInboxBucketBadge bucket={email.triage.bucket} />
                       <ProcessingStatusBadge status={email.status} />
-                      {email.confidence !== null ? (
-                        <span className="text-xs font-semibold text-muted-foreground">
-                          {Math.round(email.confidence * 100)}%
-                        </span>
-                      ) : null}
                     </div>
                   </TableCell>
                   <TableCell>
-                    <p className="truncate font-semibold">{email.clientName}</p>
                     {email.detectedType ? (
-                      <p className="mt-1 truncate text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground">
+                        <Sparkles className="h-3.5 w-3.5 text-primary" />
                         {email.detectedType}
-                      </p>
+                      </span>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">Non détecté</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <p className="font-semibold">{email.clientName}</p>
+                  </TableCell>
+                  <TableCell>
+                    <p className="text-sm font-medium text-muted-foreground">{email.threadLabel}</p>
+                  </TableCell>
+                  <TableCell>
+                    {email.linkedRequestId ? (
+                      <Link
+                        href={`/requests/${email.linkedRequestId}`}
+                        className="inline-flex items-center gap-1 text-sm font-semibold hover:text-foreground"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {email.linkedRequestLabel ?? "Voir la demande"}
+                        <ArrowUpRight className="h-3.5 w-3.5" />
+                      </Link>
                     ) : null}
+                    {!email.linkedRequestId ? (
+                      <p className="text-sm text-muted-foreground">Aucune</p>
+                    ) : null}
+                  </TableCell>
+                  <TableCell>
+                    {email.confidence !== null ? (
+                      <span className="whitespace-nowrap text-sm font-semibold text-muted-foreground">
+                        {Math.round(email.confidence * 100)}%
+                      </span>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">N/A</span>
+                    )}
                   </TableCell>
                 </TableRow>
               );
@@ -234,9 +245,9 @@ function getEmailSnippet(email: EmailListItem) {
     .replace(/\s+/g, " ")
     .trim();
 
-  if (rawSnippet.length <= 110) {
+  if (rawSnippet.length <= 180) {
     return rawSnippet;
   }
 
-  return `${rawSnippet.slice(0, 107).trimEnd()}...`;
+  return `${rawSnippet.slice(0, 177).trimEnd()}...`;
 }
