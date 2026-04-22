@@ -2,28 +2,18 @@ import { ExternalLink, FileText, Paperclip } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { EmailAttachmentToDocumentDialog } from "@/features/documents/components/email-attachment-to-document-dialog";
-import type { DocumentFormOptions } from "@/features/documents/types";
 import type { EmailAttachmentListItem } from "@/features/emails/types";
 
 export function EmailAttachmentsCard({
   attachments,
-  defaultModelId = null,
-  defaultRequestId = null,
-  documentOptions,
-  documentOptionsError = null,
 }: Readonly<{
   attachments: EmailAttachmentListItem[];
-  defaultModelId?: string | null;
-  defaultRequestId?: string | null;
-  documentOptions: DocumentFormOptions;
-  documentOptionsError?: string | null;
 }>) {
   return (
     <Card>
       <CardHeader className="space-y-3">
         <div className="flex items-center gap-2">
-          <Badge variant="outline">Pièces jointes</Badge>
+          <Badge variant="outline">Pièces jointes utiles</Badge>
           <Paperclip className="h-4 w-4 text-primary" />
         </div>
         <CardTitle className="text-base">
@@ -61,32 +51,24 @@ export function EmailAttachmentsCard({
                     ) : null}
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  {attachment.storagePath ? (
-                    isExternalAttachmentUrl(attachment.storagePath) ? (
-                      <a
-                        href={attachment.storagePath}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-xs font-medium text-primary transition hover:text-primary/80"
-                      >
-                        Ouvrir
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
-                    ) : (
-                      <span className="max-w-full truncate text-xs text-muted-foreground">
-                        {attachment.storagePath}
-                      </span>
-                    )
-                  ) : null}
-                  <EmailAttachmentToDocumentDialog
-                    attachment={attachment}
-                    defaultModelId={defaultModelId}
-                    defaultRequestId={defaultRequestId}
-                    options={documentOptions}
-                    optionsError={documentOptionsError}
-                  />
-                </div>
+
+                {attachment.storagePath ? (
+                  isExternalAttachmentUrl(attachment.storagePath) ? (
+                    <a
+                      href={attachment.storagePath}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-medium text-primary transition hover:text-primary/80"
+                    >
+                      Ouvrir
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  ) : (
+                    <span className="max-w-full truncate text-xs text-muted-foreground">
+                      {attachment.storagePath}
+                    </span>
+                  )
+                ) : null}
               </div>
             </div>
           ))

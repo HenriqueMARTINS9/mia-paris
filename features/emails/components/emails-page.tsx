@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useOptimistic, useState, useTransition } from "react";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -32,15 +32,11 @@ const SEARCH_DEBOUNCE_MS = 280;
 
 export function EmailsPage({
   bucketCounts,
-  documentOptions,
-  documentOptionsError = null,
   emails,
   error = null,
   filters,
   gmailInbox,
   pagination,
-  qualificationOptions,
-  qualificationOptionsError = null,
   requestOptions,
   requestOptionsError = null,
   selectedEmailId,
@@ -61,6 +57,13 @@ export function EmailsPage({
     "unknown",
   );
   const selectedEmailQueryId = searchParams.get("email");
+  const [optimisticSelectedEmailId, setOptimisticSelectedEmailId] = useOptimistic<
+    string | null,
+    string | null
+  >(
+    selectedEmailQueryId ?? selectedEmailId ?? null,
+    (_, nextValue) => nextValue,
+  );
   const isDesktopViewport = viewportMode === "desktop";
   const isMobileViewport = viewportMode === "mobile";
   const areFiltersLoading = viewportMode === "unknown";
@@ -114,11 +117,12 @@ export function EmailsPage({
     selectedStatus,
   ]);
 
-  const selectedEmail = selectedEmailQueryId
-    ? emails.find((email) => email.id === selectedEmailQueryId) ?? null
+  const selectedEmail = optimisticSelectedEmailId
+    ? emails.find((email) => email.id === optimisticSelectedEmailId) ?? null
     : null;
   const shouldRenderDesktopSheet = isDesktopViewport && Boolean(selectedEmail);
-  const highlightedEmailId = selectedEmail?.id ?? selectedEmailId ?? null;
+  const highlightedEmailId =
+    selectedEmail?.id ?? optimisticSelectedEmailId ?? selectedEmailId ?? null;
   const hasActiveFilters =
     filters.search.trim().length > 0 ||
     filters.selectedBucket !== "important" ||
@@ -135,6 +139,7 @@ export function EmailsPage({
   }, [emails.length, pagination.page, pagination.perPage, pagination.totalItems]);
 
   function closeEmailDetail() {
+    setOptimisticSelectedEmailId(null);
     navigateWithQuery({
       pathname,
       patch: {
@@ -251,6 +256,7 @@ export function EmailsPage({
                   emails={emails}
                   selectedEmailId={highlightedEmailId}
                   onSelectEmail={(emailId) => {
+                    setOptimisticSelectedEmailId(emailId);
                     navigateWithQuery({
                       pathname,
                       patch: { email: emailId },
@@ -291,9 +297,7 @@ export function EmailsPage({
 
         {isMobileViewport ? (
           <MobileEmailDetailSheet
-            key={selectedEmail?.id ?? "mobile-email-sheet"}
-            documentOptions={documentOptions}
-            documentOptionsError={documentOptionsError}
+            key={`${selectedEmail?.id ?? "mobile-email-sheet"}:${selectedEmail?.linkedRequestId ?? "none"}`}
             email={selectedEmail}
             open={Boolean(selectedEmail)}
             onOpenChange={(open) => {
@@ -301,8 +305,6 @@ export function EmailsPage({
                 closeEmailDetail();
               }
             }}
-            qualificationOptions={qualificationOptions}
-            qualificationOptionsError={qualificationOptionsError}
             requestOptions={requestOptions}
             requestOptionsError={requestOptionsError}
           />
@@ -333,6 +335,7 @@ export function EmailsPage({
                 emails={emails}
                 selectedEmailId={highlightedEmailId}
                 onSelectEmail={(emailId) => {
+                  setOptimisticSelectedEmailId(emailId);
                   navigateWithQuery({
                     pathname,
                     patch: { email: emailId },
@@ -393,12 +396,8 @@ export function EmailsPage({
               </SheetHeader>
               <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
                 <EmailPreviewPanel
-                  documentOptions={documentOptions}
-                  documentOptionsError={documentOptionsError}
                   email={selectedEmail}
                   mode="sheet"
-                  qualificationOptions={qualificationOptions}
-                  qualificationOptionsError={qualificationOptionsError}
                   requestOptions={requestOptions}
                   requestOptionsError={requestOptionsError}
                 />

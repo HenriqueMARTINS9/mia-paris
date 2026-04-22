@@ -30,11 +30,13 @@ import { formatDateTime } from "@/lib/utils";
 export function ReplyDraftPanel({
   context,
   eyebrow = "Réponse assistée",
+  initialReplyType = "acknowledgement",
   initialSavedDraft = null,
   title,
 }: Readonly<{
   context: ReplyDraftContext;
   eyebrow?: string;
+  initialReplyType?: ReplyDraftType;
   initialSavedDraft?: SavedReplyDraft | null;
   title: string;
 }>) {
@@ -47,7 +49,7 @@ export function ReplyDraftPanel({
     initialSavedDraft ?? {
       body: "",
       readyAt: null,
-      replyType: "acknowledgement" as ReplyDraftType,
+      replyType: initialReplyType,
       subject: "",
       updatedAt: null,
       workflowStatus: "draft" as const,

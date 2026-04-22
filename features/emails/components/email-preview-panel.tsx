@@ -10,42 +10,25 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import type { DocumentFormOptions } from "@/features/documents/types";
-import { ClassificationSummaryCard } from "@/features/emails/components/classification-summary-card";
 import { EmailActionsBar } from "@/features/emails/components/email-actions-bar";
 import { EmailAttachmentsCard } from "@/features/emails/components/email-attachments-card";
 import { EmailInboxBucketBadge } from "@/features/emails/components/email-inbox-bucket-badge";
-import { EmailQualificationPanel } from "@/features/emails/components/email-qualification-panel";
 import { ProcessingStatusBadge } from "@/features/emails/components/processing-status-badge";
-import { HistoricalSignalsCard } from "@/features/history/components/historical-signals-card";
-import { RelatedRequestsList } from "@/features/history/components/related-requests-list";
-import type { HistoricalSignal } from "@/features/history/types";
 import { EmailReplyCard } from "@/features/replies/components/email-reply-card";
-import type {
-  EmailListItem,
-  EmailQualificationOptions,
-} from "@/features/emails/types";
+import type { EmailListItem } from "@/features/emails/types";
 import type { RequestLinkOption } from "@/features/requests/types";
 import { cn, formatDateTime } from "@/lib/utils";
 
 interface EmailPreviewPanelProps {
-  documentOptions: DocumentFormOptions;
-  documentOptionsError?: string | null;
   email: EmailListItem | null;
   mode?: "desktop" | "sheet";
-  qualificationOptions: EmailQualificationOptions;
-  qualificationOptionsError?: string | null;
   requestOptions: RequestLinkOption[];
   requestOptionsError?: string | null;
 }
 
 export function EmailPreviewPanel({
-  documentOptions,
-  documentOptionsError = null,
   email,
   mode = "desktop",
-  qualificationOptions,
-  qualificationOptionsError = null,
   requestOptions,
   requestOptionsError = null,
 }: Readonly<EmailPreviewPanelProps>) {
@@ -65,36 +48,6 @@ export function EmailPreviewPanel({
         </CardContent>
       </Card>
     );
-  }
-
-  const relatedRequests = requestOptions
-    .filter((option) =>
-      option.label.toLowerCase().includes(email.clientName.toLowerCase()),
-    )
-    .slice(0, 6)
-    .map((option) => ({
-      clientName: email.clientName,
-      href: `/requests/${option.id}`,
-      id: option.id,
-      priority: "normal",
-      reason:
-        option.id === email.linkedRequestId
-          ? "Déjà reliée à cet email"
-          : "Demande proche chez le même client",
-      status: option.id === email.linkedRequestId ? "linked" : "open",
-      title: option.label,
-      updatedAt: null,
-    }));
-  const historySignals: HistoricalSignal[] = [];
-
-  if (relatedRequests.length >= 2) {
-    historySignals.push({
-      description:
-        "Plusieurs demandes proches existent déjà pour ce client. Vérifie d’abord un rattachement avant de créer un nouveau dossier.",
-      id: "email-client-history",
-      title: "Historique client à vérifier",
-      tone: "warning",
-    });
   }
 
   return (
@@ -141,18 +94,15 @@ export function EmailPreviewPanel({
                 Résumé métier
               </p>
               <p className="mt-3 text-sm leading-6 text-foreground/85">
-                {email.summary ?? "Aucun résumé IA disponible pour cet email."}
+                {email.summary ?? "Aucun résumé métier disponible pour cet email."}
               </p>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <MetaPill label="Action recommandée" value={getRecommendedAction(email)} />
               <MetaPill
-                label="État de rattachement"
-                value={
-                  email.linkedRequestLabel ??
-                  (email.linkedRequestId ? "Déjà relié à une demande" : "Aucune demande liée")
-                }
+                label="Demande liée"
+                value={email.linkedRequestLabel ?? "Aucune demande liée"}
               />
             </div>
           </CardContent>
@@ -166,18 +116,12 @@ export function EmailPreviewPanel({
         />
 
         {email.attachments.length > 0 ? (
-          <EmailAttachmentsCard
-            attachments={email.attachments}
-            defaultModelId={email.classification.suggestedFields.modelId}
-            defaultRequestId={email.linkedRequestId}
-            documentOptions={documentOptions}
-            documentOptionsError={documentOptionsError}
-          />
+          <EmailAttachmentsCard attachments={email.attachments} />
         ) : null}
 
         <CollapsibleCard
           title="Voir la conversation complète"
-          description="Le corps complet du message reste masqué tant qu’il n’est pas nécessaire."
+          description="Le fil complet reste masqué tant qu’il n’est pas utile à la décision."
           icon={MessageSquareText}
         >
           <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground/80">
@@ -186,45 +130,11 @@ export function EmailPreviewPanel({
         </CollapsibleCard>
 
         <CollapsibleCard
-          title="Pré-remplissage CRM"
-          description="Le brouillon CRM proposé par Claw reste disponible, mais caché par défaut."
-          icon={Sparkles}
-        >
-          <EmailQualificationPanel
-            key={`${email.id}:${email.linkedRequestId ?? "none"}`}
-            email={email}
-            qualificationOptions={qualificationOptions}
-            qualificationOptionsError={qualificationOptionsError}
-          />
-        </CollapsibleCard>
-
-        {(historySignals.length > 0 || relatedRequests.length > 0) ? (
-          <CollapsibleCard
-            title="Contexte complémentaire"
-            description="Historique proche et signaux secondaires, utiles seulement si vous hésitez."
-            icon={Sparkles}
-          >
-            <div className="space-y-4">
-              <HistoricalSignalsCard signals={historySignals} title="Historique utile" />
-              <RelatedRequestsList items={relatedRequests} title="Demandes proches déjà ouvertes" />
-            </div>
-          </CollapsibleCard>
-        ) : null}
-
-        <CollapsibleCard
           title="Réponse assistée"
-          description="Le brouillon proposé reste disponible si vous avez besoin de répondre."
+          description="Le brouillon de réponse reste disponible si tu dois reprendre la main ou confirmer la réponse proposée."
           icon={Sparkles}
         >
           <EmailReplyCard email={email} />
-        </CollapsibleCard>
-
-        <CollapsibleCard
-          title="Détails assistant"
-          description="Classification et détails techniques conservés, mais masqués pour ne pas surcharger la lecture."
-          icon={Sparkles}
-        >
-          <ClassificationSummaryCard email={email} />
         </CollapsibleCard>
       </CardContent>
     </Card>
@@ -270,9 +180,7 @@ function CollapsibleCard({
           <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
         </div>
       </summary>
-      <div className="border-t border-black/[0.06] px-4 py-4">
-        {children}
-      </div>
+      <div className="border-t border-black/[0.06] px-4 py-4">{children}</div>
     </details>
   );
 }
@@ -308,6 +216,12 @@ function getCrmStateLabel(email: EmailListItem) {
 }
 
 function getRecommendedAction(email: EmailListItem) {
+  const requestedAction = email.classification.suggestedFields.requestedAction?.trim();
+
+  if (requestedAction) {
+    return requestedAction;
+  }
+
   if (email.linkedRequestId) {
     return "Vérifier la demande liée et confirmer que le mail est bien absorbé.";
   }
@@ -324,5 +238,5 @@ function getRecommendedAction(email: EmailListItem) {
     return "Arbitrer la qualification avant de créer ou rattacher une demande.";
   }
 
-  return "Valider le résumé puis rattacher ou créer la bonne demande CRM.";
+  return "Valider le résumé puis créer ou rattacher la bonne demande CRM.";
 }

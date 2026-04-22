@@ -1,4 +1,5 @@
 import type { EmailListItem } from "@/features/emails/types";
+import type { ReplyDraftType } from "@/features/replies/types";
 import { ActionErrorBoundary } from "@/components/crm/action-error-boundary";
 import { ReplyContextSummary } from "@/features/replies/components/reply-context-summary";
 import { ReplyDraftPanel } from "@/features/replies/components/reply-draft-panel";
@@ -8,6 +9,7 @@ export function EmailReplyCard({
 }: Readonly<{
   email: EmailListItem;
 }>) {
+  const initialReplyType = resolveSuggestedReplyType(email);
   const context = {
     clientName: email.clientName !== "Client non détecté" ? email.clientName : null,
     dueAt: email.classification.suggestedFields.dueAt,
@@ -43,10 +45,30 @@ export function EmailReplyCard({
       >
         <ReplyDraftPanel
           key={`email-reply-${email.id}`}
+          initialReplyType={initialReplyType}
           title="Brouillon de réponse email"
           context={context}
         />
       </ActionErrorBoundary>
     </div>
   );
+}
+
+function resolveSuggestedReplyType(email: EmailListItem): ReplyDraftType {
+  const requestType = email.classification.suggestedFields.requestType;
+
+  switch (requestType) {
+    case "deadline_request":
+      return "deadline_confirmation";
+    case "production_followup":
+      return "production_update";
+    case "logistics":
+      return "logistics_response";
+    case "trim_validation":
+      return "validation_feedback";
+    case "compliance":
+      return "waiting_validation";
+    default:
+      return email.linkedRequestId ? "ownership" : "acknowledgement";
+  }
 }

@@ -3,11 +3,9 @@ import "server-only";
 import { unstable_noStore as noStore } from "next/cache";
 import { cache } from "react";
 
-import { getDocumentFormOptions } from "@/features/documents/queries";
 import { getCurrentUserGmailInboxStatus } from "@/features/emails/lib/gmail-sync";
 import {
   getEmailRelatedIds,
-  hydrateEmailQualificationFields,
   mapEmailRecordToListItem,
 } from "@/features/emails/mappers";
 import type {
@@ -15,14 +13,10 @@ import type {
   EmailInboxSnapshot,
   EmailListStatusFilter,
   EmailPageSize,
-  EmailQualificationOption,
   EmailStatusCounts,
   EmailsPageData,
 } from "@/features/emails/types";
-import {
-  getRequestAssigneeOptions,
-  getRequestLinkOptions,
-} from "@/features/requests/queries";
+import { getRequestLinkOptions } from "@/features/requests/queries";
 import {
   extractMissingSupabaseColumnName,
   isMissingSupabaseColumnError,
@@ -33,12 +27,9 @@ import { createSupabaseServerClient, hasSupabaseEnv } from "@/lib/supabase/serve
 import { readString, uniqueStrings } from "@/lib/record-helpers";
 import type {
   ClientRecord,
-  ContactRecord,
   EmailAttachmentRecord,
   EmailRecord,
   EmailThreadRecord,
-  ModelRecord,
-  ProductDepartmentRecord,
   RequestOverview,
 } from "@/types/crm";
 
@@ -272,27 +263,7 @@ const getPaginatedEmailsPageDataInternal = async (
     const totalPages = Math.max(1, Math.ceil(totalItems / input.perPage));
     const effectivePage = resolvedPageQuery.page;
     const pageRows = resolvedPageQuery.rows;
-    const pageEmailIds = pageRows.map((email) => email.id);
-    const pageEmailIdSet = new Set(pageEmailIds);
-    const pageEmails = await buildMappedEmails(pageRows);
-    const selectedEmailResult =
-      shouldLoadDetail && input.selectedEmailId && pageEmailIdSet.has(input.selectedEmailId)
-        ? await getEmailById(supabase, input.selectedEmailId)
-        : null;
-    const hydratedSelectedEmail =
-      selectedEmailResult?.row && !selectedEmailResult.error
-        ? (
-            await buildMappedEmails(
-              [selectedEmailResult.row],
-              ancillaries.qualificationOptions,
-            )
-          )[0] ?? null
-        : null;
-    const emails = hydratedSelectedEmail
-      ? pageEmails.map((email) =>
-          email.id === hydratedSelectedEmail.id ? hydratedSelectedEmail : email,
-        )
-      : pageEmails;
+    const emails = await buildMappedEmails(pageRows);
     const bucketCounts =
       bucketCountsResult.status === "fulfilled"
         ? bucketCountsResult.value
@@ -303,7 +274,9 @@ const getPaginatedEmailsPageDataInternal = async (
           });
     const counts = buildPageStatusCounts(emails, totalItems);
     const resolvedSelectedEmailId =
-      emails.find((email) => email.id === input.selectedEmailId)?.id ?? null;
+      input.selectedEmailId && emails.some((email) => email.id === input.selectedEmailId)
+        ? input.selectedEmailId
+        : null;
 
     return {
       ...ancillaries,
@@ -439,85 +412,12 @@ const getEmailInboxSnapshotInternal = async (
 
 export const getEmailInboxSnapshot = cache(getEmailInboxSnapshotInternal);
 
-const getEmailQualificationOptions = cache(async (): Promise<{
-  error: string | null;
-  options: Omit<EmailsPageData["qualificationOptions"], "assignees">;
-}> => {
-  const [clientsResult, contactsResult, productDepartmentsResult, modelsResult] =
-    await Promise.all([
-      supabaseRestSelectList<ClientRecord>("clients", {
-        select: "*",
-      }),
-      supabaseRestSelectList<ContactRecord>("contacts", {
-        select: "*",
-      }),
-      supabaseRestSelectList<ProductDepartmentRecord>("product_departments", {
-        select: "*",
-      }),
-      supabaseRestSelectList<ModelRecord>("models", {
-        select: "*",
-      }),
-    ]);
-
-  const errors = [
-    collectOptionalResourceError("clients", clientsResult.error, clientsResult.rawError),
-    collectOptionalResourceError("contacts", contactsResult.error, contactsResult.rawError),
-    collectOptionalResourceError(
-      "product_departments",
-      productDepartmentsResult.error,
-      productDepartmentsResult.rawError,
-    ),
-    collectOptionalResourceError("models", modelsResult.error, modelsResult.rawError),
-  ].filter((value): value is string => Boolean(value));
-
-  return {
-    error:
-      errors.length > 0
-        ? `Certaines options de qualification sont indisponibles: ${errors.join(", ")}.`
-        : null,
-    options: {
-      clients: (clientsResult.data ?? []).map((client) => ({
-        id: client.id,
-        label:
-          readString(client, ["name", "client_name", "account_name"]) ??
-          client.id,
-        secondary: readString(client, ["code", "client_code"]),
-      })),
-      contacts: (contactsResult.data ?? []).map((contact) => ({
-        id: contact.id,
-        label:
-          readString(contact, ["full_name", "name", "contact_name"]) ?? contact.id,
-        secondary: readString(contact, ["email"]),
-        clientId: readString(contact, ["client_id", "clientId"]),
-      })),
-      productDepartments: (productDepartmentsResult.data ?? []).map(
-        (department) => ({
-          id: department.id,
-          label:
-            readString(department, ["name", "label", "department_name"]) ??
-            department.id,
-          secondary: readString(department, ["code"]),
-        }),
-      ),
-      models: (modelsResult.data ?? []).map((model) => ({
-        id: model.id,
-        label:
-          readString(model, ["name", "label", "reference", "style_name"]) ??
-          model.id,
-        secondary: readString(model, ["reference", "code"]),
-        clientId: readString(model, ["client_id", "clientId"]),
-      })),
-    },
-  };
-});
-
 async function getEmailPageAncillariesForMode(
   includeDetailOptions: boolean,
 ): Promise<EmailPageAncillaries> {
   const gmailInbox = await getCurrentUserGmailInboxStatus();
-
-  if (!includeDetailOptions) {
-    return {
+  const emptyAncillaries: Omit<EmailPageAncillaries, "gmailInbox" | "requestOptions" | "requestOptionsError"> =
+    {
       documentOptions: {
         models: [],
         orders: [],
@@ -525,7 +425,6 @@ async function getEmailPageAncillariesForMode(
         requests: [],
       },
       documentOptionsError: null,
-      gmailInbox,
       qualificationOptions: {
         assignees: [],
         clients: [],
@@ -534,44 +433,28 @@ async function getEmailPageAncillariesForMode(
         productDepartments: [],
       },
       qualificationOptionsError: null,
+    };
+
+  if (!includeDetailOptions) {
+    return {
+      ...emptyAncillaries,
+      gmailInbox,
       requestOptions: [],
       requestOptionsError: null,
     };
   }
 
-  const [
-    requestOptionsResult,
-    qualificationOptionsResult,
-    assigneesResult,
-    documentOptionsResult,
-  ] = await Promise.all([
-    getRequestLinkOptions(),
-    getEmailQualificationOptions(),
-    getRequestAssigneeOptions(),
-    getDocumentFormOptions(),
-  ]);
+  const requestOptionsResult = await getRequestLinkOptions();
 
   return {
-    documentOptions: documentOptionsResult.options,
-    documentOptionsError: documentOptionsResult.error,
+    ...emptyAncillaries,
     gmailInbox,
-    qualificationOptions: {
-      ...qualificationOptionsResult.options,
-      assignees: assigneesResult.assignees,
-    },
-    qualificationOptionsError: buildQualificationOptionsError(
-      qualificationOptionsResult.error,
-      assigneesResult.error,
-    ),
     requestOptions: requestOptionsResult.options,
     requestOptionsError: requestOptionsResult.error,
   };
 }
 
-async function buildMappedEmails(
-  emailRows: EmailRecord[],
-  qualificationOptions?: Omit<EmailsPageData["qualificationOptions"], "assignees">,
-) {
+async function buildMappedEmails(emailRows: EmailRecord[]) {
   const relatedIds = emailRows.map(getEmailRelatedIds);
   const clientIds = uniqueStrings(relatedIds.map((item) => item.clientId));
   const emailIds = uniqueStrings(emailRows.map((email) => email.id));
@@ -617,12 +500,7 @@ async function buildMappedEmails(
     }),
   );
 
-  return (qualificationOptions
-    ? mappedEmails.map((email) =>
-        hydrateEmailQualificationFields(email, qualificationOptions),
-      )
-    : mappedEmails
-  ).sort(sortEmails);
+  return mappedEmails.sort(sortEmails);
 }
 
 async function getPaginatedEmailRows(
@@ -1037,18 +915,6 @@ function buildMappedEmailScans(emailRows: EmailRecord[]) {
     .sort(sortEmails);
 }
 
-async function getEmailById(
-  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
-  id: string,
-) {
-  const { data, error } = await supabase.from("emails").select("*").eq("id", id).maybeSingle();
-
-  return {
-    error: error?.message ?? null,
-    row: (data as EmailRecord | null) ?? null,
-  };
-}
-
 function normalizeEmailQueryInput(
   input?: Partial<NormalizedEmailQueryInput>,
 ): NormalizedEmailQueryInput {
@@ -1118,10 +984,10 @@ function createEmptyEmailsPageData(
     },
     qualificationOptions: {
       assignees: [],
-      clients: [] as EmailQualificationOption[],
-      contacts: [] as EmailQualificationOption[],
-      models: [] as EmailQualificationOption[],
-      productDepartments: [] as EmailQualificationOption[],
+      clients: [],
+      contacts: [],
+      models: [],
+      productDepartments: [],
     },
     qualificationOptionsError: null,
     requestOptions: [],
@@ -1240,36 +1106,8 @@ async function getThreadsByIds(threadIds: string[]) {
   return result.data ?? [];
 }
 
-function collectOptionalResourceError(
-  resource: string,
-  error: string | null,
-  rawError: unknown,
-) {
-  if (!error) {
-    return null;
-  }
-
-  if (
-    typeof rawError === "object" &&
-    rawError !== null &&
-    "code" in rawError &&
-    isMissingSupabaseResourceError(rawError as never)
-  ) {
-    return null;
-  }
-
-  return resource;
-}
-
 function buildInFilter(ids: string[]) {
   return `in.(${ids.join(",")})`;
-}
-
-function buildQualificationOptionsError(
-  qualificationOptionsError: string | null,
-  assigneesError: string | null,
-) {
-  return [qualificationOptionsError, assigneesError].filter(Boolean).join(" · ") || null;
 }
 
 function sortEmails(

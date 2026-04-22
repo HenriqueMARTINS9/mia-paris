@@ -35,7 +35,7 @@ where classification_confidence is null
 
 update public.emails
 set assistant_bucket = case
-  when coalesce(processing_status, triage_status, status) = 'review' then 'to_review'
+  when coalesce(processing_status::text, triage_status::text, status::text) = 'review' then 'to_review'
   when request_id is not null or client_id is not null then 'important'
   else 'to_review'
 end

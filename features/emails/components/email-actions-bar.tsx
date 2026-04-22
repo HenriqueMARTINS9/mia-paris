@@ -1,12 +1,19 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckCheck, Clock3, Loader2, TriangleAlert } from "lucide-react";
+import {
+  CheckCheck,
+  Clock3,
+  FolderPlus,
+  Loader2,
+  TriangleAlert,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { useAuthorization } from "@/features/auth/components/auth-role-provider";
+import { createRequestFromEmailAction } from "@/features/emails/actions/create-request-from-email";
 import {
   attachEmailToRequestAction,
   ignoreEmailForNowAction,
@@ -39,10 +46,36 @@ export function EmailActionsBar({
   const [currentLinkedRequestId, setCurrentLinkedRequestId] = useState<string | null>(
     email.linkedRequestId,
   );
+  const [isCreatePending, startCreateTransition] = useTransition();
   const [isProcessedPending, startProcessedTransition] = useTransition();
   const [isReviewPending, startReviewTransition] = useTransition();
   const [isIgnorePending, startIgnoreTransition] = useTransition();
   const [isAttachPending, startAttachTransition] = useTransition();
+
+  const canCreateRequest = can("emails.qualify") && can("requests.create");
+  const canCreate =
+    canCreateRequest &&
+    !currentLinkedRequestId &&
+    email.classification.suggestedFields.title.trim().length > 0 &&
+    Boolean(email.classification.suggestedFields.requestType);
+
+  function handleCreateRequest() {
+    startCreateTransition(async () => {
+      const result = await createRequestFromEmailAction({
+        emailId: email.id,
+        qualification: email.classification.suggestedFields,
+      });
+
+      if (result.ok) {
+        setCurrentLinkedRequestId(result.requestId ?? email.linkedRequestId);
+        toast.success(result.message);
+        router.refresh();
+        return;
+      }
+
+      toast.error(result.message);
+    });
+  }
 
   function handleMarkProcessed() {
     startProcessedTransition(async () => {
@@ -111,125 +144,165 @@ export function EmailActionsBar({
   }
 
   return (
-    <div className="rounded-3xl border border-white/70 bg-white/60 p-3.5 sm:p-4">
-      <div className="grid gap-4">
-        <div className="grid gap-3 rounded-2xl border border-white/70 bg-white/65 p-3.5 sm:p-4">
-          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold">Statut de traitement</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                L’email peut rester en attente, passer à revoir, être marqué traité ou être absorbé dans une demande CRM.
-              </p>
-            </div>
-            <ProcessingStatusBadge status={email.status} />
-          </div>
-
-          {can("emails.qualify") ? (
-            <div className="grid gap-2 sm:flex sm:flex-wrap">
-              <Button
-                variant="secondary"
-                size="sm"
-                className="w-full sm:w-auto"
-                onClick={handleMarkReview}
-                disabled={isReviewPending}
-              >
-                {isReviewPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    En cours
-                  </>
-                ) : (
-                  <>
-                    <TriangleAlert className="h-4 w-4" />
-                    Marquer à revoir
-                  </>
-                )}
-              </Button>
-
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full sm:w-auto"
-                onClick={handleIgnore}
-                disabled={isIgnorePending}
-              >
-                {isIgnorePending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    En cours
-                  </>
-                ) : (
-                  <>
-                    <Clock3 className="h-4 w-4" />
-                    Ignorer pour l’instant
-                  </>
-                )}
-              </Button>
-
-              <Button
-                size="sm"
-                className="w-full sm:w-auto"
-                onClick={handleMarkProcessed}
-                disabled={isProcessedPending}
-              >
-                {isProcessedPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    En cours
-                  </>
-                ) : (
-                  <>
-                    <CheckCheck className="h-4 w-4" />
-                    Marquer traité
-                  </>
-                )}
-              </Button>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="grid gap-3 rounded-2xl border border-white/70 bg-white/65 p-3.5 sm:p-4">
-          <div>
-            <p className="text-sm font-semibold">Rattacher à une demande existante</p>
+    <div className="grid gap-4 rounded-3xl border border-white/70 bg-white/60 p-3.5 sm:p-4">
+      <div className="grid gap-3 rounded-2xl border border-white/70 bg-white/65 p-3.5 sm:p-4">
+        <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">Demande CRM</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              {requestOptionsError ??
-                "Recherche rapide d’une demande déjà ouverte pour éviter un doublon."}
+              Claw a déjà préparé le client, le type, la priorité et le résumé. Ici, tu valides simplement la création ou tu rattaches à un dossier existant.
             </p>
           </div>
+          <ProcessingStatusBadge status={email.status} />
+        </div>
 
-          {can("emails.qualify") ? (
-            <>
-              <ExistingRequestMatcher
-                requestOptions={requestOptions}
-                selectedValue={linkedRequestValue}
-                onSelectValue={setLinkedRequestValue}
-                disabled={isAttachPending}
-                error={requestOptionsError}
-              />
-
-              <div className="grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
-                <div className="grid gap-2 sm:flex sm:flex-wrap">
-                  {currentLinkedRequestId ? (
-                    <OpenCreatedRequestLink requestId={currentLinkedRequestId} />
-                  ) : null}
-                  <LinkToExistingRequestAction
-                    onClick={handleAttachRequest}
-                    isPending={isAttachPending}
-                    disabled={
-                      requestOptions.length === 0 ||
-                      !linkedRequestValue ||
-                      linkedRequestValue === (currentLinkedRequestId ?? "")
-                    }
-                  />
-                </div>
-              </div>
-            </>
-          ) : currentLinkedRequestId ? (
-            <div className="grid gap-2 sm:flex sm:justify-end">
+        <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="grid gap-2 sm:flex sm:flex-wrap">
+            {currentLinkedRequestId ? (
               <OpenCreatedRequestLink requestId={currentLinkedRequestId} />
-            </div>
+            ) : (
+              <Button
+                size="sm"
+                className="w-full sm:w-auto"
+                onClick={handleCreateRequest}
+                disabled={!canCreate || isCreatePending}
+              >
+                {isCreatePending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Création
+                  </>
+                ) : (
+                  <>
+                    <FolderPlus className="h-4 w-4" />
+                    Créer la demande
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+
+          {currentLinkedRequestId ? (
+            <p className="text-xs leading-5 text-muted-foreground">
+              L’email est déjà absorbé dans une demande CRM. Tu peux encore le marquer à revoir si quelque chose te semble incohérent.
+            </p>
           ) : null}
         </div>
+      </div>
+
+      <div className="grid gap-3 rounded-2xl border border-white/70 bg-white/65 p-3.5 sm:p-4">
+        <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">Statut de traitement</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              L’email peut rester en attente, passer à revoir, être marqué traité ou être absorbé dans une demande CRM.
+            </p>
+          </div>
+          <ProcessingStatusBadge status={email.status} />
+        </div>
+
+        {can("emails.qualify") ? (
+          <div className="grid gap-2 sm:flex sm:flex-wrap">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-full sm:w-auto"
+              onClick={handleMarkReview}
+              disabled={isReviewPending}
+            >
+              {isReviewPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  En cours
+                </>
+              ) : (
+                <>
+                  <TriangleAlert className="h-4 w-4" />
+                  Marquer à revoir
+                </>
+              )}
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full sm:w-auto"
+              onClick={handleIgnore}
+              disabled={isIgnorePending}
+            >
+              {isIgnorePending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  En cours
+                </>
+              ) : (
+                <>
+                  <Clock3 className="h-4 w-4" />
+                  Ignorer pour l’instant
+                </>
+              )}
+            </Button>
+
+            <Button
+              size="sm"
+              className="w-full sm:w-auto"
+              onClick={handleMarkProcessed}
+              disabled={isProcessedPending}
+            >
+              {isProcessedPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  En cours
+                </>
+              ) : (
+                <>
+                  <CheckCheck className="h-4 w-4" />
+                  Marquer traité
+                </>
+              )}
+            </Button>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="grid gap-3 rounded-2xl border border-white/70 bg-white/65 p-3.5 sm:p-4">
+        <div>
+          <p className="text-sm font-semibold">Rattacher à une demande existante</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {requestOptionsError ??
+              (requestOptions.length === 0
+                ? "Suggestions de rattachement en cours ou aucune demande pertinente ouverte."
+                : "Recherche rapide d’une demande déjà ouverte pour éviter un doublon.")}
+          </p>
+        </div>
+
+        {can("emails.qualify") ? (
+          <>
+            <ExistingRequestMatcher
+              requestOptions={requestOptions}
+              selectedValue={linkedRequestValue}
+              onSelectValue={setLinkedRequestValue}
+              disabled={isAttachPending}
+              error={requestOptionsError}
+            />
+
+            <div className="grid gap-2 sm:flex sm:flex-wrap sm:justify-end">
+              <LinkToExistingRequestAction
+                onClick={handleAttachRequest}
+                isPending={isAttachPending}
+                disabled={
+                  requestOptions.length === 0 ||
+                  !linkedRequestValue ||
+                  linkedRequestValue === (currentLinkedRequestId ?? "")
+                }
+              />
+            </div>
+          </>
+        ) : currentLinkedRequestId ? (
+          <div className="grid gap-2 sm:flex sm:justify-end">
+            <OpenCreatedRequestLink requestId={currentLinkedRequestId} />
+          </div>
+        ) : null}
       </div>
     </div>
   );
