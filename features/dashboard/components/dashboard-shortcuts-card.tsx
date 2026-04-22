@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, Factory, FolderKanban, Inbox, Sun } from "lucide-react";
+import { ArrowUpRight, CheckSquare, FolderKanban, Inbox } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -17,16 +17,10 @@ const shortcuts = [
     label: "Voir les demandes",
   },
   {
-    description: "Contrôler les blocages atelier et les productions sous tension.",
-    href: "/productions",
-    icon: Factory,
-    label: "Surveiller la production",
-  },
-  {
-    description: "Basculer vers le cockpit du jour pour gérer le reste des urgences.",
-    href: "/aujourdhui",
-    icon: Sun,
-    label: "Ouvrir Aujourd’hui",
+    description: "Reprendre rapidement les actions ouvertes que Claw n’a pas pu clôturer seul.",
+    href: "/taches",
+    icon: CheckSquare,
+    label: "Voir les tâches",
   },
 ] as const;
 

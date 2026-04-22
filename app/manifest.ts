@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "MIA CRM",
     description:
       "Pilotage quotidien MIA PARIS pour emails entrants, demandes, tâches, deadlines et productions.",
-    start_url: "/aujourdhui",
+    start_url: "/dashboard",
     display: "standalone",
     background_color: "#fcfaf6",
     theme_color: "#17212b",

@@ -35,7 +35,7 @@ export default function OfflinePage() {
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Button asChild>
-              <Link href="/aujourdhui">Ouvrir Aujourd’hui</Link>
+              <Link href="/dashboard">Ouvrir le dashboard</Link>
             </Button>
             <Button asChild variant="outline">
               <Link href="/emails">Ouvrir les emails</Link>
@@ -43,7 +43,7 @@ export default function OfflinePage() {
           </div>
 
           <Button asChild variant="secondary" className="w-full">
-            <Link href="/aujourdhui">
+            <Link href="/dashboard">
               <RefreshCcw className="h-4 w-4" />
               Réessayer maintenant
             </Link>

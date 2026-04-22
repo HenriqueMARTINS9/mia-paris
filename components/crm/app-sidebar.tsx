@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Dot, Menu } from "lucide-react";
+import { Building2, ChevronDown, ChevronRight, Dot, Menu } from "lucide-react";
 
 import { useCrmSummary } from "@/components/crm/crm-summary-provider";
 import { useAuthorization } from "@/features/auth/components/auth-role-provider";
@@ -29,6 +29,22 @@ export function AppSidebar() {
   const { can } = useAuthorization();
   const { summary, isLoading } = useCrmSummary();
   const visibleSections = getVisibleNavigationSections(can);
+  const [desktopOpenSections, setDesktopOpenSections] = useState<Record<string, boolean>>(
+    () =>
+      Object.fromEntries(
+        visibleSections.map((section) => [
+          section.id,
+          section.collapsedByDefault !== true,
+        ]),
+      ),
+  );
+
+  function toggleDesktopSection(sectionId: string) {
+    setDesktopOpenSections((current) => ({
+      ...current,
+      [sectionId]: !(current[sectionId] ?? false),
+    }));
+  }
 
   return (
     <aside className="hidden md:block">
@@ -65,28 +81,15 @@ export function AppSidebar() {
           <div className="flex-1 overflow-y-auto px-2 py-4 lg:px-3">
             <div className="space-y-6">
               {visibleSections.map((section) => (
-                <div key={section.id}>
-                  <div className="mb-3 hidden px-2 lg:block">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">
-                      {section.label}
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-white/28">
-                      {section.description}
-                    </p>
-                  </div>
-
-                  <nav className="space-y-1.5">
-                    {section.items.map((item) => (
-                      <SidebarLink
-                        key={item.href}
-                        item={item}
-                        pathname={pathname}
-                        summary={summary}
-                        isLoading={isLoading}
-                      />
-                    ))}
-                  </nav>
-                </div>
+                <SidebarSection
+                  key={section.id}
+                  isLoading={isLoading}
+                  onToggle={() => toggleDesktopSection(section.id)}
+                  open={desktopOpenSections[section.id] ?? section.collapsedByDefault !== true}
+                  pathname={pathname}
+                  section={section}
+                  summary={summary}
+                />
               ))}
             </div>
           </div>
@@ -179,6 +182,22 @@ export function MobileNavigationMenu() {
   const { can } = useAuthorization();
   const { summary, isLoading } = useCrmSummary();
   const visibleSections = getVisibleNavigationSections(can);
+  const [mobileOpenSections, setMobileOpenSections] = useState<Record<string, boolean>>(
+    () =>
+      Object.fromEntries(
+        visibleSections.map((section) => [
+          section.id,
+          section.collapsedByDefault !== true,
+        ]),
+      ),
+  );
+
+  function toggleMobileSection(sectionId: string) {
+    setMobileOpenSections((current) => ({
+      ...current,
+      [sectionId]: !(current[sectionId] ?? false),
+    }));
+  }
 
   return (
     <>
@@ -216,29 +235,16 @@ export function MobileNavigationMenu() {
             <div className="flex-1 overflow-y-auto px-4 py-5">
               <div className="space-y-6">
                 {visibleSections.map((section) => (
-                  <div key={section.id}>
-                    <div className="mb-3 px-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">
-                        {section.label}
-                      </p>
-                      <p className="mt-1 text-xs leading-5 text-white/28">
-                        {section.description}
-                      </p>
-                    </div>
-
-                    <nav className="space-y-2">
-                      {section.items.map((item) => (
-                        <SheetSidebarLink
-                          key={item.href}
-                          item={item}
-                          pathname={pathname}
-                          summary={summary}
-                          isLoading={isLoading}
-                          onNavigate={() => setMobileMenuOpen(false)}
-                        />
-                      ))}
-                    </nav>
-                  </div>
+                  <MobileSidebarSection
+                    key={section.id}
+                    isLoading={isLoading}
+                    onNavigate={() => setMobileMenuOpen(false)}
+                    onToggle={() => toggleMobileSection(section.id)}
+                    open={mobileOpenSections[section.id] ?? section.collapsedByDefault !== true}
+                    pathname={pathname}
+                    section={section}
+                    summary={summary}
+                  />
                 ))}
               </div>
             </div>
@@ -321,4 +327,145 @@ function getVisibleNavigationSections(
       ),
     }))
     .filter((section) => section.items.length > 0);
+}
+
+function SidebarSection({
+  isLoading,
+  onToggle,
+  open,
+  pathname,
+  section,
+  summary,
+}: Readonly<{
+  isLoading: boolean;
+  onToggle: () => void;
+  open: boolean;
+  pathname: string;
+  section: NavigationSection;
+  summary: CrmSummary;
+}>) {
+  const isCollapsible = section.collapsedByDefault === true;
+
+  return (
+    <div>
+      <div className="mb-3 hidden px-2 lg:block">
+        {isCollapsible ? (
+          <button
+            type="button"
+            onClick={onToggle}
+            className="flex w-full items-start justify-between gap-3 rounded-2xl px-2 py-2 text-left transition hover:bg-white/5"
+          >
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">
+                {section.label}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-white/28">
+                {section.description}
+              </p>
+            </div>
+            {open ? (
+              <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-white/45" />
+            ) : (
+              <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-white/45" />
+            )}
+          </button>
+        ) : (
+          <>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">
+              {section.label}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-white/28">
+              {section.description}
+            </p>
+          </>
+        )}
+      </div>
+
+      {open ? (
+        <nav className="space-y-1.5">
+          {section.items.map((item) => (
+            <SidebarLink
+              key={item.href}
+              item={item}
+              pathname={pathname}
+              summary={summary}
+              isLoading={isLoading}
+            />
+          ))}
+        </nav>
+      ) : null}
+    </div>
+  );
+}
+
+function MobileSidebarSection({
+  isLoading,
+  onNavigate,
+  onToggle,
+  open,
+  pathname,
+  section,
+  summary,
+}: Readonly<{
+  isLoading: boolean;
+  onNavigate: () => void;
+  onToggle: () => void;
+  open: boolean;
+  pathname: string;
+  section: NavigationSection;
+  summary: CrmSummary;
+}>) {
+  const isCollapsible = section.collapsedByDefault === true;
+
+  return (
+    <div>
+      <div className="mb-3 px-2">
+        {isCollapsible ? (
+          <button
+            type="button"
+            onClick={onToggle}
+            className="flex w-full items-start justify-between gap-3 rounded-2xl px-2 py-2 text-left transition hover:bg-white/5"
+          >
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">
+                {section.label}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-white/28">
+                {section.description}
+              </p>
+            </div>
+            {open ? (
+              <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-white/45" />
+            ) : (
+              <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-white/45" />
+            )}
+          </button>
+        ) : (
+          <>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">
+              {section.label}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-white/28">
+              {section.description}
+            </p>
+          </>
+        )}
+      </div>
+
+      {open ? (
+        <nav className="space-y-2">
+          {section.items.map((item) => (
+            <SheetSidebarLink
+              key={item.href}
+              item={item}
+              pathname={pathname}
+              summary={summary}
+              isLoading={isLoading}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </nav>
+      ) : null}
+    </div>
+  );
 }

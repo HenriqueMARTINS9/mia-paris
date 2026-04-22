@@ -11,7 +11,6 @@ import {
   PackageCheck,
   Radar,
   Sparkles,
-  Sun,
   TimerReset,
   Truck,
 } from "lucide-react";
@@ -33,41 +32,28 @@ export interface NavigationSection {
   id: string;
   label: string;
   description: string;
+  collapsedByDefault?: boolean;
   items: NavigationItem[];
 }
 
 export const navigationSections: NavigationSection[] = [
   {
-    id: "daily-cockpit",
-    label: "Cockpit quotidien",
-    description: "Les écrans à ouvrir en premier pour piloter la journée.",
+    id: "primary",
+    label: "Principal",
+    description: "Les seuls écrans à garder sous les yeux au quotidien.",
     items: [
-      {
-        href: "/aujourdhui",
-        label: "Aujourd’hui",
-        shortLabel: "Now",
-        description: "Cockpit quotidien mobile-first pour arbitrer le jour",
-        icon: Sun,
-      },
       {
         href: "/dashboard",
         label: "Dashboard",
         shortLabel: "Dash",
-        description: "Vue pilotage global MIA PARIS",
+        description: "Vue de contrôle simple pour ce qui mérite une vérification",
         icon: LayoutGrid,
       },
-    ],
-  },
-  {
-    id: "client-flow",
-    label: "Flux client",
-    description: "Tout ce qui arrive du client et doit être absorbé vite.",
-    items: [
       {
         href: "/emails",
         label: "Inbox emails",
         shortLabel: "Mail",
-        description: "Flux entrant à qualifier et rattacher",
+        description: "Emails importants à vérifier, rattacher ou absorber",
         icon: Inbox,
         summaryKey: "inboundEmails",
       },
@@ -75,23 +61,31 @@ export const navigationSections: NavigationSection[] = [
         href: "/demandes",
         label: "Demandes",
         shortLabel: "Req",
-        description: "Emails entrants transformés en dossiers et actions CRM",
+        description: "Dossiers métier déjà captés par le CRM",
         icon: ClipboardList,
       },
-    ],
-  },
-  {
-    id: "execution",
-    label: "Exécution",
-    description: "Le backlog opérationnel qui fait avancer les dossiers.",
-    items: [
       {
         href: "/taches",
         label: "Tâches",
         shortLabel: "Task",
-        description: "Actions ouvertes par équipe et dossier",
+        description: "Actions à faire, à suivre ou à relancer",
         icon: ListTodo,
         summaryKey: "openTasks",
+      },
+    ],
+  },
+  {
+    id: "complements",
+    label: "Compléments",
+    description: "Le reste du CRM, utile au besoin mais volontairement caché au premier abord.",
+    collapsedByDefault: true,
+    items: [
+      {
+        href: "/aujourdhui",
+        label: "Aujourd’hui",
+        shortLabel: "Now",
+        description: "Cockpit quotidien détaillé si tu veux aller plus loin que le dashboard",
+        icon: LayoutGrid,
       },
       {
         href: "/deadlines",
@@ -109,13 +103,6 @@ export const navigationSections: NavigationSection[] = [
         icon: PackageCheck,
         summaryKey: "activeProductions",
       },
-    ],
-  },
-  {
-    id: "textile-workspaces",
-    label: "Métiers textile",
-    description: "Les espaces dédiés aux pôles métier MIA PARIS.",
-    items: [
       {
         href: "/developpement",
         label: "Développement",
@@ -137,13 +124,6 @@ export const navigationSections: NavigationSection[] = [
         description: "Demandes de prix, price sheets et pièces de facturation consolidées",
         icon: Euro,
       },
-    ],
-  },
-  {
-    id: "complements",
-    label: "Compléments",
-    description: "Écrans avancés utiles, mais non essentiels au flux métier principal.",
-    items: [
       {
         href: "/a-traiter",
         label: "À traiter",
