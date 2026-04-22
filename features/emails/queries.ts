@@ -24,6 +24,8 @@ import {
   getRequestLinkOptions,
 } from "@/features/requests/queries";
 import {
+  extractMissingSupabaseColumnName,
+  isMissingSupabaseColumnError,
   isMissingSupabaseResourceError,
   supabaseRestSelectList,
 } from "@/lib/supabase/rest";
@@ -63,7 +65,7 @@ const EMAIL_SCAN_SELECT = [
   "created_at",
   "updated_at",
 ].join(",");
-const EMAIL_LIST_SELECT = [
+const EMAIL_LIST_REQUIRED_COLUMNS = [
   "id",
   "inbox_id",
   "thread_id",
@@ -80,15 +82,17 @@ const EMAIL_LIST_SELECT = [
   "is_processed",
   "is_unread",
   "ai_summary",
-  "ai_classification",
-  "classification_confidence",
   "assistant_bucket",
-  "assistant_bucket_confidence",
-  "assistant_bucket_reason",
   "received_at",
   "created_at",
   "updated_at",
-].join(",");
+];
+const EMAIL_LIST_OPTIONAL_COLUMNS = [
+  "ai_classification",
+  "classification_confidence",
+  "assistant_bucket_confidence",
+  "assistant_bucket_reason",
+];
 
 type EmailStatusFilter = EmailListStatusFilter;
 type EmailBucketFilter = "all" | EmailInboxBucket;
@@ -675,24 +679,68 @@ async function fetchEmailPageRows(
 ) {
   const from = (page - 1) * input.perPage;
   const to = from + input.perPage;
-  let query = supabase
-    .from("emails")
-    .select(EMAIL_LIST_SELECT) as unknown as EmailFilterableQuery<EmailListQueryResult>;
+  let activeOptionalColumns = [...EMAIL_LIST_OPTIONAL_COLUMNS];
 
-  query = applyEmailSearchFilter(query, input.search);
-  query = applyEmailBucketFilter(query, input.selectedBucket);
-  query = applyEmailStatusFilter(query, input.selectedStatus);
+  while (true) {
+    const query = buildEmailListQuery({
+      input,
+      optionalColumns: activeOptionalColumns,
+      supabase,
+    });
+    const { data, error } = await query.range(from, to);
+
+    if (!error) {
+      const rows = ((data ?? []) as EmailRecord[]).slice(0, input.perPage);
+      const hasNextPage = ((data ?? []) as EmailRecord[]).length > input.perPage;
+
+      return {
+        error: null,
+        hasNextPage,
+        rows,
+      };
+    }
+
+    if (!isMissingSupabaseColumnError(error)) {
+      return {
+        error: resolveSupabaseQueryErrorMessage(error, "La requête email a échoué."),
+        hasNextPage: false,
+        rows: [],
+      };
+    }
+
+    const missingColumn = extractMissingSupabaseColumnName(error);
+
+    if (!missingColumn || !activeOptionalColumns.includes(missingColumn)) {
+      return {
+        error: resolveSupabaseQueryErrorMessage(error, "La requête email a échoué."),
+        hasNextPage: false,
+        rows: [],
+      };
+    }
+
+    activeOptionalColumns = activeOptionalColumns.filter(
+      (column) => column !== missingColumn,
+    );
+  }
+}
+
+function buildEmailListQuery(input: {
+  input: NormalizedEmailQueryInput;
+  optionalColumns: string[];
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
+}) {
+  let query = input.supabase
+    .from("emails")
+    .select(
+      [...EMAIL_LIST_REQUIRED_COLUMNS, ...input.optionalColumns].join(","),
+    ) as unknown as EmailFilterableQuery<EmailListQueryResult>;
+
+  query = applyEmailSearchFilter(query, input.input.search);
+  query = applyEmailBucketFilter(query, input.input.selectedBucket);
+  query = applyEmailStatusFilter(query, input.input.selectedStatus);
   query = applyEmailOrdering(query);
 
-  const { data, error } = await query.range(from, to);
-  const rows = ((data ?? []) as EmailRecord[]).slice(0, input.perPage);
-  const hasNextPage = ((data ?? []) as EmailRecord[]).length > input.perPage;
-
-  return {
-    error: error ? resolveSupabaseQueryErrorMessage(error, "La requête email a échoué.") : null,
-    hasNextPage,
-    rows,
-  };
+  return query;
 }
 
 async function getEmailBucketCounts(
