@@ -4,6 +4,7 @@ import type {
   RequestPriority,
 } from "@/features/requests/types";
 import type { RequestAssigneeOption } from "@/features/requests/types";
+import type { ReplyDraftType } from "@/features/replies/types";
 
 export type EmailProcessingStatus = "new" | "review" | "processed";
 export type EmailInboxBucket = "important" | "promotional" | "to_review";
@@ -69,8 +70,18 @@ export interface EmailInboxTriage {
   source: EmailInboxBucketSource;
 }
 
+export interface EmailAssistantReply {
+  body: string;
+  disclaimer: string | null;
+  generatedAt: string | null;
+  subject: string;
+  suggestedRecipients: string[];
+  type: ReplyDraftType;
+}
+
 export interface EmailListItem {
   attachments: EmailAttachmentListItem[];
+  assistantReply: EmailAssistantReply | null;
   bodyHtml: string | null;
   id: string;
   threadId: string | null;

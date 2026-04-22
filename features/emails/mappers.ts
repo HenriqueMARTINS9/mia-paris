@@ -1,5 +1,6 @@
 import {
   compactIdentifier,
+  readArray,
   parseJsonObject,
   readBoolean,
   readNumber,
@@ -19,6 +20,7 @@ import {
 } from "@/features/emails/lib/qualification";
 import { resolveEmailInboxTriage } from "@/features/emails/lib/inbox-triage";
 import type {
+  EmailAssistantReply,
   EmailClassificationResult,
   EmailAttachmentListItem,
   EmailListItem,
@@ -157,9 +159,11 @@ export function mapEmailRecordToListItem({
     subject,
     suggestedFields: classification.suggestedFields,
   });
+  const assistantReply = readAssistantReply(emailRecord, classification.raw);
 
   return {
     attachments,
+    assistantReply,
     bodyHtml,
     id: emailRecord.id,
     threadId,
@@ -207,6 +211,47 @@ export function mapEmailRecordToListItem({
     isUnread:
       readBoolean(emailRecord, ["is_unread", "unread"]) ??
       mapRawEmailStatusToUiStatus(rawStatus) === "new",
+  };
+}
+
+function readAssistantReply(
+  emailRecord: EmailRecord,
+  classification: Record<string, unknown> | null,
+): EmailAssistantReply | null {
+  const nestedAssistantReply =
+    readObject(classification, ["assistant_reply", "assistantReply"]) ?? null;
+  const type =
+    readString(emailRecord, ["assistant_reply_type"]) ??
+    readString(nestedAssistantReply, ["type"]);
+  const subject =
+    readString(emailRecord, ["assistant_reply_subject"]) ??
+    readString(nestedAssistantReply, ["subject"]);
+  const body =
+    readString(emailRecord, ["assistant_reply_body"]) ??
+    readString(nestedAssistantReply, ["body"]);
+
+  if (!type || !subject || !body) {
+    return null;
+  }
+
+  const recipients =
+    readArray(emailRecord, ["assistant_reply_recipients"]) ??
+    readArray(nestedAssistantReply, ["suggestedRecipients", "recipients"]) ??
+    [];
+
+  return {
+    body,
+    disclaimer:
+      readString(emailRecord, ["assistant_reply_disclaimer"]) ??
+      readString(nestedAssistantReply, ["disclaimer"]),
+    generatedAt:
+      readString(emailRecord, ["assistant_reply_generated_at"]) ??
+      readString(nestedAssistantReply, ["generatedAt"]),
+    subject,
+    suggestedRecipients: recipients.filter(
+      (value): value is string => typeof value === "string" && value.trim().length > 0,
+    ),
+    type: type as EmailAssistantReply["type"],
   };
 }
 

@@ -7,7 +7,11 @@ import type {
 import type { AssistantMutationActorContext } from "@/features/assistant-actions/execution-context";
 import type { ServerPermissionOverride } from "@/features/auth/server-authorization";
 import { createRequestFromEmailAction } from "@/features/emails/actions/create-request-from-email";
-import type { EmailInboxBucket, EmailQualificationDraft } from "@/features/emails/types";
+import type {
+  EmailAssistantReply,
+  EmailInboxBucket,
+  EmailQualificationDraft,
+} from "@/features/emails/types";
 import { resolveEmailInboxTriage } from "@/features/emails/lib/inbox-triage";
 import {
   buildEmailQualificationDraft,
@@ -15,6 +19,8 @@ import {
 } from "@/features/emails/lib/qualification";
 import { syncLatestGmailMessagesForActor } from "@/features/emails/lib/gmail-sync";
 import { logOperationalError } from "@/lib/action-runtime";
+import { buildReplyDraft } from "@/features/replies/lib/build-reply-draft";
+import type { ReplyDraftContext, ReplyDraftType } from "@/features/replies/types";
 import {
   parseJsonObject,
   readBoolean,
@@ -326,15 +332,37 @@ async function classifySingleEmail(
         requestType: enrichedDraft.requestType,
       },
     });
+    const linkedRequestId =
+      readString(email, ["request_id", "linked_request_id", "crm_request_id"]) ??
+      readString(storedClassification, [
+        "linkedRequestId",
+        "linked_request_id",
+        "request_id",
+      ]) ??
+      null;
+    const assistantReply = buildAssistantReplySuggestion({
+      draft: enrichedDraft,
+      email,
+      fromEmail,
+      fromName,
+      linkedRequestId,
+      triage,
+    });
     const classificationPayload = buildAssistantClassificationPayload(
       email.id,
       enrichedDraft,
       triage,
+      assistantReply,
       storedClassification,
     );
     const patchResult = await patchEmailClassification(
       email.id,
-      buildEmailPatchPayload(enrichedDraft, triage, classificationPayload),
+      buildEmailPatchPayload(
+        enrichedDraft,
+        triage,
+        classificationPayload,
+        assistantReply,
+      ),
       options.rest,
     );
 
@@ -709,6 +737,7 @@ function buildEmailPatchPayload(
     source: string;
   },
   classificationPayload: Record<string, unknown>,
+  assistantReply: EmailAssistantReply | null,
 ) {
   const reviewPayload =
     triage.bucket === "to_review"
@@ -727,6 +756,12 @@ function buildEmailPatchPayload(
     assistant_bucket: triage.bucket,
     assistant_bucket_confidence: triage.confidence,
     assistant_bucket_reason: triage.reason,
+    assistant_reply_body: assistantReply?.body ?? null,
+    assistant_reply_disclaimer: assistantReply?.disclaimer ?? null,
+    assistant_reply_generated_at: assistantReply?.generatedAt ?? null,
+    assistant_reply_recipients: assistantReply?.suggestedRecipients ?? null,
+    assistant_reply_subject: assistantReply?.subject ?? null,
+    assistant_reply_type: assistantReply?.type ?? null,
     classification_json: classificationPayload,
     client_id: draft.clientId,
     contact_id: draft.contactId,
@@ -755,10 +790,12 @@ function buildAssistantClassificationPayload(
     reason: string | null;
     source: string;
   },
+  assistantReply: EmailAssistantReply | null,
   currentClassification: Record<string, unknown> | null,
 ) {
   return {
     ...(currentClassification ?? {}),
+    assistant_reply: assistantReply,
     assistantBucket: triage.bucket,
     assistantBucketConfidence: triage.confidence,
     assistantBucketReason: triage.reason,
@@ -815,6 +852,99 @@ function buildRecommendedAction(
     draft.requestedAction ??
     "Qualifier puis créer ou rattacher une demande dans le CRM."
   );
+}
+
+function buildAssistantReplySuggestion(input: {
+  draft: EmailQualificationDraft;
+  email: EmailRecord;
+  fromEmail: string;
+  fromName: string;
+  linkedRequestId: string | null;
+  triage: {
+    bucket: EmailInboxBucket;
+    confidence: number | null;
+    reason: string | null;
+    source: string;
+  };
+}): EmailAssistantReply | null {
+  if (input.triage.bucket !== "important") {
+    return null;
+  }
+
+  if (input.draft.requiresHumanValidation) {
+    return null;
+  }
+
+  if (
+    typeof input.draft.aiConfidence === "number" &&
+    input.draft.aiConfidence < 0.58
+  ) {
+    return null;
+  }
+
+  const replyType = resolveAssistantReplyType(
+    input.draft.requestType,
+    input.linkedRequestId,
+  );
+  const context: ReplyDraftContext = {
+    clientName: input.draft.clientName,
+    dueAt: input.draft.dueAt,
+    historicalSignals: [
+      input.linkedRequestId ? "Une demande liée existe déjà dans le CRM." : null,
+      input.draft.productDepartmentName
+        ? `Département détecté: ${input.draft.productDepartmentName}.`
+        : null,
+      input.draft.modelName ? `Modèle détecté: ${input.draft.modelName}.` : null,
+    ].filter((value): value is string => Boolean(value)),
+    linkedRequestTitle: null,
+    recipientEmail: input.fromEmail || null,
+    recipientName: input.fromName || null,
+    requestPriority: input.draft.priority,
+    requestReference: input.linkedRequestId,
+    requestStatus: readString(input.email, ["processing_status", "status", "triage_status"]),
+    requestType: input.draft.requestType,
+    requestedAction: input.draft.requestedAction,
+    requestId: input.linkedRequestId,
+    sourceId: input.email.id,
+    sourceType: "email",
+    subject: readString(input.email, ["subject"]) ?? "Sans objet",
+    summary:
+      input.draft.summary ??
+      readString(input.email, ["ai_summary", "preview_text", "body_text"]),
+  };
+  const draft = buildReplyDraft({
+    ...context,
+    replyType,
+  });
+
+  return {
+    body: draft.body,
+    disclaimer: draft.disclaimer,
+    generatedAt: new Date().toISOString(),
+    subject: draft.subject,
+    suggestedRecipients: draft.suggestedRecipients,
+    type: draft.type,
+  };
+}
+
+function resolveAssistantReplyType(
+  requestType: string | null,
+  linkedRequestId: string | null,
+): ReplyDraftType {
+  switch (requestType) {
+    case "deadline_request":
+      return "deadline_confirmation";
+    case "production_followup":
+      return "production_update";
+    case "logistics":
+      return "logistics_response";
+    case "trim_validation":
+      return "validation_feedback";
+    case "compliance":
+      return "waiting_validation";
+    default:
+      return linkedRequestId ? "ownership" : "acknowledgement";
+  }
 }
 
 function readPriorityFromSources(
@@ -922,6 +1052,13 @@ function needsAssistantHandling(
     readString(classification, ["client_id", "client_name"]) ??
       readString(email, ["client_id", "detected_client_name"]),
   );
+  const hasAssistantReply = Boolean(
+    readString(email, ["assistant_reply_body", "assistant_reply_subject"]) ??
+      readString(
+        readObject(classification, ["assistant_reply", "assistantReply"]),
+        ["body", "subject"],
+      ),
+  );
 
   if (!currentBucket) {
     return true;
@@ -932,6 +1069,10 @@ function needsAssistantHandling(
   }
 
   if (currentBucket === "important" && !hasRequestType && !hasClientSignal) {
+    return true;
+  }
+
+  if (currentBucket === "important" && !hasAssistantReply) {
     return true;
   }
 

@@ -83,6 +83,12 @@ const EMAIL_LIST_OPTIONAL_COLUMNS = [
   "classification_confidence",
   "assistant_bucket_confidence",
   "assistant_bucket_reason",
+  "assistant_reply_type",
+  "assistant_reply_subject",
+  "assistant_reply_body",
+  "assistant_reply_disclaimer",
+  "assistant_reply_recipients",
+  "assistant_reply_generated_at",
 ];
 
 type EmailStatusFilter = EmailListStatusFilter;
