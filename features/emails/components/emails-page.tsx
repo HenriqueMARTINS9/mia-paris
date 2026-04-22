@@ -234,13 +234,6 @@ export function EmailsPage({
         </>
       )}
 
-      <InboxSummaryCard
-        bucketCounts={bucketCounts}
-        paginationSummary={paginationSummary}
-        selectedBucket={filters.selectedBucket}
-        selectedStatus={filters.selectedStatus}
-      />
-
       <div className="grid gap-4 md:hidden">
         <Card>
           <CardHeader className="gap-2 border-b border-black/[0.06] pb-4">
