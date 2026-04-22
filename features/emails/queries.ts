@@ -82,12 +82,12 @@ const EMAIL_LIST_REQUIRED_COLUMNS = [
   "is_processed",
   "is_unread",
   "ai_summary",
-  "assistant_bucket",
   "received_at",
   "created_at",
   "updated_at",
 ];
 const EMAIL_LIST_OPTIONAL_COLUMNS = [
+  "assistant_bucket",
   "ai_classification",
   "classification_confidence",
   "assistant_bucket_confidence",
@@ -682,14 +682,37 @@ async function fetchEmailPageRows(
   let activeOptionalColumns = [...EMAIL_LIST_OPTIONAL_COLUMNS];
 
   while (true) {
+    const canApplyBucketFilter =
+      input.selectedBucket === "all" || activeOptionalColumns.includes("assistant_bucket");
     const query = buildEmailListQuery({
+      canApplyBucketFilter,
       input,
       optionalColumns: activeOptionalColumns,
       supabase,
     });
-    const { data, error } = await query.range(from, to);
+    const queryFrom = canApplyBucketFilter ? from : 0;
+    const fallbackWindowSize = Math.max(input.perPage * Math.max(input.page, 1) * 8, 120);
+    const queryTo = canApplyBucketFilter ? to : fallbackWindowSize - 1;
+    const { data, error } = await query.range(queryFrom, queryTo);
 
     if (!error) {
+      if (!canApplyBucketFilter && input.selectedBucket !== "all") {
+        const rawRows = (data ?? []) as EmailRecord[];
+        const filteredRows = buildMappedEmailScans(rawRows).filter(
+          (email) => email.triage.bucket === input.selectedBucket,
+        );
+        const visibleFilteredRows = filteredRows.slice(from, from + input.perPage);
+        const visibleRowIds = new Set(visibleFilteredRows.map((email) => email.id));
+        const rows = rawRows.filter((row) => visibleRowIds.has(row.id));
+        const hasNextPage = filteredRows.length > from + input.perPage;
+
+        return {
+          error: null,
+          hasNextPage,
+          rows,
+        };
+      }
+
       const rows = ((data ?? []) as EmailRecord[]).slice(0, input.perPage);
       const hasNextPage = ((data ?? []) as EmailRecord[]).length > input.perPage;
 
@@ -725,6 +748,7 @@ async function fetchEmailPageRows(
 }
 
 function buildEmailListQuery(input: {
+  canApplyBucketFilter: boolean;
   input: NormalizedEmailQueryInput;
   optionalColumns: string[];
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
@@ -736,7 +760,9 @@ function buildEmailListQuery(input: {
     ) as unknown as EmailFilterableQuery<EmailListQueryResult>;
 
   query = applyEmailSearchFilter(query, input.input.search);
-  query = applyEmailBucketFilter(query, input.input.selectedBucket);
+  if (input.canApplyBucketFilter) {
+    query = applyEmailBucketFilter(query, input.input.selectedBucket);
+  }
   query = applyEmailStatusFilter(query, input.input.selectedStatus);
   query = applyEmailOrdering(query);
 
