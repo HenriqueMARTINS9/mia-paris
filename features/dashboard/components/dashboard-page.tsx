@@ -45,11 +45,6 @@ export function DashboardPage({
 
       <DashboardFocusCards kpis={data.kpis} />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-        <TodayUrgenciesPanel deadlines={data.urgentDeadlines} />
-        <DashboardShortcutsCard />
-      </div>
-
       <div className="grid gap-6 xl:grid-cols-2">
         <PriorityRequestsPanel
           requests={data.unassignedRequests}
@@ -63,18 +58,6 @@ export function DashboardPage({
           title="Emails importants à vérifier"
           description="Messages que Claw a laissés dans l’inbox principale pour validation ou arbitrage."
           emptyMessage="Aucun email important ne demande votre attention immédiate."
-        />
-        <BlockedProductionsPanel
-          productions={data.blockedProductions}
-          title="Productions bloquées"
-          description="Blocages à lever vite pour éviter un impact planning ou atelier."
-          emptyMessage="Aucune production bloquée à signaler pour le moment."
-        />
-        <BlockedProductionsPanel
-          productions={data.highRiskProductions}
-          title="Productions à risque élevé"
-          description="Productions à surveiller de près, même sans blocage franc pour l’instant."
-          emptyMessage="Aucune production à risque élevé ne remonte dans le cockpit."
         />
       </div>
 
