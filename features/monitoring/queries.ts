@@ -78,8 +78,7 @@ export async function getMonitoringRouteData(): Promise<MonitoringRouteData> {
     supabaseRestSelectList<ActivityLogRecord>("activity_logs", {
       limit: 80,
       order: "created_at.desc.nullslast",
-      select:
-        "id,action,action_type,action_source,action_status,scope,source,status,description,entity_id,entity_type,request_id,created_at,payload,metadata",
+      select: "*",
     }),
   ]);
 

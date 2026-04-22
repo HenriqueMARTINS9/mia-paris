@@ -75,7 +75,7 @@ export async function getReplyDraftHistory(
       entity_type: "eq.reply_draft",
       limit,
       order: "created_at.desc.nullslast",
-      select: "id,action,action_type,created_at,description,payload,metadata",
+      select: "*",
     });
 
     if (result.error || !result.data) {

@@ -238,28 +238,36 @@ const getPaginatedEmailsPageDataInternal = async (
     }
 
     const shouldLoadDetail = Boolean(input.selectedEmailId);
-    const [
-      ancillaries,
-      bucketCounts,
-      pageQueryResult,
-    ] = await Promise.all([
-      getEmailPageAncillariesForMode(shouldLoadDetail),
+    const ancillaries = await getEmailPageAncillariesForMode(shouldLoadDetail);
+    const [bucketCountsResult, pageQueryResult] = await Promise.allSettled([
       getEmailBucketCounts(supabase, input),
       getPaginatedEmailRows(supabase, input),
     ]);
 
-    if (pageQueryResult.error) {
+    if (pageQueryResult.status === "rejected") {
       return {
         ...emptyData,
         ...ancillaries,
-        error: `Impossible de charger les emails: ${pageQueryResult.error}`,
+        error: `Impossible de charger les emails: ${resolveUnknownEmailErrorMessage(
+          pageQueryResult.reason,
+        )}`,
       };
     }
 
-    const totalItems = pageQueryResult.totalItems;
+    const resolvedPageQuery = pageQueryResult.value;
+
+    if (resolvedPageQuery.error) {
+      return {
+        ...emptyData,
+        ...ancillaries,
+        error: `Impossible de charger les emails: ${resolvedPageQuery.error}`,
+      };
+    }
+
+    const totalItems = resolvedPageQuery.totalItems;
     const totalPages = Math.max(1, Math.ceil(totalItems / input.perPage));
-    const effectivePage = pageQueryResult.page;
-    const pageRows = pageQueryResult.rows;
+    const effectivePage = resolvedPageQuery.page;
+    const pageRows = resolvedPageQuery.rows;
     const pageEmailIds = pageRows.map((email) => email.id);
     const pageEmailIdSet = new Set(pageEmailIds);
     const pageEmails = await buildMappedEmails(pageRows);
@@ -281,6 +289,14 @@ const getPaginatedEmailsPageDataInternal = async (
           email.id === hydratedSelectedEmail.id ? hydratedSelectedEmail : email,
         )
       : pageEmails;
+    const bucketCounts =
+      bucketCountsResult.status === "fulfilled"
+        ? bucketCountsResult.value
+        : buildFallbackBucketCounts({
+            emails,
+            selectedBucket: input.selectedBucket,
+            totalItems,
+          });
     const counts = buildPageStatusCounts(emails, totalItems);
     const resolvedSelectedEmailId =
       emails.find((email) => email.id === input.selectedEmailId)?.id ?? null;
@@ -309,7 +325,7 @@ const getPaginatedEmailsPageDataInternal = async (
       ...emptyData,
       error:
         error instanceof Error
-          ? `Impossible de charger les emails: ${error.message}`
+          ? `Impossible de charger les emails: ${resolveUnknownEmailErrorMessage(error)}`
           : "Impossible de charger les emails.",
     };
   }
@@ -610,16 +626,46 @@ async function getPaginatedEmailRows(
   input: NormalizedEmailQueryInput,
 ) {
   const initialResult = await fetchEmailPageRows(supabase, input, input.page);
+  const exactTotalItems = await countEmailRows(supabase, {
+    search: input.search,
+    selectedBucket: input.selectedBucket,
+    selectedStatus: input.selectedStatus,
+  }).catch(() => null);
+  const initialTotalItems =
+    exactTotalItems ??
+    buildApproximateEmailTotal({
+      hasNextPage: initialResult.hasNextPage,
+      page: input.page,
+      perPage: input.perPage,
+      visibleItems: initialResult.rows.length,
+    });
+  const initialTotalPages = Math.max(1, Math.ceil(initialTotalItems / input.perPage));
 
   if (
     !initialResult.error &&
-    initialResult.totalItems > 0 &&
-    initialResult.page > initialResult.totalPages
+    exactTotalItems !== null &&
+    exactTotalItems > 0 &&
+    input.page > initialTotalPages
   ) {
-    return fetchEmailPageRows(supabase, input, initialResult.totalPages);
+    const clampedPage = initialTotalPages;
+    const clampedResult = await fetchEmailPageRows(supabase, input, clampedPage);
+
+    return {
+      error: clampedResult.error,
+      page: clampedPage,
+      rows: clampedResult.rows,
+      totalItems: exactTotalItems,
+      totalPages: initialTotalPages,
+    };
   }
 
-  return initialResult;
+  return {
+    error: initialResult.error,
+    page: input.page,
+    rows: initialResult.rows,
+    totalItems: initialTotalItems,
+    totalPages: initialTotalPages,
+  };
 }
 
 async function fetchEmailPageRows(
@@ -628,26 +674,24 @@ async function fetchEmailPageRows(
   page: number,
 ) {
   const from = (page - 1) * input.perPage;
-  const to = from + input.perPage - 1;
+  const to = from + input.perPage;
   let query = supabase
     .from("emails")
-    .select(EMAIL_LIST_SELECT, { count: "exact" }) as unknown as EmailFilterableQuery<EmailListQueryResult>;
+    .select(EMAIL_LIST_SELECT) as unknown as EmailFilterableQuery<EmailListQueryResult>;
 
   query = applyEmailSearchFilter(query, input.search);
   query = applyEmailBucketFilter(query, input.selectedBucket);
   query = applyEmailStatusFilter(query, input.selectedStatus);
   query = applyEmailOrdering(query);
 
-  const { count, data, error } = await query.range(from, to);
-  const totalItems = count ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalItems / input.perPage));
+  const { data, error } = await query.range(from, to);
+  const rows = ((data ?? []) as EmailRecord[]).slice(0, input.perPage);
+  const hasNextPage = ((data ?? []) as EmailRecord[]).length > input.perPage;
 
   return {
-    error: error?.message ?? null,
-    page,
-    rows: (data ?? []) as EmailRecord[],
-    totalItems,
-    totalPages,
+    error: error ? resolveSupabaseQueryErrorMessage(error, "La requête email a échoué.") : null,
+    hasNextPage,
+    rows,
   };
 }
 
@@ -701,7 +745,9 @@ async function countEmailRows(
   const { count, error } = await query;
 
   if (error) {
-    throw new Error(error.message);
+    throw new Error(
+      resolveSupabaseQueryErrorMessage(error, "Le comptage des emails a échoué."),
+    );
   }
 
   return count ?? 0;
@@ -794,6 +840,55 @@ function applyEmailStatusFilter<TResult, T extends EmailFilterableQuery<TResult>
   }
 
   return query;
+}
+
+function buildApproximateEmailTotal(input: {
+  hasNextPage: boolean;
+  page: number;
+  perPage: number;
+  visibleItems: number;
+}) {
+  const from = (input.page - 1) * input.perPage;
+  return from + input.visibleItems + (input.hasNextPage ? 1 : 0);
+}
+
+function buildFallbackBucketCounts(input: {
+  emails: EmailsPageData["emails"];
+  selectedBucket: EmailBucketFilter;
+  totalItems: number;
+}) {
+  if (input.selectedBucket === "all") {
+    const pageCounts = countEmailBuckets(input.emails);
+    return {
+      ...pageCounts,
+      all: input.totalItems,
+    };
+  }
+
+  return {
+    all: input.totalItems,
+    important: input.selectedBucket === "important" ? input.totalItems : 0,
+    promotional: input.selectedBucket === "promotional" ? input.totalItems : 0,
+    toReview: input.selectedBucket === "to_review" ? input.totalItems : 0,
+  };
+}
+
+function resolveSupabaseQueryErrorMessage(
+  error: { message?: string | null },
+  fallbackMessage: string,
+) {
+  const message = error.message?.trim();
+  return message && message.length > 0 ? message : fallbackMessage;
+}
+
+function resolveUnknownEmailErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message.trim().length > 0
+      ? error.message
+      : "Le chargement des emails a échoué.";
+  }
+
+  return "Le chargement des emails a échoué.";
 }
 
 function countEmailStatuses(emails: EmailsPageData["emails"]): EmailStatusCounts {

@@ -94,12 +94,9 @@ const getDashboardPageDataInternal = async (): Promise<DashboardPageData> => {
       getEmailInboxSnapshot(12),
       supabase
         .from("activity_logs")
-        .select(
-          "id,action_type,description,entity_id,entity_type,request_id,status,action_status,created_at,source",
-        )
-        .eq("source", "assistant")
+        .select("*")
         .order("created_at", { ascending: false })
-        .limit(8),
+        .limit(16),
       supabaseRestSelectList<ValidationRecord>("validations", {
         select: "id,status",
       }),
@@ -163,6 +160,7 @@ const getDashboardPageDataInternal = async (): Promise<DashboardPageData> => {
       .slice(0, 6);
 
     const recentAssistantActions = ((assistantLogsResult.data ?? []) as ActivityLogRecord[])
+      .filter((log) => (readString(log, ["action_source", "source"]) ?? "").toLowerCase() === "assistant")
       .map(mapAssistantLogToItem)
       .slice(0, 6);
 
