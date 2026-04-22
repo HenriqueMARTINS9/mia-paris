@@ -31,8 +31,8 @@ export default async function EmailsRoutePage({
     10,
     resolvedSearchParams.search ?? "",
     (resolvedSearchParams.bucket as "all" | "important" | "promotional" | "to_review" | undefined) ??
-      "important",
-    (resolvedSearchParams.status as "all" | "review" | "processed" | undefined) ??
+      "all",
+    (resolvedSearchParams.status as "all" | "new" | "review" | "processed" | undefined) ??
       "all",
     resolvedSearchParams.email ?? null,
   );

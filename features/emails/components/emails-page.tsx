@@ -6,7 +6,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { EmptyState } from "@/components/crm/empty-state";
 import { ErrorState } from "@/components/crm/error-state";
-import { MobileFilterSheet } from "@/components/crm/mobile-filter-sheet";
 import { PageHeader } from "@/components/crm/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,7 +24,6 @@ import { GmailAutoSyncBridge } from "@/features/emails/components/gmail-auto-syn
 import { GmailSyncControls } from "@/features/emails/components/gmail-sync-controls";
 import { MobileEmailDetailSheet } from "@/features/emails/components/mobile-email-detail-sheet";
 import { MobileEmailList } from "@/features/emails/components/mobile-email-list";
-import { emailInboxBucketMeta } from "@/features/emails/metadata";
 import type { EmailsPageData } from "@/features/emails/types";
 
 const SEARCH_DEBOUNCE_MS = 280;
@@ -92,7 +90,7 @@ export function EmailsPage({
       navigateWithQuery({
         pathname,
         patch: {
-          bucket: selectedBucket === "important" ? null : selectedBucket,
+          bucket: selectedBucket === "all" ? null : selectedBucket,
           email: null,
           page: null,
           search: searchInput.trim() || null,
@@ -125,7 +123,7 @@ export function EmailsPage({
     selectedEmail?.id ?? optimisticSelectedEmailId ?? selectedEmailId ?? null;
   const hasActiveFilters =
     filters.search.trim().length > 0 ||
-    filters.selectedBucket !== "important" ||
+    filters.selectedBucket !== "all" ||
     filters.selectedStatus !== "all";
   const paginationSummary = useMemo(() => {
     if (pagination.totalItems === 0 || emails.length === 0) {
@@ -179,14 +177,18 @@ export function EmailsPage({
       ? "Aucun email publicitaire visible"
       : filters.selectedBucket === "to_review"
         ? "Aucun email à vérifier pour l’instant"
-        : "Aucun email important à vérifier";
+        : filters.selectedBucket === "important"
+          ? "Aucun email important à vérifier"
+          : "Aucun email visible";
   const emptyStateDescription = hasActiveFilters
     ? "Ajuste la recherche ou reviens à un tri plus large."
     : filters.selectedBucket === "promotional"
       ? "Claw n’a pas laissé de newsletter ou de promotion à cet endroit."
       : filters.selectedBucket === "to_review"
         ? "Les cas incertains ont déjà été absorbés ou déplacés."
-        : "L’inbox principale est vide pour le moment.";
+        : filters.selectedBucket === "important"
+          ? "L’inbox principale est vide pour le moment."
+          : "Aucun email n’est visible pour le moment.";
 
   return (
     <div className="flex flex-col gap-6">
@@ -199,15 +201,28 @@ export function EmailsPage({
         />
       ) : null}
 
-      {areFiltersLoading ? (
-        <FiltersLoadingCard />
-      ) : (
-        <>
-          <div className="md:hidden">
-            <MobileFilterSheet
-              title="Filtrer les emails"
-              description="Choisir l’onglet assistant et retrouver vite un message utile."
-            >
+      <div className="grid gap-4 md:hidden">
+        <Card>
+          <CardHeader className="gap-2 border-b border-black/[0.06] pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <Badge variant="outline" className="bg-[#fbf8f2]">
+                  Inbox métier
+                </Badge>
+                <CardTitle className="mt-2">Liste des emails</CardTitle>
+              </div>
+              <Badge variant="outline" className="bg-white">
+                {paginationSummary}
+              </Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              10 emails au maximum, avec tous les filtres utiles au même endroit.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4 p-4">
+            {areFiltersLoading ? (
+              <FiltersLoadingInline />
+            ) : (
               <EmailFilters
                 bucketCounts={bucketCounts}
                 search={searchInput}
@@ -217,32 +232,8 @@ export function EmailsPage({
                 selectedBucket={selectedBucket}
                 onStatusChange={setSelectedStatus}
               />
-            </MobileFilterSheet>
-          </div>
+            )}
 
-          <div className="hidden md:block">
-            <EmailFilters
-              bucketCounts={bucketCounts}
-              search={searchInput}
-              onBucketChange={setSelectedBucket}
-              onSearchChange={setSearchInput}
-              selectedStatus={selectedStatus}
-              selectedBucket={selectedBucket}
-              onStatusChange={setSelectedStatus}
-            />
-          </div>
-        </>
-      )}
-
-      <div className="grid gap-4 md:hidden">
-        <Card>
-          <CardHeader className="gap-2 border-b border-black/[0.06] pb-4">
-            <CardTitle>Liste des emails</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              10 emails au maximum, pour garder une lecture rapide.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4 p-4">
             {emails.length > 0 ? (
               <>
                 <MobileEmailList
@@ -319,10 +310,24 @@ export function EmailsPage({
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground">
-              Vue courte et lisible, 10 emails seulement par page.
+              Vue courte et lisible, avec tous les filtres directement dans cette carte.
             </p>
           </CardHeader>
-          <CardContent className="px-0 pb-0">
+          <CardContent className="space-y-4 p-4">
+            {areFiltersLoading ? (
+              <FiltersLoadingInline />
+            ) : (
+              <EmailFilters
+                bucketCounts={bucketCounts}
+                search={searchInput}
+                onBucketChange={setSelectedBucket}
+                onSearchChange={setSearchInput}
+                selectedStatus={selectedStatus}
+                selectedBucket={selectedBucket}
+                onStatusChange={setSelectedStatus}
+              />
+            )}
+
             {emails.length > 0 ? (
               <EmailsTable
                 emails={emails}
@@ -339,12 +344,10 @@ export function EmailsPage({
                 }}
               />
             ) : (
-              <div className="p-6">
-                <EmptyState
-                  title={emptyStateTitle}
-                  description={emptyStateDescription}
-                />
-              </div>
+              <EmptyState
+                title={emptyStateTitle}
+                description={emptyStateDescription}
+              />
             )}
           </CardContent>
           <CardContent className="border-t border-black/[0.06] p-4">
@@ -403,70 +406,17 @@ export function EmailsPage({
   );
 }
 
-function InboxSummaryCard({
-  bucketCounts,
-  paginationSummary,
-  selectedBucket,
-  selectedStatus,
-}: Readonly<{
-  bucketCounts: EmailsPageData["bucketCounts"];
-  paginationSummary: string;
-  selectedBucket: EmailsPageData["filters"]["selectedBucket"];
-  selectedStatus: EmailsPageData["filters"]["selectedStatus"];
-}>) {
-  const selectedBucketLabel =
-    selectedBucket === "all"
-      ? "Tous les emails"
-      : emailInboxBucketMeta[selectedBucket].label;
-
+function FiltersLoadingInline() {
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <p className="text-sm font-semibold text-foreground">
-            {selectedBucketLabel}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            {selectedStatus === "all"
-              ? "Tous statuts"
-              : selectedStatus === "review"
-                ? "Emails à revoir"
-                : "Emails déjà traités"}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="outline" className="bg-white">
-            {paginationSummary}
-          </Badge>
-          <Badge variant="outline" className="bg-white">
-            {bucketCounts.important} importants
-          </Badge>
-          <Badge variant="outline" className="bg-white">
-            {bucketCounts.toReview} à vérifier
-          </Badge>
-          <Badge variant="outline" className="bg-white">
-            {bucketCounts.promotional} pub
-          </Badge>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function FiltersLoadingCard() {
-  return (
-    <Card>
-      <CardContent className="flex min-h-32 flex-col items-center justify-center gap-3 p-5 text-center">
-        <Loader2 className="h-5 w-5 animate-spin text-primary" />
-        <div className="space-y-1">
-          <p className="text-sm font-semibold text-foreground">Chargement des filtres emails</p>
-          <p className="text-xs text-muted-foreground">
-            On prépare l’inbox et ses contrôles de tri.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="flex min-h-24 flex-col items-center justify-center gap-3 rounded-[1.15rem] border border-dashed border-black/[0.08] bg-[#fbf8f2]/65 p-5 text-center">
+      <Loader2 className="h-5 w-5 animate-spin text-primary" />
+      <div className="space-y-1">
+        <p className="text-sm font-semibold text-foreground">Chargement des filtres emails</p>
+        <p className="text-xs text-muted-foreground">
+          On prépare la recherche, les statuts et le tri assistant.
+        </p>
+      </div>
+    </div>
   );
 }
 

@@ -11,7 +11,7 @@ export type EmailInboxBucket = "important" | "promotional" | "to_review";
 export type EmailInboxBucketSource = "stored" | "rules_v1";
 
 export type EmailPageSize = 10;
-export type EmailListStatusFilter = "all" | "review" | "processed";
+export type EmailListStatusFilter = "all" | "new" | "review" | "processed";
 
 export type EmailQualificationRequestType =
   | "price_request"

@@ -199,7 +199,7 @@ const getPaginatedEmailsPageDataInternal = async (
   page = 1,
   perPage: EmailPageSize = DEFAULT_PAGE_SIZE,
   search = "",
-  selectedBucket: EmailBucketFilter = "important",
+  selectedBucket: EmailBucketFilter = "all",
   selectedStatus: EmailStatusFilter = "all",
   selectedEmailId: string | null = null,
 ): Promise<EmailsPageData> => {
@@ -747,6 +747,7 @@ interface EmailListQueryResult extends EmailQueryResult {
 
 interface EmailFilterableQuery<TResult> extends EmailOrderableQuery, EmailSearchableQuery {
   eq: (column: string, value: string | boolean) => EmailFilterableQuery<TResult>;
+  neq: (column: string, value: string | boolean) => EmailFilterableQuery<TResult>;
   range: (from: number, to: number) => Promise<TResult>;
   then: PromiseLike<TResult>["then"];
 }
@@ -789,6 +790,10 @@ function applyEmailBucketFilter<TResult, T extends EmailFilterableQuery<TResult>
 }
 
 function applyEmailStatusFilter<TResult, T extends EmailFilterableQuery<TResult>>(query: T, status: EmailStatusFilter): T {
+  if (status === "new") {
+    return query.eq("is_processed", false).neq("processing_status", "review") as T;
+  }
+
   if (status === "review") {
     return query.eq("processing_status", "review") as T;
   }
@@ -933,11 +938,11 @@ function normalizeEmailQueryInput(
     ? Math.floor(requestedPage)
     : 1;
   const selectedBucket = (["all", "important", "promotional", "to_review"] as const).includes(
-    (input?.selectedBucket ?? "important") as EmailBucketFilter,
+    (input?.selectedBucket ?? "all") as EmailBucketFilter,
   )
-    ? ((input?.selectedBucket ?? "important") as EmailBucketFilter)
-    : "important";
-  const selectedStatus = (["all", "review", "processed"] as const).includes(
+    ? ((input?.selectedBucket ?? "all") as EmailBucketFilter)
+    : "all";
+  const selectedStatus = (["all", "new", "review", "processed"] as const).includes(
     (input?.selectedStatus ?? "all") as EmailStatusFilter,
   )
     ? ((input?.selectedStatus ?? "all") as EmailStatusFilter)

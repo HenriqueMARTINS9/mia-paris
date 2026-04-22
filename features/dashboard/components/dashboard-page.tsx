@@ -1,12 +1,9 @@
 import { ErrorState } from "@/components/crm/error-state";
 import { PageHeader } from "@/components/crm/page-header";
-import { BlockedProductionsPanel } from "@/features/dashboard/components/blocked-productions-panel";
 import { DashboardFocusCards } from "@/features/dashboard/components/dashboard-focus-cards";
-import { DashboardShortcutsCard } from "@/features/dashboard/components/dashboard-shortcuts-card";
 import { InboxTriagePanel } from "@/features/dashboard/components/inbox-triage-panel";
 import { PriorityRequestsPanel } from "@/features/dashboard/components/priority-requests-panel";
 import { RecentAssistantActionsCard } from "@/features/dashboard/components/recent-assistant-actions-card";
-import { TodayUrgenciesPanel } from "@/features/dashboard/components/today-urgencies-panel";
 import { GmailAutoSyncBridge } from "@/features/emails/components/gmail-auto-sync-bridge";
 import type { DashboardPageData } from "@/features/dashboard/types";
 
