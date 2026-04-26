@@ -100,7 +100,7 @@ export function TasksPage({
       eyebrow="Étape 3 · Tâches"
       title="Tâches"
       badge={`${filteredTasks.length} ouverte${filteredTasks.length > 1 ? "s" : ""}`}
-      description="Vue opérationnelle des actions ouvertes MIA PARIS : owners, échéances, demande liée et arbitrages du jour."
+      description="Owners, échéances, demande liée et arbitrages du jour."
       actions={
         <>
           <Button variant="outline">

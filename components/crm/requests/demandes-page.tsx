@@ -165,7 +165,7 @@ export function DemandesPage({
         eyebrow="Étape 2 · Demandes"
         title="Demandes"
         badge={`${filteredRequests.length} dossier${filteredRequests.length > 1 ? "s" : ""}`}
-        description="Vue opérationnelle branchée sur Supabase : qualification, suivi, urgence et contexte dossier sont désormais alimentés par v_requests_overview."
+        description="Qualification, suivi, urgence et contexte dossier."
         actions={
           <>
             <Button variant="outline">

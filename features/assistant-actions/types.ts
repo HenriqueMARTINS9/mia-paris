@@ -20,6 +20,7 @@ import type {
   RequestStatus,
 } from "@/features/requests/types";
 import type { AssistantTaskType } from "@/features/tasks/task-types";
+import type { TaskStatus } from "@/features/tasks/types";
 
 export type AssistantActionKind = "read" | "write";
 
@@ -54,6 +55,8 @@ export type AssistantActionName =
   | "setEmailInboxBucket"
   | "searchClientHistory"
   | "searchModelHistory"
+  | "updateRequest"
+  | "updateTask"
   | "writeDailySummary";
 
 export interface AssistantActionDefinition {
@@ -137,6 +140,25 @@ export interface AssistantAttachEmailToRequestInput {
   source?: AssistantActionSource;
 }
 
+export interface AssistantUpdateTaskInput {
+  assignedUserId?: string | null;
+  dueAt?: string | null;
+  priority?: RequestPriority | null;
+  requestId?: string | null;
+  source?: AssistantActionSource;
+  status?: TaskStatus | null;
+  taskId: string;
+}
+
+export interface AssistantUpdateRequestInput {
+  assignedUserId?: string | null;
+  priority?: RequestPriority | null;
+  requestId: string;
+  requestType?: string | null;
+  source?: AssistantActionSource;
+  status?: RequestStatus | null;
+}
+
 export interface AssistantAddRequestNoteInput {
   note: string;
   requestId: string;
@@ -161,10 +183,14 @@ export interface AssistantRunGmailSyncInput {
 }
 
 export interface AssistantRunEmailOpsCycleInput {
+  attachToExistingRequests?: boolean | null;
   createRequests?: boolean | null;
   limit?: number | null;
   source?: AssistantActionSource;
   syncLimit?: number | null;
+  updateRequests?: boolean | null;
+  updateTasks?: boolean | null;
+  writeSummary?: boolean | null;
 }
 
 export interface AssistantSetEmailInboxBucketInput {
@@ -206,10 +232,14 @@ export interface AssistantRunEmailOpsCycleResult {
   items: AssistantEmailOpsCycleItem[];
   processedCount: number;
   promotionalCount: number;
+  requestAttachedCount: number;
   requestCreatedCount: number;
+  requestUpdatedCount: number;
   skippedCount: number;
+  summaryWrittenCount: number;
   sync: GmailSyncResult;
   taskCreatedCount: number;
+  taskUpdatedCount: number;
   toReviewCount: number;
 }
 
@@ -239,6 +269,12 @@ export type AssistantCreateRequestResult = RequestMutationResult & {
   requestId?: string | null;
 };
 export type AssistantCreateDeadlineResult = RequestMutationResult;
+export type AssistantUpdateTaskResult = RequestMutationResult & {
+  updatedFields?: string[];
+};
+export type AssistantUpdateRequestResult = RequestMutationResult & {
+  updatedFields?: string[];
+};
 export type AssistantCreateClientResult = {
   client: EmailQualificationOption | null;
   clientId: string | null;

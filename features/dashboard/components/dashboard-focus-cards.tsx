@@ -27,18 +27,6 @@ export function DashboardFocusCards({
       value: kpis.requestsWithoutOwner,
     },
     {
-      href: "/productions",
-      icon: Factory,
-      label: "Productions bloquées",
-      value: kpis.productionsBlocked,
-    },
-    {
-      href: "/productions",
-      icon: ShieldAlert,
-      label: "Productions à risque",
-      value: kpis.productionsHighRisk,
-    },
-    {
       href: "/emails?bucket=important",
       icon: Inbox,
       label: "Emails importants",

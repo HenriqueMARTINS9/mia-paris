@@ -193,28 +193,43 @@ But métier:
 - classer chaque email en `important`, `promotional` ou `to_review`
 - remplir les données CRM détectables sur l’email
 - classifier le client quand il est reconnaissable
+- rattacher un email à une demande existante si le client et le contexte matchent clairement
 - créer une demande CRM quand l’email important est suffisamment clair
+- mettre à jour priorité/échéance des demandes et tâches liées quand le mail apporte un signal plus urgent
 - laisser le flux métier existant créer les tâches et deadlines automatiques associées
+- écrire une synthèse CRM du cycle si demandé
 
 Champs optionnels:
 
+- `attachToExistingRequests`
 - `createRequests`
 - `limit`
 - `syncLimit`
+- `updateRequests`
+- `updateTasks`
+- `writeSummary`
 
 Valeurs valides:
 
+- `attachToExistingRequests`: `true` ou `false`
 - `createRequests`: `true` ou `false`
 - `limit`: entier entre `1` et `40`
 - `syncLimit`: entier entre `1` et `100`
+- `updateRequests`: `true` ou `false`
+- `updateTasks`: `true` ou `false`
+- `writeSummary`: `true` ou `false`
 
 Payload valide:
 
 ```json
 {
+  "attachToExistingRequests": true,
   "createRequests": true,
   "limit": 15,
-  "syncLimit": 50
+  "syncLimit": 50,
+  "updateRequests": true,
+  "updateTasks": true,
+  "writeSummary": true
 }
 ```
 
@@ -230,10 +245,14 @@ Réponse compacte:
     "importantCount": 6,
     "processedCount": 10,
     "promotionalCount": 2,
+    "requestAttachedCount": 2,
     "requestCreatedCount": 3,
+    "requestUpdatedCount": 1,
+    "summaryWrittenCount": 1,
     "syncImportedMessages": 4,
     "syncOk": true,
     "taskCreatedCount": 3,
+    "taskUpdatedCount": 2,
     "toReviewCount": 2
   },
   "format": "compact",
@@ -393,6 +412,12 @@ Valeurs valides:
 
 - `limit`: entier entre `1` et `100`
 
+Comportement:
+
+- en première synchronisation, `limit` borne le nombre d’emails importés
+- en synchronisation incrémentale, le CRM pagine Gmail et récupère tous les emails disponibles depuis le dernier email synchronisé
+- les doublons sont ignorés côté CRM via les identifiants Gmail `message/thread`
+
 Payload valide:
 
 ```json
@@ -464,6 +489,62 @@ Payload valide:
   "requestId": "request-uuid",
   "assignedUserId": "user-uuid",
   "dueAt": "2026-04-04"
+}
+```
+
+### `updateTask`
+
+Champs obligatoires:
+
+- `taskId`
+- au moins un champ à modifier parmi `status`, `priority`, `assignedUserId`, `dueAt`
+
+Champs optionnels:
+
+- `requestId`
+- `status`
+- `priority`
+- `assignedUserId`
+- `dueAt`
+
+Valeurs valides:
+
+- `status`: `todo`, `in_progress`, `blocked`, `done`
+- `priority`: `critical`, `high`, `normal`
+
+Note enum:
+
+- côté CRM, `blocked` est converti vers l’enum PostgreSQL réel `waiting_external`
+- ne jamais envoyer `open`
+
+Payload valide:
+
+```json
+{
+  "taskId": "task-uuid",
+  "requestId": "request-uuid",
+  "status": "in_progress",
+  "priority": "critical",
+  "assignedUserId": "user-uuid",
+  "dueAt": "2026-04-27"
+}
+```
+
+Réponse compacte:
+
+```json
+{
+  "format": "compact",
+  "recommendedAction": "Le suivi tâche est à jour dans le CRM.",
+  "summary": "Tâche mise à jour: status, priority, dueAt.",
+  "task": {
+    "taskId": "task-uuid",
+    "requestId": "request-uuid",
+    "status": "in_progress",
+    "priority": "critical",
+    "dueAt": "2026-04-27",
+    "updatedFields": ["status", "priority", "dueAt"]
+  }
 }
 ```
 
@@ -539,6 +620,55 @@ Règle métier:
 - si Claw crée une demande depuis un ou plusieurs emails, il doit passer `emailIds`
 - si la demande existe déjà, utiliser `attachEmailToRequest`
 - ne pas créer une deuxième demande si le mail correspond clairement à une demande existante
+
+### `updateRequest`
+
+Champs obligatoires:
+
+- `requestId`
+- au moins un champ à modifier parmi `status`, `priority`, `assignedUserId`
+
+Champs optionnels:
+
+- `requestType` obligatoire si `status` est fourni
+- `status`
+- `priority`
+- `assignedUserId`
+
+Valeurs valides:
+
+- `status`: `new`, `qualification`, `costing`, `awaiting_validation`, `approved`, `in_production`
+- `priority`: `critical`, `high`, `normal`
+
+Payload valide:
+
+```json
+{
+  "requestId": "request-uuid",
+  "requestType": "price_request",
+  "status": "costing",
+  "priority": "high",
+  "assignedUserId": "user-uuid"
+}
+```
+
+Réponse compacte:
+
+```json
+{
+  "format": "compact",
+  "recommendedAction": "Le CRM est à jour. Vérifier uniquement si un arbitrage client est nécessaire.",
+  "summary": "Demande mise à jour: status, priority, assignedUserId.",
+  "request": {
+    "requestId": "request-uuid",
+    "requestType": "price_request",
+    "status": "costing",
+    "priority": "high",
+    "assignedUserId": "user-uuid",
+    "updatedFields": ["status", "priority", "assignedUserId"]
+  }
+}
+```
 
 ### `attachEmailToRequest`
 
@@ -828,8 +958,10 @@ Payload valide:
 - Utiliser `responseMode: "detailed"` uniquement si le contexte le demande vraiment.
 - Ne jamais inventer une valeur enum.
 - Pour la gestion email quotidienne, préférer `runEmailOpsCycle` à un simple `runGmailSync`.
-- Après le dernier cycle de la journée, utiliser `writeDailySummary` pour alimenter la page `Synthèses`.
+- Pour le pilotage automatique complet, appeler `runEmailOpsCycle` avec `attachToExistingRequests`, `createRequests`, `updateRequests`, `updateTasks` et `writeSummary` à `true`.
+- `writeDailySummary` reste disponible comme action séparée si Claw veut réécrire une synthèse plus éditorialisée en fin de journée.
 - Ne jamais remplacer une vraie action CRM safe par une simple note mémoire si l’utilisateur demande explicitement la mutation.
+- Quand une demande ou une tâche existe déjà, préférer `updateRequest`, `updateTask` ou `attachEmailToRequest` plutôt que créer un doublon.
 - Utiliser les actions READ sans confirmation.
 - Utiliser les SAFE WRITE uniquement après intention claire.
 - Les writes OpenClaw utilisent l’acteur technique serveur et ne dépendent pas d’une session navigateur.

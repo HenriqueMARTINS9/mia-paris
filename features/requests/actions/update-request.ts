@@ -20,14 +20,12 @@ import type {
   RequestPriority,
   RequestStatus,
 } from "@/features/requests/types";
-import { getSupabaseEnv } from "@/lib/supabase/env";
 import {
   isMissingSupabaseColumnError,
   supabaseRestPatch,
   supabaseRestSelectMaybeSingle,
 } from "@/lib/supabase/rest";
 import { recordAuditEvent } from "@/lib/action-runtime";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { RequestRecord } from "@/types/crm";
 
 interface UpdateRequestStatusInput {
@@ -54,6 +52,7 @@ interface AppendRequestNoteInput {
 
 export async function updateRequestStatusAction(
   input: UpdateRequestStatusInput,
+  context?: AssistantMutationExecutionContext,
 ): Promise<RequestMutationResult> {
   if (!input.requestId) {
     return {
@@ -78,11 +77,13 @@ export async function updateRequestStatusAction(
       field: "status",
       successMessage: `Statut mis à jour: ${requestStatusMeta[input.status].label}.`,
     },
+    context,
   );
 }
 
 export async function updateRequestPriorityAction(
   input: UpdateRequestPriorityInput,
+  context?: AssistantMutationExecutionContext,
 ): Promise<RequestMutationResult> {
   if (!input.requestId) {
     return {
@@ -102,11 +103,13 @@ export async function updateRequestPriorityAction(
       field: "priority",
       successMessage: `Priorité mise à jour: ${requestPriorityMeta[input.priority].label}.`,
     },
+    context,
   );
 }
 
 export async function assignRequestAction(
   input: AssignRequestInput,
+  context?: AssistantMutationExecutionContext,
 ): Promise<RequestMutationResult> {
   if (!input.requestId) {
     return {
@@ -134,11 +137,13 @@ export async function assignRequestAction(
       field: "assigned_user_id",
       successMessage: "Demande réassignée avec succès.",
     },
+    context,
   );
 }
 
 export async function markRequestAsProcessedAction(
   input: Pick<UpdateRequestStatusInput, "requestId" | "requestType">,
+  context?: AssistantMutationExecutionContext,
 ): Promise<RequestMutationResult> {
   if (!input.requestId) {
     return {
@@ -158,6 +163,7 @@ export async function markRequestAsProcessedAction(
       field: "status",
       successMessage: "Demande marquée comme traitée.",
     },
+    context,
   );
 }
 
@@ -314,9 +320,15 @@ async function updateRequestRecord(
     field: RequestMutationResult["field"];
     successMessage: string;
   },
+  context?: AssistantMutationExecutionContext,
 ): Promise<RequestMutationResult> {
   try {
-    const authorization = await authorizeServerAction("requests.update");
+    const authorization = context?.authorizationOverride
+      ? await authorizeServerPermissions(
+          ["requests.update"],
+          context.authorizationOverride,
+        )
+      : await authorizeServerAction("requests.update");
 
     if (!authorization.ok) {
       return {
@@ -326,63 +338,25 @@ async function updateRequestRecord(
       };
     }
 
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    const result = await supabaseRestPatch<Array<Pick<RequestRecord, "id">>>(
+      "requests",
+      values,
+      {
+        id: `eq.${requestId}`,
+        select: "id",
+      },
+      context?.rest ?? undefined,
+    );
 
-    if (authError || !user) {
+    if (result.error) {
       return {
         ok: false,
         field: options.field,
-        message:
-          "Session Supabase introuvable. Reconnecte-toi pour modifier cette demande.",
+        message: getRequestMutationErrorMessage(result.error),
       };
     }
 
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
-
-    if (sessionError || !session?.access_token) {
-      return {
-        ok: false,
-        field: options.field,
-        message:
-          "Session Supabase expirée. Reconnecte-toi pour modifier cette demande.",
-      };
-    }
-
-    const response = await fetch(buildRequestsMutationUrl(requestId), {
-      method: "PATCH",
-      headers: getRequestsMutationHeaders(session.access_token),
-      body: JSON.stringify(values),
-      cache: "no-store",
-    });
-
-    const payload = (await response.json().catch(() => null)) as
-      | Array<Pick<RequestRecord, "id">>
-      | {
-          message?: string;
-          error?: string;
-          details?: string;
-          hint?: string;
-        }
-      | null;
-
-    if (!response.ok) {
-      return {
-        ok: false,
-        field: options.field,
-        message: getRequestMutationErrorMessage(
-          getResponseErrorMessage(payload) ?? response.statusText,
-        ),
-      };
-    }
-
-    if (!Array.isArray(payload) || payload.length === 0) {
+    if (!result.data || result.data.length === 0) {
       return {
         ok: false,
         field: options.field,
@@ -391,6 +365,7 @@ async function updateRequestRecord(
     }
 
     revalidatePath("/demandes");
+    revalidatePath(`/requests/${requestId}`);
     revalidatePath("/", "layout");
 
     return {
@@ -428,45 +403,6 @@ function getRequestMutationErrorMessage(message: string) {
 
 function getRequestMutationFallbackMessage() {
   return "Aucune ligne n'a été mise à jour. Vérifie les policies RLS sur requests et les droits de l'utilisateur connecté.";
-}
-
-function buildRequestsMutationUrl(requestId: string) {
-  const { supabaseUrl } = getSupabaseEnv();
-  const params = new URLSearchParams({
-    id: `eq.${requestId}`,
-    select: "id",
-  });
-
-  return `${supabaseUrl}/rest/v1/requests?${params.toString()}`;
-}
-
-function getRequestsMutationHeaders(accessToken: string) {
-  const { supabasePublishableKey } = getSupabaseEnv();
-
-  return {
-    apikey: supabasePublishableKey,
-    Authorization: `Bearer ${accessToken}`,
-    "Content-Type": "application/json",
-    Prefer: "return=representation",
-  };
-}
-
-function getResponseErrorMessage(
-  payload:
-    | Array<Pick<RequestRecord, "id">>
-    | {
-        message?: string;
-        error?: string;
-        details?: string;
-        hint?: string;
-      }
-    | null,
-) {
-  if (!payload || Array.isArray(payload)) {
-    return null;
-  }
-
-  return payload.message ?? payload.error ?? payload.details ?? payload.hint ?? null;
 }
 
 function buildAppendedRequestNote(

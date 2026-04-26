@@ -326,6 +326,8 @@ Actions SAFE WRITE exposees:
 - `createDeadline`
 - `createRequest`
 - `createTask`
+- `updateRequest`
+- `updateTask`
 - `addNoteToRequest`
 - `addNoteToProduction`
 
@@ -361,6 +363,8 @@ Livre:
 Trace notamment:
 - `runEmailOpsCycle`
 - `createTask`
+- `updateRequest`
+- `updateTask`
 - `createDeadline`
 - `updateProduction`
 - `createDocumentFromAttachment`

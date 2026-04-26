@@ -53,6 +53,8 @@ export function presentOpenClawData(input: {
     case "createDeadline":
     case "createRequest":
     case "createTask":
+    case "updateRequest":
+    case "updateTask":
     case "addNoteToRequest":
     case "addNoteToProduction":
     case "setEmailInboxBucket":
@@ -239,10 +241,14 @@ function presentEmailOpsCycle(data: unknown) {
       importantCount: result?.importantCount ?? 0,
       processedCount: result?.processedCount ?? 0,
       promotionalCount: result?.promotionalCount ?? 0,
+      requestAttachedCount: result?.requestAttachedCount ?? 0,
       requestCreatedCount: result?.requestCreatedCount ?? 0,
+      requestUpdatedCount: result?.requestUpdatedCount ?? 0,
+      summaryWrittenCount: result?.summaryWrittenCount ?? 0,
       syncImportedMessages: result?.sync.importedMessages ?? 0,
       syncOk: result?.sync.ok ?? false,
       taskCreatedCount: result?.taskCreatedCount ?? 0,
+      taskUpdatedCount: result?.taskUpdatedCount ?? 0,
       toReviewCount: result?.toReviewCount ?? 0,
     },
     format: "compact" as const,
@@ -302,6 +308,43 @@ function presentSafeWriteResult(input: {
         title: readString(payload, "title"),
       },
       summary: resultMessage,
+    };
+  }
+
+  if (input.action === "updateRequest") {
+    const result = isRecord(input.data) ? input.data : {};
+
+    return {
+      format: "compact" as const,
+      recommendedAction: "Le CRM est à jour. Vérifier uniquement si un arbitrage client est nécessaire.",
+      request: {
+        assignedUserId: readString(payload, "assignedUserId"),
+        priority: readString(payload, "priority"),
+        requestId: readString(payload, "requestId"),
+        requestType: readString(payload, "requestType"),
+        status: readString(payload, "status"),
+        updatedFields: Array.isArray(result.updatedFields) ? result.updatedFields : [],
+      },
+      summary: resultMessage,
+    };
+  }
+
+  if (input.action === "updateTask") {
+    const result = isRecord(input.data) ? input.data : {};
+
+    return {
+      format: "compact" as const,
+      recommendedAction: "Le suivi tâche est à jour dans le CRM.",
+      summary: resultMessage,
+      task: {
+        assignedUserId: readString(payload, "assignedUserId"),
+        dueAt: readString(payload, "dueAt"),
+        priority: readString(payload, "priority"),
+        requestId: readString(payload, "requestId"),
+        status: readString(payload, "status"),
+        taskId: readString(payload, "taskId"),
+        updatedFields: Array.isArray(result.updatedFields) ? result.updatedFields : [],
+      },
     };
   }
 
@@ -397,6 +440,12 @@ function presentSafeWriteResult(input: {
         importantCount: readNumber(emailOpsResult, "importantCount"),
         processedCount: readNumber(emailOpsResult, "processedCount"),
         promotionalCount: readNumber(emailOpsResult, "promotionalCount"),
+        requestAttachedCount: readNumber(emailOpsResult, "requestAttachedCount"),
+        requestCreatedCount: readNumber(emailOpsResult, "requestCreatedCount"),
+        requestUpdatedCount: readNumber(emailOpsResult, "requestUpdatedCount"),
+        summaryWrittenCount: readNumber(emailOpsResult, "summaryWrittenCount"),
+        taskCreatedCount: readNumber(emailOpsResult, "taskCreatedCount"),
+        taskUpdatedCount: readNumber(emailOpsResult, "taskUpdatedCount"),
         toReviewCount,
       },
       format: "compact" as const,

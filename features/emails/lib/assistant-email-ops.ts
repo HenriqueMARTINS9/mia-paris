@@ -6,7 +6,9 @@ import type {
 } from "@/features/assistant-actions/types";
 import type { AssistantMutationActorContext } from "@/features/assistant-actions/execution-context";
 import type { ServerPermissionOverride } from "@/features/auth/server-authorization";
+import { writeDailySummaryAction } from "@/features/daily-summaries/actions/write-daily-summary";
 import { createRequestFromEmailAction } from "@/features/emails/actions/create-request-from-email";
+import { attachEmailToRequestAction } from "@/features/emails/actions/update-email";
 import type {
   EmailAssistantReply,
   EmailInboxBucket,
@@ -37,6 +39,11 @@ import {
   type SupabaseRestExecutionContext,
 } from "@/lib/supabase/rest";
 import type { RequestPriority } from "@/features/requests/types";
+import { updateRequestPriorityAction } from "@/features/requests/actions/update-request";
+import {
+  updateTaskDueDateAction,
+  updateTaskPriorityAction,
+} from "@/features/tasks/actions/update-task";
 import type {
   ClientRecord,
   ContactRecord,
@@ -44,6 +51,8 @@ import type {
   EmailRecord,
   ModelRecord,
   ProductDepartmentRecord,
+  RequestRecord,
+  TaskRecord,
 } from "@/types/crm";
 
 const DEFAULT_EMAIL_OPS_LIMIT = 15;
@@ -57,15 +66,21 @@ interface EmailOpsReferenceData {
   contacts: ContactRecord[];
   models: ModelRecord[];
   productDepartments: ProductDepartmentRecord[];
+  requests: RequestRecord[];
+  tasks: TaskRecord[];
 }
 
 export interface RunAssistantEmailOpsCycleOptions {
   actor?: AssistantMutationActorContext | null;
   authorizationOverride?: ServerPermissionOverride | null;
   createRequests?: boolean | null;
+  attachToExistingRequests?: boolean | null;
   limit?: number | null;
   rest?: SupabaseRestExecutionContext | null;
   syncLimit?: number | null;
+  updateRequests?: boolean | null;
+  updateTasks?: boolean | null;
+  writeSummary?: boolean | null;
 }
 
 export async function runAssistantEmailOpsCycle(
@@ -103,10 +118,14 @@ export async function runAssistantEmailOpsCycle(
     items: [],
     processedCount: 0,
     promotionalCount: 0,
+    requestAttachedCount: 0,
     requestCreatedCount: 0,
+    requestUpdatedCount: 0,
     skippedCount: 0,
+    summaryWrittenCount: 0,
     sync,
     taskCreatedCount: 0,
+    taskUpdatedCount: 0,
     toReviewCount: 0,
   };
 
@@ -115,8 +134,11 @@ export async function runAssistantEmailOpsCycle(
     const emailResult = await classifySingleEmail(email, references, {
       actor: options?.actor ?? null,
       authorizationOverride: options?.authorizationOverride ?? null,
+      attachToExistingRequests: options?.attachToExistingRequests ?? null,
       createRequests: options?.createRequests ?? null,
       rest: options?.rest ?? null,
+      updateRequests: options?.updateRequests ?? null,
+      updateTasks: options?.updateTasks ?? null,
     });
 
     result.items.push(emailResult.item);
@@ -136,8 +158,20 @@ export async function runAssistantEmailOpsCycle(
         result.requestCreatedCount += 1;
       }
 
+      if (emailResult.requestAttached) {
+        result.requestAttachedCount += 1;
+      }
+
+      if (emailResult.requestUpdated) {
+        result.requestUpdatedCount += 1;
+      }
+
       if (emailResult.taskCreated) {
         result.taskCreatedCount += 1;
+      }
+
+      if (emailResult.taskUpdated) {
+        result.taskUpdatedCount += 1;
       }
 
       if (emailResult.deadlineCreated) {
@@ -166,6 +200,20 @@ export async function runAssistantEmailOpsCycle(
     }
   }
 
+  if (options?.writeSummary) {
+    const summaryResult = await writeEmailOpsDailySummary(result, {
+      actor: options?.actor ?? null,
+      authorizationOverride: options?.authorizationOverride ?? null,
+      rest: options?.rest ?? null,
+    });
+
+    if (summaryResult.ok) {
+      result.summaryWrittenCount += 1;
+    } else {
+      result.errorCount += 1;
+    }
+  }
+
   const ok = result.processedCount > 0 || (sync.ok && result.errorCount === 0);
   const message = buildEmailOpsMessage(result);
 
@@ -182,16 +230,22 @@ async function classifySingleEmail(
   options: {
     actor: AssistantMutationActorContext | null;
     authorizationOverride: ServerPermissionOverride | null;
+    attachToExistingRequests: boolean | null;
     createRequests: boolean | null;
     rest: SupabaseRestExecutionContext | null;
+    updateRequests: boolean | null;
+    updateTasks: boolean | null;
   },
 ): Promise<{
   clientClassified: boolean;
   deadlineCreated: boolean;
   enrichedCrm: boolean;
   item: AssistantEmailOpsCycleItem;
+  requestAttached: boolean;
   requestCreated: boolean;
+  requestUpdated: boolean;
   taskCreated: boolean;
+  taskUpdated: boolean;
 }> {
   const subject = readString(email, ["subject"]) ?? "Sans objet";
   const fromEmail = readString(email, ["from_email"]) ?? "";
@@ -237,8 +291,11 @@ async function classifySingleEmail(
         status: "skipped",
         subject,
       },
+      requestAttached: false,
       requestCreated: false,
+      requestUpdated: false,
       taskCreated: false,
+      taskUpdated: false,
     };
   }
 
@@ -384,19 +441,26 @@ async function classifySingleEmail(
           status: "error",
           subject,
         },
+        requestAttached: false,
         requestCreated: false,
+        requestUpdated: false,
         taskCreated: false,
+        taskUpdated: false,
       };
     }
 
     const automation = await maybeAutomateQualifiedEmail({
       actor: options.actor,
       authorizationOverride: options.authorizationOverride,
+      attachToExistingRequests: options.attachToExistingRequests,
       createRequests: options.createRequests,
       draft: enrichedDraft,
       email,
+      references,
       rest: options.rest,
       triage,
+      updateRequests: options.updateRequests,
+      updateTasks: options.updateTasks,
     });
 
     return {
@@ -418,8 +482,11 @@ async function classifySingleEmail(
         status: "classified",
         subject,
       },
+      requestAttached: automation.requestAttached,
       requestCreated: automation.requestCreated,
+      requestUpdated: automation.requestUpdated,
       taskCreated: automation.taskCreated,
+      taskUpdated: automation.taskUpdated,
     };
   } catch (error) {
     await logOperationalError({
@@ -454,8 +521,11 @@ async function classifySingleEmail(
         status: "error",
         subject,
       },
+      requestAttached: false,
       requestCreated: false,
+      requestUpdated: false,
       taskCreated: false,
+      taskUpdated: false,
     };
   }
 }
@@ -463,9 +533,11 @@ async function classifySingleEmail(
 async function maybeAutomateQualifiedEmail(input: {
   actor: AssistantMutationActorContext | null;
   authorizationOverride: ServerPermissionOverride | null;
+  attachToExistingRequests: boolean | null;
   createRequests: boolean | null;
   draft: EmailQualificationDraft;
   email: EmailRecord;
+  references: EmailOpsReferenceData;
   rest: SupabaseRestExecutionContext | null;
   triage: {
     bucket: EmailInboxBucket;
@@ -473,6 +545,8 @@ async function maybeAutomateQualifiedEmail(input: {
     reason: string | null;
     source: string;
   };
+  updateRequests: boolean | null;
+  updateTasks: boolean | null;
 }) {
   const linkedRequestId =
     readString(input.email, ["request_id", "linked_request_id", "crm_request_id"]) ??
@@ -492,10 +566,54 @@ async function maybeAutomateQualifiedEmail(input: {
   }
 
   if (linkedRequestId) {
+    const updates = await maybeUpdateLinkedCrmFromEmail({
+      ...input,
+      requestId: linkedRequestId,
+    });
+
     return {
       ...createEmptyAutomationResult(),
+      requestUpdated: updates.requestUpdated,
       recommendedAction: "Demande déjà liée. Compléter ou traiter le dossier existant.",
+      taskUpdated: updates.taskUpdated,
     };
+  }
+
+  if (input.attachToExistingRequests) {
+    const match = findMatchingRequestForEmail(input.draft, input.email, input.references);
+
+    if (match) {
+      const attachResult = await attachEmailToRequestAction(
+        {
+          emailId: input.email.id,
+          requestId: match.request.id,
+          source: "assistant",
+        },
+        {
+          actor: input.actor,
+          authorizationOverride: input.authorizationOverride,
+          rest: input.rest,
+        },
+      );
+
+      if (attachResult.ok) {
+        const updates = await maybeUpdateLinkedCrmFromEmail({
+          ...input,
+          requestId: match.request.id,
+        });
+
+        return {
+          ...createEmptyAutomationResult(),
+          recommendedAction:
+            updates.taskUpdated || updates.requestUpdated
+              ? "Email rattaché à la demande existante, priorité/échéance mises à jour si utile."
+              : "Email rattaché à la demande existante.",
+          requestAttached: true,
+          requestUpdated: updates.requestUpdated,
+          taskUpdated: updates.taskUpdated,
+        };
+      }
+    }
   }
 
   if (
@@ -535,9 +653,259 @@ async function maybeAutomateQualifiedEmail(input: {
     recommendedAction: creationResult.taskCreated || creationResult.deadlineCreated
       ? "Demande, tâche et suivi ont été créés automatiquement dans le CRM."
       : "Demande CRM créée automatiquement depuis cet email.",
+    requestAttached: false,
     requestCreated: creationResult.requestCreated === true || Boolean(creationResult.requestId),
+    requestUpdated: false,
     taskCreated: creationResult.taskCreated === true,
+    taskUpdated: false,
   };
+}
+
+async function maybeUpdateLinkedCrmFromEmail(input: {
+  actor: AssistantMutationActorContext | null;
+  authorizationOverride: ServerPermissionOverride | null;
+  draft: EmailQualificationDraft;
+  references: EmailOpsReferenceData;
+  requestId: string;
+  rest: SupabaseRestExecutionContext | null;
+  updateRequests: boolean | null;
+  updateTasks: boolean | null;
+}) {
+  let requestUpdated = false;
+  let taskUpdated = false;
+  const context = {
+    actor: input.actor,
+    authorizationOverride: input.authorizationOverride,
+    rest: input.rest,
+  };
+  const request =
+    input.references.requests.find((item) => item.id === input.requestId) ?? null;
+
+  if (
+    input.updateRequests &&
+    request &&
+    input.draft.priority &&
+    priorityRank(input.draft.priority) > priorityRank(readPriorityValue(request.priority))
+  ) {
+    const result = await updateRequestPriorityAction(
+      {
+        priority: input.draft.priority,
+        requestId: input.requestId,
+      },
+      context,
+    );
+
+    requestUpdated = result.ok;
+  }
+
+  if (input.updateTasks) {
+    const task = findMostRelevantOpenTask(input.references.tasks, input.requestId);
+
+    if (task) {
+      const currentPriority = readPriorityValue(task.priority);
+
+      if (
+        input.draft.priority &&
+        priorityRank(input.draft.priority) > priorityRank(currentPriority)
+      ) {
+        const result = await updateTaskPriorityAction(
+          {
+            priority: input.draft.priority,
+            requestId: input.requestId,
+            taskId: task.id,
+          },
+          context,
+        );
+
+        taskUpdated = taskUpdated || result.ok;
+      }
+
+      if (input.draft.dueAt && shouldPullTaskDueDateForward(task.due_at, input.draft.dueAt)) {
+        const result = await updateTaskDueDateAction(
+          {
+            dueAt: input.draft.dueAt.slice(0, 10),
+            requestId: input.requestId,
+            taskId: task.id,
+          },
+          context,
+        );
+
+        taskUpdated = taskUpdated || result.ok;
+      }
+    }
+  }
+
+  return {
+    requestUpdated,
+    taskUpdated,
+  };
+}
+
+function findMatchingRequestForEmail(
+  draft: EmailQualificationDraft,
+  email: EmailRecord,
+  references: EmailOpsReferenceData,
+) {
+  if (!draft.clientId) {
+    return null;
+  }
+
+  const sourceText = normalizeSearchText(
+    [
+      draft.title,
+      draft.summary,
+      draft.requestedAction,
+      readString(email, ["subject"]),
+      readString(email, ["preview_text"]),
+      readString(email, ["body_text"]),
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+  const sourceTokens = toMatchTokens(sourceText);
+
+  if (sourceTokens.length === 0) {
+    return null;
+  }
+
+  const candidates = references.requests
+    .filter((request) => request.client_id === draft.clientId)
+    .filter((request) => !isClosedRequestStatus(request.status))
+    .map((request) => {
+      const requestText = normalizeSearchText(
+        [
+          request.title,
+          request.summary,
+          request.requested_action,
+          request.raw_source_excerpt,
+          request.request_type,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
+      const requestTokens = toMatchTokens(requestText);
+      const overlap = sourceTokens.filter((token) => requestTokens.includes(token));
+      let score =
+        sourceTokens.length > 0 ? overlap.length / Math.max(sourceTokens.length, 1) : 0;
+
+      if (draft.requestType && request.request_type === draft.requestType) {
+        score += 0.18;
+      }
+
+      if (draft.modelId && request.model_id === draft.modelId) {
+        score += 0.2;
+      }
+
+      if (
+        draft.productDepartmentId &&
+        request.product_department_id === draft.productDepartmentId
+      ) {
+        score += 0.12;
+      }
+
+      return {
+        request,
+        score,
+      };
+    })
+    .sort((left, right) => right.score - left.score);
+
+  const best = candidates[0] ?? null;
+
+  return best && best.score >= 0.42 ? best : null;
+}
+
+function findMostRelevantOpenTask(tasks: TaskRecord[], requestId: string) {
+  return [...tasks]
+    .filter((task) => task.request_id === requestId)
+    .filter((task) => !isClosedTaskStatus(task.status))
+    .sort((left, right) => {
+      const leftDueAt = left.due_at ? new Date(left.due_at).getTime() : Number.MAX_SAFE_INTEGER;
+      const rightDueAt = right.due_at ? new Date(right.due_at).getTime() : Number.MAX_SAFE_INTEGER;
+
+      return leftDueAt - rightDueAt;
+    })[0] ?? null;
+}
+
+async function writeEmailOpsDailySummary(
+  result: AssistantRunEmailOpsCycleResult,
+  context: {
+    actor: AssistantMutationActorContext | null;
+    authorizationOverride: ServerPermissionOverride | null;
+    rest: SupabaseRestExecutionContext | null;
+  },
+) {
+  const now = new Date();
+  const grouped = new Map<string, AssistantEmailOpsCycleItem[]>();
+
+  for (const item of result.items.filter((entry) => entry.status === "classified")) {
+    const clientName = item.clientName?.trim() || "Inbox sans client";
+    grouped.set(clientName, [...(grouped.get(clientName) ?? []), item]);
+  }
+
+  if (grouped.size === 0) {
+    grouped.set("Inbox", []);
+  }
+
+  const clientSummaries = Array.from(grouped.entries()).map(([clientName, items]) => ({
+    clientName,
+    decisions: items
+      .filter((item) => item.bucket === "to_review")
+      .slice(0, 4)
+      .map((item) => `À vérifier: ${item.subject}`),
+    emailIds: items.map((item) => item.emailId),
+    highlights:
+      items.length > 0
+        ? items.slice(0, 5).map((item) => `${item.subject} (${item.bucket ?? "non classé"})`)
+        : ["Aucun nouvel email qualifié pendant ce cycle."],
+    nextActions: uniqueStrings(
+      items
+        .map((item) => item.recommendedAction)
+        .filter((value): value is string => Boolean(value))
+        .slice(0, 6),
+    ),
+    requestIds: [],
+    risks: items
+      .filter((item) => item.priority === "critical" || item.priority === "high")
+      .slice(0, 5)
+      .map((item) => `${item.priority}: ${item.subject}`),
+    summary:
+      items.length > 0
+        ? `${items.length} email(s) traités: ${items.filter((item) => item.bucket === "important").length} important(s), ${items.filter((item) => item.bucket === "to_review").length} à vérifier, ${items.filter((item) => item.bucket === "promotional").length} pub.`
+        : "Aucun nouvel email qualifié pendant ce cycle.",
+    taskIds: [],
+  }));
+
+  return writeDailySummaryAction(
+    {
+      clientSummaries,
+      generatedAt: now.toISOString(),
+      highlights: [
+        `${result.processedCount} email(s) qualifié(s)`,
+        `${result.requestCreatedCount} demande(s) créée(s)`,
+        `${result.requestAttachedCount} email(s) rattaché(s)`,
+        `${result.taskCreatedCount + result.taskUpdatedCount} tâche(s) créée(s) ou mise(s) à jour`,
+      ],
+      nextActions:
+        result.toReviewCount > 0
+          ? ["Contrôler les emails dans À vérifier."]
+          : ["Surveiller les emails importants et demandes créées par Claw."],
+      overview: `Cycle Claw: ${result.processedCount} email(s) classé(s), ${result.importantCount} important(s), ${result.toReviewCount} à vérifier, ${result.requestCreatedCount} demande(s) créée(s).`,
+      risks:
+        result.errorCount > 0
+          ? [`${result.errorCount} erreur(s) pendant le cycle.`]
+          : [],
+      source: "assistant",
+      summaryDate: now.toISOString().slice(0, 10),
+      summaryTime: new Intl.DateTimeFormat("fr-FR", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "Europe/Paris",
+      }).format(now),
+      title: `Synthèse Claw inbox ${now.toISOString().slice(0, 10)}`,
+    },
+    context,
+  );
 }
 
 async function loadEmailOpsCandidates(limit: number) {
@@ -562,12 +930,29 @@ async function loadEmailOpsCandidates(limit: number) {
 
 async function loadEmailOpsReferenceData(emailIds: string[]): Promise<EmailOpsReferenceData> {
   const admin = createSupabaseAdminClient();
-  const [clientsResult, contactsResult, modelsResult, productDepartmentsResult, attachments] =
-    await Promise.all([
+  const [
+    clientsResult,
+    contactsResult,
+    modelsResult,
+    productDepartmentsResult,
+    requestsResult,
+    tasksResult,
+    attachments,
+  ] = await Promise.all([
       admin.from("clients").select("*"),
       admin.from("contacts").select("*"),
       admin.from("models").select("*"),
       admin.from("product_departments").select("*"),
+      admin
+        .from("requests")
+        .select("*")
+        .order("updated_at", { ascending: false, nullsFirst: false })
+        .limit(250),
+      admin
+        .from("tasks")
+        .select("*")
+        .order("updated_at", { ascending: false, nullsFirst: false })
+        .limit(500),
       emailIds.length > 0
         ? admin.from("email_attachments").select("email_id").in("email_id", emailIds)
         : Promise.resolve({ data: [], error: null }),
@@ -589,6 +974,16 @@ async function loadEmailOpsReferenceData(emailIds: string[]): Promise<EmailOpsRe
     throw new Error(
       `Impossible de charger les départements produit CRM: ${productDepartmentsResult.error.message}`,
     );
+  }
+
+  if (requestsResult.error) {
+    throw new Error(
+      `Impossible de charger les demandes CRM: ${requestsResult.error.message}`,
+    );
+  }
+
+  if (tasksResult.error) {
+    throw new Error(`Impossible de charger les tâches CRM: ${tasksResult.error.message}`);
   }
 
   if (attachments.error) {
@@ -618,6 +1013,8 @@ async function loadEmailOpsReferenceData(emailIds: string[]): Promise<EmailOpsRe
     contacts: (contactsResult.data ?? []) as ContactRecord[],
     models: (modelsResult.data ?? []) as ModelRecord[],
     productDepartments: (productDepartmentsResult.data ?? []) as ProductDepartmentRecord[],
+    requests: (requestsResult.data ?? []) as RequestRecord[],
+    tasks: (tasksResult.data ?? []) as TaskRecord[],
   };
 }
 
@@ -978,12 +1375,28 @@ function buildEmailOpsMessage(result: AssistantRunEmailOpsCycleResult) {
     segments.push(`${result.requestCreatedCount} demande(s) créée(s).`);
   }
 
+  if (result.requestAttachedCount > 0) {
+    segments.push(`${result.requestAttachedCount} email(s) rattaché(s).`);
+  }
+
+  if (result.requestUpdatedCount > 0) {
+    segments.push(`${result.requestUpdatedCount} demande(s) mise(s) à jour.`);
+  }
+
   if (result.taskCreatedCount > 0) {
     segments.push(`${result.taskCreatedCount} tâche(s) automatique(s) créée(s).`);
   }
 
+  if (result.taskUpdatedCount > 0) {
+    segments.push(`${result.taskUpdatedCount} tâche(s) mise(s) à jour.`);
+  }
+
   if (result.deadlineCreatedCount > 0) {
     segments.push(`${result.deadlineCreatedCount} deadline(s) créée(s).`);
+  }
+
+  if (result.summaryWrittenCount > 0) {
+    segments.push("Synthèse CRM écrite.");
   }
 
   if (!result.sync.ok) {
@@ -1170,6 +1583,83 @@ function getSearchWeight(record: Record<string, unknown>) {
   return getSearchTokens(record).reduce((total, token) => total + token.length, 0);
 }
 
+function toMatchTokens(value: string) {
+  return uniqueStrings(
+    value
+      .split(" ")
+      .map((token) => token.trim())
+      .filter((token) => token.length > 3)
+      .filter(
+        (token) =>
+          ![
+            "avec",
+            "dans",
+            "pour",
+            "mail",
+            "email",
+            "merci",
+            "bonjour",
+            "hello",
+            "cordialement",
+          ].includes(token),
+      ),
+  ).slice(0, 24);
+}
+
+function readPriorityValue(value: string | null | undefined): RequestPriority {
+  const normalized = (value ?? "").toLowerCase();
+
+  if (normalized.includes("crit")) {
+    return "critical";
+  }
+
+  if (normalized.includes("high") || normalized.includes("haute")) {
+    return "high";
+  }
+
+  return "normal";
+}
+
+function priorityRank(priority: RequestPriority) {
+  if (priority === "critical") {
+    return 3;
+  }
+
+  if (priority === "high") {
+    return 2;
+  }
+
+  return 1;
+}
+
+function isClosedRequestStatus(status: string | null | undefined) {
+  const normalized = (status ?? "").toLowerCase();
+
+  return ["done", "closed", "cancelled", "canceled", "approved"].includes(normalized);
+}
+
+function isClosedTaskStatus(status: string | null | undefined) {
+  const normalized = (status ?? "").toLowerCase();
+
+  return ["done", "closed", "cancelled", "canceled"].includes(normalized);
+}
+
+function shouldPullTaskDueDateForward(currentDueAt: string | null, nextDueAt: string) {
+  const nextTime = new Date(nextDueAt).getTime();
+
+  if (!Number.isFinite(nextTime)) {
+    return false;
+  }
+
+  if (!currentDueAt) {
+    return true;
+  }
+
+  const currentTime = new Date(currentDueAt).getTime();
+
+  return !Number.isFinite(currentTime) || nextTime < currentTime;
+}
+
 function normalizeSearchText(value: string) {
   return value
     .normalize("NFD")
@@ -1220,7 +1710,10 @@ function createEmptyAutomationResult() {
   return {
     deadlineCreated: false,
     recommendedAction: null as string | null,
+    requestAttached: false,
     requestCreated: false,
+    requestUpdated: false,
     taskCreated: false,
+    taskUpdated: false,
   };
 }

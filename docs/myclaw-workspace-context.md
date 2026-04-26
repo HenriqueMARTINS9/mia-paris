@@ -75,21 +75,23 @@ Avec ça, le bot a déjà:
 - l’ensemble des writes assistant-ready exposés, y compris la création explicite de deadlines
 - les setters utiles pour créer un client CRM puis l’assigner explicitement à un email
 - le rattachement des emails à une demande via `emailIds` dans `createRequest` ou via `attachEmailToRequest`
+- les setters `updateRequest` et `updateTask` pour modifier statut, priorité, assignation et échéance sans session navigateur
 
 ## Routine recommandée MyClaw
 
 Pour la gestion quotidienne des emails, préférer `runEmailOpsCycle` plutôt que `runGmailSync` seul.
 
-Routine simple conseillée:
+Routine pilotage complet conseillée:
 
-1. `08:30` -> `runEmailOpsCycle` avec `{ "createRequests": true, "limit": 15, "syncLimit": 50 }`
-2. `13:00` -> `runEmailOpsCycle` avec `{ "createRequests": true, "limit": 15, "syncLimit": 50 }`
-3. `17:30` -> `runEmailOpsCycle` avec `{ "createRequests": true, "limit": 15, "syncLimit": 50 }`
-4. `17:45` -> `writeDailySummary` avec un résumé court, daté, découpé par client
+1. `08:30` -> `runEmailOpsCycle` avec `{ "attachToExistingRequests": true, "createRequests": true, "updateRequests": true, "updateTasks": true, "writeSummary": true, "limit": 15, "syncLimit": 50 }`
+2. `13:00` -> `runEmailOpsCycle` avec `{ "attachToExistingRequests": true, "createRequests": true, "updateRequests": true, "updateTasks": true, "writeSummary": true, "limit": 15, "syncLimit": 50 }`
+3. `17:30` -> `runEmailOpsCycle` avec `{ "attachToExistingRequests": true, "createRequests": true, "updateRequests": true, "updateTasks": true, "writeSummary": true, "limit": 15, "syncLimit": 50 }`
+4. `17:45` -> si besoin seulement, `writeDailySummary` pour une synthèse plus éditorialisée ou consolidée
 
 Comportement attendu:
 
 - sync Gmail
+- la sync Gmail incrémentale récupère toutes les pages depuis le dernier email synchronisé, pas seulement les 50 premiers résultats
 - lecture email par email
 - classement `important / promotional / to_review`
 - enrichissement des données CRM détectables
@@ -97,6 +99,7 @@ Comportement attendu:
 - création d’une demande si l’email important est clair et prêt à être structuré
 - rattachement des autres emails au même dossier si le sujet, le client et le contexte correspondent
 - création des tâches et deadlines automatiques via le flux standard `email -> request`
+- mise à jour de priorité/assignation/statut/échéance via `updateRequest` et `updateTask` quand une vraie entité existe déjà
 - écriture d’une synthèse de journée exploitable dans le CRM
 - priorité aux emails `important`
 - relecture humaine des emails `to_review`

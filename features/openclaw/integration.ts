@@ -22,6 +22,8 @@ import {
   searchClientHistory,
   searchModelHistory,
   writeDailySummary,
+  updateRequest,
+  updateTask,
 } from "@/features/assistant-actions/commands";
 import { assistantActionCatalog } from "@/features/assistant-actions/catalog";
 import type {
@@ -39,6 +41,8 @@ import type {
   AssistantRunEmailOpsCycleInput,
   AssistantRunGmailSyncInput,
   AssistantSetEmailInboxBucketInput,
+  AssistantUpdateRequestInput,
+  AssistantUpdateTaskInput,
   AssistantWriteDailySummaryInput,
 } from "@/features/assistant-actions/types";
 import type { ServerPermissionOverride } from "@/features/auth/server-authorization";
@@ -49,6 +53,7 @@ import {
   assistantTaskTypeValues,
   isAssistantTaskType,
 } from "@/features/tasks/task-types";
+import { taskStatusOptions } from "@/features/tasks/metadata";
 import { recordAuditEvent } from "@/lib/action-runtime";
 
 export type OpenClawReadActionName =
@@ -73,6 +78,8 @@ export type OpenClawSafeWriteActionName =
   | "runEmailOpsCycle"
   | "runGmailSync"
   | "setEmailInboxBucket"
+  | "updateRequest"
+  | "updateTask"
   | "writeDailySummary";
 
 export type OpenClawExposedActionName =
@@ -135,6 +142,8 @@ export const openClawSafeWriteActionNames: OpenClawSafeWriteActionName[] = [
   "createDeadline",
   "createRequest",
   "createTask",
+  "updateRequest",
+  "updateTask",
   "addNoteToRequest",
   "addNoteToProduction",
 ];
@@ -193,6 +202,20 @@ const openClawActionSamples: Record<
     taskType: "internal_review",
     title: "Contrôler les derniers éléments client",
   },
+  updateRequest: {
+    assignedUserId: "user-uuid",
+    priority: "high",
+    requestId: "request-uuid",
+    requestType: "price_request",
+    status: "costing",
+  },
+  updateTask: {
+    dueAt: "2026-04-27",
+    priority: "critical",
+    requestId: "request-uuid",
+    status: "in_progress",
+    taskId: "task-uuid",
+  },
   setEmailInboxBucket: {
     bucket: "important",
     confidence: 0.92,
@@ -242,9 +265,13 @@ const openClawActionSamples: Record<
     replyType: "acknowledgement",
   },
   runEmailOpsCycle: {
+    attachToExistingRequests: true,
     createRequests: true,
     limit: 15,
     syncLimit: 50,
+    updateRequests: true,
+    updateTasks: true,
+    writeSummary: true,
   },
   runGmailSync: {
     limit: 50,
@@ -531,6 +558,30 @@ async function dispatchOpenClawAction(
           })
         : parsed.result;
     }
+    case "updateRequest": {
+      const parsed = parseUpdateRequestInput(input);
+      return parsed.ok
+        ? updateRequest({
+            ...parsed.value,
+            source: "assistant",
+          }, {
+            authorizationOverride: options?.authorizationOverride,
+            mutationContext: options?.mutationContext ?? null,
+          })
+        : parsed.result;
+    }
+    case "updateTask": {
+      const parsed = parseUpdateTaskInput(input);
+      return parsed.ok
+        ? updateTask({
+            ...parsed.value,
+            source: "assistant",
+          }, {
+            authorizationOverride: options?.authorizationOverride,
+            mutationContext: options?.mutationContext ?? null,
+          })
+        : parsed.result;
+    }
     case "addNoteToRequest": {
       const parsed = parseAddNoteToRequestInput(input);
       return parsed.ok
@@ -670,6 +721,133 @@ function parseCreateTaskInput(input: unknown) {
       taskType: input.taskType,
       title: input.title,
     } satisfies AssistantCreateTaskInput,
+  };
+}
+
+function parseUpdateTaskInput(input: unknown) {
+  if (!isRecord(input)) {
+    return invalidPayloadResult("Payload invalide pour updateTask.");
+  }
+
+  if (typeof input.taskId !== "string") {
+    return invalidPayloadResult("Le champ taskId est requis pour updateTask.");
+  }
+
+  if (
+    "status" in input &&
+    typeof input.status === "string" &&
+    !taskStatusOptions.includes(input.status as (typeof taskStatusOptions)[number])
+  ) {
+    return invalidPayloadResult(
+      `status invalide pour updateTask. Valeurs supportées: ${taskStatusOptions.join(", ")}.`,
+    );
+  }
+
+  if (
+    "priority" in input &&
+    typeof input.priority === "string" &&
+    !requestPriorityOptions.includes(
+      input.priority as (typeof requestPriorityOptions)[number],
+    )
+  ) {
+    return invalidPayloadResult(
+      `priority invalide pour updateTask. Valeurs supportées: ${requestPriorityOptions.join(", ")}.`,
+    );
+  }
+
+  const hasDueAt = Object.prototype.hasOwnProperty.call(input, "dueAt");
+  const value: AssistantUpdateTaskInput = {
+    assignedUserId:
+      typeof input.assignedUserId === "string" ? input.assignedUserId : null,
+    priority:
+      typeof input.priority === "string"
+        ? (input.priority as AssistantUpdateTaskInput["priority"])
+        : null,
+    requestId: typeof input.requestId === "string" ? input.requestId : null,
+    status:
+      typeof input.status === "string"
+        ? (input.status as AssistantUpdateTaskInput["status"])
+        : null,
+    taskId: input.taskId,
+  };
+
+  if (hasDueAt) {
+    value.dueAt = typeof input.dueAt === "string" ? input.dueAt : null;
+  }
+
+  if (!value.status && !value.priority && !value.assignedUserId && !hasDueAt) {
+    return invalidPayloadResult(
+      "updateTask nécessite au moins un champ parmi status, priority, assignedUserId ou dueAt.",
+    );
+  }
+
+  return {
+    ok: true as const,
+    value,
+  };
+}
+
+function parseUpdateRequestInput(input: unknown) {
+  if (!isRecord(input)) {
+    return invalidPayloadResult("Payload invalide pour updateRequest.");
+  }
+
+  if (typeof input.requestId !== "string") {
+    return invalidPayloadResult("Le champ requestId est requis pour updateRequest.");
+  }
+
+  if (
+    "status" in input &&
+    typeof input.status === "string" &&
+    !(input.status in requestStatusMeta)
+  ) {
+    return invalidPayloadResult(
+      `status invalide pour updateRequest. Valeurs supportées: ${Object.keys(requestStatusMeta).join(", ")}.`,
+    );
+  }
+
+  if (
+    "priority" in input &&
+    typeof input.priority === "string" &&
+    !requestPriorityOptions.includes(
+      input.priority as (typeof requestPriorityOptions)[number],
+    )
+  ) {
+    return invalidPayloadResult(
+      `priority invalide pour updateRequest. Valeurs supportées: ${requestPriorityOptions.join(", ")}.`,
+    );
+  }
+
+  if (typeof input.status === "string" && typeof input.requestType !== "string") {
+    return invalidPayloadResult(
+      "Le champ requestType est requis quand updateRequest modifie le statut.",
+    );
+  }
+
+  const value: AssistantUpdateRequestInput = {
+    assignedUserId:
+      typeof input.assignedUserId === "string" ? input.assignedUserId : null,
+    priority:
+      typeof input.priority === "string"
+        ? (input.priority as AssistantUpdateRequestInput["priority"])
+        : null,
+    requestId: input.requestId,
+    requestType: typeof input.requestType === "string" ? input.requestType : null,
+    status:
+      typeof input.status === "string"
+        ? (input.status as AssistantUpdateRequestInput["status"])
+        : null,
+  };
+
+  if (!value.status && !value.priority && !value.assignedUserId) {
+    return invalidPayloadResult(
+      "updateRequest nécessite au moins un champ parmi status, priority ou assignedUserId.",
+    );
+  }
+
+  return {
+    ok: true as const,
+    value,
   };
 }
 
@@ -937,9 +1115,13 @@ function parseRunEmailOpsCycleInput(input: unknown) {
     return {
       ok: true as const,
       value: {
+        attachToExistingRequests: null,
         createRequests: null,
         limit: null,
         syncLimit: null,
+        updateRequests: null,
+        updateTasks: null,
+        writeSummary: null,
       } satisfies AssistantRunEmailOpsCycleInput,
     };
   }
@@ -975,11 +1157,20 @@ function parseRunEmailOpsCycleInput(input: unknown) {
   return {
     ok: true as const,
     value: {
+      attachToExistingRequests:
+        typeof input.attachToExistingRequests === "boolean"
+          ? input.attachToExistingRequests
+          : null,
       createRequests:
         typeof input.createRequests === "boolean" ? input.createRequests : null,
       limit: typeof input.limit === "number" ? Math.floor(input.limit) : null,
       syncLimit:
         typeof input.syncLimit === "number" ? Math.floor(input.syncLimit) : null,
+      updateRequests:
+        typeof input.updateRequests === "boolean" ? input.updateRequests : null,
+      updateTasks: typeof input.updateTasks === "boolean" ? input.updateTasks : null,
+      writeSummary:
+        typeof input.writeSummary === "boolean" ? input.writeSummary : null,
     } satisfies AssistantRunEmailOpsCycleInput,
   };
 }
@@ -1138,6 +1329,30 @@ function sanitizeAuditInput(action: OpenClawExposedActionName, input: unknown) {
         taskType: typeof input.taskType === "string" ? input.taskType : null,
         title: typeof input.title === "string" ? input.title.slice(0, 120) : null,
       };
+    case "updateRequest":
+      return {
+        assignedUserId:
+          typeof input.assignedUserId === "string" ? input.assignedUserId : null,
+        priority: typeof input.priority === "string" ? input.priority : null,
+        requestId: typeof input.requestId === "string" ? input.requestId : null,
+        requestType:
+          typeof input.requestType === "string" ? input.requestType : null,
+        status: typeof input.status === "string" ? input.status : null,
+      };
+    case "updateTask":
+      return {
+        assignedUserId:
+          typeof input.assignedUserId === "string" ? input.assignedUserId : null,
+        dueAt:
+          Object.prototype.hasOwnProperty.call(input, "dueAt") &&
+          typeof input.dueAt === "string"
+            ? input.dueAt
+            : null,
+        priority: typeof input.priority === "string" ? input.priority : null,
+        requestId: typeof input.requestId === "string" ? input.requestId : null,
+        status: typeof input.status === "string" ? input.status : null,
+        taskId: typeof input.taskId === "string" ? input.taskId : null,
+      };
     case "prepareReplyDraft":
       return isRecord(input.context)
         ? {
@@ -1157,10 +1372,19 @@ function sanitizeAuditInput(action: OpenClawExposedActionName, input: unknown) {
     case "runGmailSync":
     case "runEmailOpsCycle":
       return {
+        attachToExistingRequests:
+          typeof input.attachToExistingRequests === "boolean"
+            ? input.attachToExistingRequests
+            : null,
         createRequests:
           typeof input.createRequests === "boolean" ? input.createRequests : null,
         limit: typeof input.limit === "number" ? input.limit : null,
         syncLimit: typeof input.syncLimit === "number" ? input.syncLimit : null,
+        updateRequests:
+          typeof input.updateRequests === "boolean" ? input.updateRequests : null,
+        updateTasks: typeof input.updateTasks === "boolean" ? input.updateTasks : null,
+        writeSummary:
+          typeof input.writeSummary === "boolean" ? input.writeSummary : null,
       };
     case "setEmailInboxBucket":
       return {
@@ -1213,7 +1437,10 @@ function getAuditEntityId(action: OpenClawExposedActionName, input: unknown) {
           : null;
     case "createTask":
     case "addNoteToRequest":
+    case "updateRequest":
       return typeof input.requestId === "string" ? input.requestId : null;
+    case "updateTask":
+      return typeof input.taskId === "string" ? input.taskId : null;
     case "addNoteToProduction":
       return typeof input.productionId === "string" ? input.productionId : null;
     case "setEmailInboxBucket":
@@ -1242,8 +1469,10 @@ function getAuditEntityType(action: OpenClawExposedActionName) {
     case "createDeadline":
       return "deadline";
     case "createTask":
+    case "updateTask":
       return "task";
     case "addNoteToRequest":
+    case "updateRequest":
     case "searchClientHistory":
       return "request";
     case "addNoteToProduction":
@@ -1297,7 +1526,10 @@ function getAuditRequestId(action: OpenClawExposedActionName, input: unknown) {
   }
 
   if (
-    (action === "createTask" || action === "addNoteToRequest") &&
+    (action === "createTask" ||
+      action === "updateTask" ||
+      action === "updateRequest" ||
+      action === "addNoteToRequest") &&
     typeof input.requestId === "string"
   ) {
     return input.requestId;

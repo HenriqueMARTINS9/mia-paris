@@ -53,7 +53,7 @@ export function mapRawTaskStatusToUiStatus(rawStatus: string | null): TaskStatus
     return "in_progress";
   }
 
-  if (status === "blocked") {
+  if (status === "blocked" || status === "waiting_external") {
     return "blocked";
   }
 
@@ -70,7 +70,7 @@ export function mapUiTaskStatusToDatabaseStatus(status: TaskStatus) {
   }
 
   if (status === "blocked") {
-    return "blocked";
+    return "waiting_external";
   }
 
   return "done";

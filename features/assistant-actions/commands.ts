@@ -33,6 +33,10 @@ import type {
   AssistantRunGmailSyncInput,
   AssistantSetEmailInboxBucketInput,
   AssistantUnprocessedEmailList,
+  AssistantUpdateRequestResult,
+  AssistantUpdateRequestInput,
+  AssistantUpdateTaskResult,
+  AssistantUpdateTaskInput,
   AssistantWriteDailySummaryInput,
   AssistantUrgencyList,
   AssistantWorkspaceData,
@@ -58,10 +62,21 @@ import { getEmailsPageData } from "@/features/emails/queries";
 import { getProductionsPageData } from "@/features/productions/queries";
 import { updateProductionNotesAction } from "@/features/productions/actions/update-production";
 import { buildReplyDraft } from "@/features/replies/lib/build-reply-draft";
-import { appendRequestNoteAction } from "@/features/requests/actions/update-request";
+import {
+  appendRequestNoteAction,
+  assignRequestAction,
+  updateRequestPriorityAction,
+  updateRequestStatusAction,
+} from "@/features/requests/actions/update-request";
 import { createRequestAction } from "@/features/requests/actions/create-request";
 import { getRequestsOverviewPageData } from "@/features/requests/queries";
 import { createTaskAction } from "@/features/tasks/actions/create-request-task";
+import {
+  assignTaskAction,
+  updateTaskDueDateAction,
+  updateTaskPriorityAction,
+  updateTaskStatusAction,
+} from "@/features/tasks/actions/update-task";
 import { getTodayOverviewData } from "@/features/today/queries";
 import { createDeadlineAction } from "@/features/deadlines/actions/create-deadline";
 import { logOperationalError, recordAuditEvent } from "@/lib/action-runtime";
@@ -524,10 +539,14 @@ export async function runEmailOpsCycle(
       options?.mutationContext?.authorizationOverride ??
       options?.authorizationOverride ??
       null,
+    attachToExistingRequests: input.attachToExistingRequests ?? null,
     createRequests: input.createRequests ?? null,
     limit: input.limit ?? null,
     rest: options?.mutationContext?.rest ?? null,
     syncLimit: input.syncLimit ?? null,
+    updateRequests: input.updateRequests ?? null,
+    updateTasks: input.updateTasks ?? null,
+    writeSummary: input.writeSummary ?? null,
   });
 
   await recordAuditEvent({
@@ -539,6 +558,7 @@ export async function runEmailOpsCycle(
     entityType: "email_ops",
     payload: {
       clientClassifiedCount: cycle.result.clientClassifiedCount,
+      attachToExistingRequests: input.attachToExistingRequests ?? null,
       crmEnrichedCount: cycle.result.crmEnrichedCount,
       createRequests: input.createRequests ?? null,
       deadlineCreatedCount: cycle.result.deadlineCreatedCount,
@@ -548,13 +568,20 @@ export async function runEmailOpsCycle(
       preview: cycle.result.items.slice(0, 5),
       processedCount: cycle.result.processedCount,
       promotionalCount: cycle.result.promotionalCount,
+      requestAttachedCount: cycle.result.requestAttachedCount,
       requestCreatedCount: cycle.result.requestCreatedCount,
+      requestUpdatedCount: cycle.result.requestUpdatedCount,
       skippedCount: cycle.result.skippedCount,
       source: normalizeAssistantSource(input.source),
+      summaryWrittenCount: cycle.result.summaryWrittenCount,
       syncLimit: input.syncLimit ?? null,
       syncMessage: cycle.result.sync.message,
       taskCreatedCount: cycle.result.taskCreatedCount,
+      taskUpdatedCount: cycle.result.taskUpdatedCount,
       toReviewCount: cycle.result.toReviewCount,
+      updateRequests: input.updateRequests ?? null,
+      updateTasks: input.updateTasks ?? null,
+      writeSummary: input.writeSummary ?? null,
     },
     requestId: null,
     scope: "assistant_actions.run_email_ops_cycle",
@@ -724,6 +751,277 @@ export async function createTask(
   });
 
   return createAssistantActionSuccess(result, result.message);
+}
+
+export async function updateTask(
+  input: AssistantUpdateTaskInput,
+  options?: AssistantCommandExecutionOptions,
+): Promise<AssistantActionResult<AssistantUpdateTaskResult>> {
+  const authorization = await authorizeServerPermissions(
+    ["assistant.write.safe", "tasks.update"],
+    options?.authorizationOverride,
+  );
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const updatedFields: string[] = [];
+  const mutationContext = {
+    actor: options?.mutationContext?.actor ?? null,
+    authorizationOverride:
+      options?.mutationContext?.authorizationOverride ??
+      options?.authorizationOverride ??
+      null,
+    rest: options?.mutationContext?.rest ?? null,
+  };
+
+  if (!input.taskId) {
+    return createAssistantActionFailure(
+      "validation_error",
+      "Le champ taskId est requis pour updateTask.",
+    );
+  }
+
+  if (input.status) {
+    const result = await updateTaskStatusAction(
+      {
+        requestId: input.requestId ?? null,
+        status: input.status,
+        taskId: input.taskId,
+      },
+      mutationContext,
+    );
+
+    if (!result.ok) {
+      return createAssistantActionFailure("error", result.message);
+    }
+
+    updatedFields.push("status");
+  }
+
+  if (input.priority) {
+    const result = await updateTaskPriorityAction(
+      {
+        priority: input.priority,
+        requestId: input.requestId ?? null,
+        taskId: input.taskId,
+      },
+      mutationContext,
+    );
+
+    if (!result.ok) {
+      return createAssistantActionFailure("error", result.message);
+    }
+
+    updatedFields.push("priority");
+  }
+
+  if (input.assignedUserId) {
+    const result = await assignTaskAction(
+      {
+        assignedUserId: input.assignedUserId,
+        requestId: input.requestId ?? null,
+        taskId: input.taskId,
+      },
+      mutationContext,
+    );
+
+    if (!result.ok) {
+      return createAssistantActionFailure("error", result.message);
+    }
+
+    updatedFields.push("assignedUserId");
+  }
+
+  const hasDueAt = Object.prototype.hasOwnProperty.call(input, "dueAt");
+
+  if (hasDueAt) {
+    const result = await updateTaskDueDateAction(
+      {
+        dueAt: input.dueAt ?? null,
+        requestId: input.requestId ?? null,
+        taskId: input.taskId,
+      },
+      mutationContext,
+    );
+
+    if (!result.ok) {
+      return createAssistantActionFailure("error", result.message);
+    }
+
+    updatedFields.push("dueAt");
+  }
+
+  if (updatedFields.length === 0) {
+    return createAssistantActionFailure(
+      "validation_error",
+      "Aucun champ modifiable fourni pour updateTask.",
+    );
+  }
+
+  const message = `Tâche mise à jour: ${updatedFields.join(", ")}.`;
+
+  await recordAuditEvent({
+    action: "assistant_update_task",
+    actorId: authorization.actorId,
+    actorType: authorization.actorType,
+    description: message,
+    entityId: input.taskId,
+    entityType: "task",
+    payload: {
+      assignedUserId: input.assignedUserId ?? null,
+      dueAt: hasDueAt ? input.dueAt ?? null : undefined,
+      priority: input.priority ?? null,
+      requestId: input.requestId ?? null,
+      source: normalizeAssistantSource(input.source),
+      status: input.status ?? null,
+      taskId: input.taskId,
+      updatedFields,
+    },
+    requestId: input.requestId ?? null,
+    scope: "assistant_actions.update_task",
+    source: normalizeAssistantSource(input.source),
+    status: "success",
+  });
+
+  return createAssistantActionSuccess(
+    {
+      field: "task",
+      message,
+      ok: true,
+      updatedFields,
+    },
+    message,
+  );
+}
+
+export async function updateRequest(
+  input: AssistantUpdateRequestInput,
+  options?: AssistantCommandExecutionOptions,
+): Promise<AssistantActionResult<AssistantUpdateRequestResult>> {
+  const authorization = await authorizeServerPermissions(
+    ["assistant.write.safe", "requests.update"],
+    options?.authorizationOverride,
+  );
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  if (!input.requestId) {
+    return createAssistantActionFailure(
+      "validation_error",
+      "Le champ requestId est requis pour updateRequest.",
+    );
+  }
+
+  if (input.status && !input.requestType) {
+    return createAssistantActionFailure(
+      "validation_error",
+      "Le champ requestType est requis quand updateRequest modifie le statut.",
+    );
+  }
+
+  const updatedFields: string[] = [];
+  const mutationContext = {
+    actor: options?.mutationContext?.actor ?? null,
+    authorizationOverride:
+      options?.mutationContext?.authorizationOverride ??
+      options?.authorizationOverride ??
+      null,
+    rest: options?.mutationContext?.rest ?? null,
+  };
+
+  if (input.status) {
+    const result = await updateRequestStatusAction(
+      {
+        requestId: input.requestId,
+        requestType: input.requestType ?? "",
+        status: input.status,
+      },
+      mutationContext,
+    );
+
+    if (!result.ok) {
+      return createAssistantActionFailure("error", result.message);
+    }
+
+    updatedFields.push("status");
+  }
+
+  if (input.priority) {
+    const result = await updateRequestPriorityAction(
+      {
+        priority: input.priority,
+        requestId: input.requestId,
+      },
+      mutationContext,
+    );
+
+    if (!result.ok) {
+      return createAssistantActionFailure("error", result.message);
+    }
+
+    updatedFields.push("priority");
+  }
+
+  if (input.assignedUserId) {
+    const result = await assignRequestAction(
+      {
+        assignedUserId: input.assignedUserId,
+        requestId: input.requestId,
+      },
+      mutationContext,
+    );
+
+    if (!result.ok) {
+      return createAssistantActionFailure("error", result.message);
+    }
+
+    updatedFields.push("assignedUserId");
+  }
+
+  if (updatedFields.length === 0) {
+    return createAssistantActionFailure(
+      "validation_error",
+      "Aucun champ modifiable fourni pour updateRequest.",
+    );
+  }
+
+  const message = `Demande mise à jour: ${updatedFields.join(", ")}.`;
+
+  await recordAuditEvent({
+    action: "assistant_update_request",
+    actorId: authorization.actorId,
+    actorType: authorization.actorType,
+    description: message,
+    entityId: input.requestId,
+    entityType: "request",
+    payload: {
+      assignedUserId: input.assignedUserId ?? null,
+      priority: input.priority ?? null,
+      requestId: input.requestId,
+      requestType: input.requestType ?? null,
+      source: normalizeAssistantSource(input.source),
+      status: input.status ?? null,
+      updatedFields,
+    },
+    requestId: input.requestId,
+    scope: "assistant_actions.update_request",
+    source: normalizeAssistantSource(input.source),
+    status: "success",
+  });
+
+  return createAssistantActionSuccess(
+    {
+      field: "status",
+      message,
+      ok: true,
+      updatedFields,
+    },
+    message,
+  );
 }
 
 export async function createRequest(

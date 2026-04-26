@@ -20,6 +20,8 @@ export {
   setEmailInboxBucket,
   searchClientHistory,
   searchModelHistory,
+  updateRequest,
+  updateTask,
   writeDailySummary,
 } from "@/features/assistant-actions/commands";
 export { assistantActionCatalog as assistantReadyActions } from "@/features/assistant-actions/catalog";

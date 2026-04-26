@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 
-import { authorizeServerAction } from "@/features/auth/server-authorization";
+import type { AssistantMutationExecutionContext } from "@/features/assistant-actions/execution-context";
+import {
+  authorizeServerAction,
+  authorizeServerPermissions,
+} from "@/features/auth/server-authorization";
 import { notifyCriticalTask } from "@/features/notifications/lib/operational-notifications";
 import {
   mapUiPriorityToDatabasePriority,
@@ -41,6 +45,7 @@ interface UpdateTaskDueDateInput {
 
 export async function updateTaskStatusAction(
   input: UpdateTaskStatusInput,
+  context?: AssistantMutationExecutionContext,
 ): Promise<RequestMutationResult> {
   return updateTaskRecord(
     input.taskId,
@@ -54,11 +59,13 @@ export async function updateTaskStatusAction(
       successMessage: `Statut tâche mis à jour: ${taskStatusMeta[input.status].label}.`,
       taskId: input.taskId,
     },
+    context,
   );
 }
 
 export async function updateTaskPriorityAction(
   input: UpdateTaskPriorityInput,
+  context?: AssistantMutationExecutionContext,
 ): Promise<RequestMutationResult> {
   return updateTaskRecord(
     input.taskId,
@@ -83,11 +90,13 @@ export async function updateTaskPriorityAction(
       successMessage: `Priorité tâche mise à jour: ${requestPriorityMeta[input.priority].label}.`,
       taskId: input.taskId,
     },
+    context,
   );
 }
 
 export async function assignTaskAction(
   input: AssignTaskInput,
+  context?: AssistantMutationExecutionContext,
 ): Promise<RequestMutationResult> {
   if (!input.assignedUserId) {
     return {
@@ -109,11 +118,13 @@ export async function assignTaskAction(
       successMessage: "Responsable de la tâche mis à jour.",
       taskId: input.taskId,
     },
+    context,
   );
 }
 
 export async function updateTaskDueDateAction(
   input: UpdateTaskDueDateInput,
+  context?: AssistantMutationExecutionContext,
 ): Promise<RequestMutationResult> {
   return updateTaskRecord(
     input.taskId,
@@ -127,6 +138,7 @@ export async function updateTaskDueDateAction(
       successMessage: "Échéance de la tâche mise à jour.",
       taskId: input.taskId,
     },
+    context,
   );
 }
 
@@ -140,6 +152,7 @@ async function updateTaskRecord(
     successMessage: string;
     taskId: string;
   },
+  context?: AssistantMutationExecutionContext,
 ): Promise<RequestMutationResult> {
   if (!taskId) {
     return {
@@ -149,7 +162,9 @@ async function updateTaskRecord(
     };
   }
 
-  const authorization = await authorizeServerAction("tasks.update");
+  const authorization = context?.authorizationOverride
+    ? await authorizeServerPermissions(["tasks.update"], context.authorizationOverride)
+    : await authorizeServerAction("tasks.update");
 
   if (!authorization.ok) {
     return {
@@ -166,6 +181,7 @@ async function updateTaskRecord(
       id: `eq.${taskId}`,
       select: "id,request_id,title,due_at",
     },
+    context?.rest ?? undefined,
   );
 
   if (result.error) {

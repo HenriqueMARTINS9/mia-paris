@@ -317,6 +317,8 @@ export const getCurrentUserGmailInboxStatus = cache(
   getCurrentUserGmailInboxStatusInternal,
 );
 
+const GMAIL_LIST_PAGE_SIZE = 100;
+
 async function getSharedActiveGoogleInbox(admin: ReturnType<typeof createSupabaseAdminClient>) {
   const result = await admin
     .from("inboxes")
@@ -340,7 +342,7 @@ async function syncInbox(input: {
   const admin = createSupabaseAdminClient();
   const accessToken = await ensureActiveAccessToken(input.inbox);
   const env = getGoogleGmailEnv();
-  const maxResults = Math.max(1, Math.min(input.limit || env.googleGmailInitialSyncLimit, 100));
+  const initialSyncLimit = Math.max(1, input.limit || env.googleGmailInitialSyncLimit);
   const syncState = buildSyncState({
     lastSyncedAt: input.inbox.last_synced_at ?? null,
     syncCursor: input.inbox.sync_cursor ?? null,
@@ -348,8 +350,10 @@ async function syncInbox(input: {
   const syncTimestamp = new Date().toISOString();
   const listState = await listGmailMessagesWithFallback({
     accessToken,
-    maxResults,
+    maxResults: initialSyncLimit,
+    pageSize: GMAIL_LIST_PAGE_SIZE,
     query: syncState.query,
+    totalLimit: syncState.mode === "initial" ? initialSyncLimit : null,
   });
   const messageRefs = listState.payload.messages ?? [];
 
@@ -379,9 +383,53 @@ async function syncInbox(input: {
     };
   }
 
-  const messageIds = messageRefs.map((messageRef) => messageRef.id);
+  const gmailMessages = [] as Awaited<ReturnType<typeof getGmailMessage>>[];
+
+  for (const messageRef of messageRefs) {
+    gmailMessages.push(
+      await getGmailMessage({
+        accessToken,
+        messageId: messageRef.id,
+      }),
+    );
+  }
+
+  const parsedMessages = gmailMessages
+    .map((message) => parseGmailMessage(message, input.inbox.email_address ?? null))
+    .filter((message) => isMessageInsideSyncWindow(message.receivedAt, syncState));
+
+  if (parsedMessages.length === 0) {
+    await admin
+      .from("inboxes")
+      .update(
+        {
+          last_error: null,
+          last_synced_at: syncTimestamp,
+          updated_at: syncTimestamp,
+        } as Database["public"]["Tables"]["inboxes"]["Update"] as never,
+      )
+      .eq("id", input.inbox.id);
+
+    return {
+      connectedInboxEmail: input.inbox.email_address ?? null,
+      errorCount: 0,
+      ignoredMessages: messageRefs.length,
+      importedMessages: 0,
+      importedThreads: 0,
+      message:
+        messageRefs.length > 0
+          ? "Aucun nouvel email Gmail à importer après filtrage incrémental."
+          : "Aucun nouvel email Gmail à importer.",
+      ok: true,
+      queryUsed: listState.queryUsed,
+      syncMode: syncState.mode,
+      syncedAt: syncTimestamp,
+    };
+  }
+
+  const messageIds = parsedMessages.map((message) => message.externalMessageId);
   const externalThreadIds = Array.from(
-    new Set(messageRefs.map((messageRef) => messageRef.threadId)),
+    new Set(parsedMessages.map((message) => message.externalThreadId)),
   );
 
   const [existingMessagesResult, existingThreadsResult] = await Promise.all([
@@ -408,20 +456,6 @@ async function syncInbox(input: {
       .filter((value): value is string => Boolean(value)),
   );
 
-  const gmailMessages = [] as Awaited<ReturnType<typeof getGmailMessage>>[];
-
-  for (const messageRef of messageRefs) {
-    gmailMessages.push(
-      await getGmailMessage({
-        accessToken,
-        messageId: messageRef.id,
-      }),
-    );
-  }
-
-  const parsedMessages = gmailMessages.map((message) =>
-    parseGmailMessage(message, input.inbox.email_address ?? null),
-  );
   const threadRows = buildInitialThreadRows(parsedMessages, input.inbox.id);
   const threadUpsertResult = await upsertEmailThreads(admin, input.inbox.id, threadRows);
 
@@ -584,10 +618,17 @@ async function syncInbox(input: {
 async function listGmailMessagesWithFallback(input: {
   accessToken: string;
   maxResults: number;
+  pageSize: number;
   query: string | null;
+  totalLimit: number | null;
 }) {
   try {
-    const payload = await listGmailMessages(input);
+    const payload = await listAllGmailMessages({
+      accessToken: input.accessToken,
+      pageSize: input.pageSize,
+      query: input.query,
+      totalLimit: input.totalLimit,
+    });
 
     return {
       payload,
@@ -599,10 +640,11 @@ async function listGmailMessagesWithFallback(input: {
       throw error;
     }
 
-    const payload = await listGmailMessages({
+    const payload = await listAllGmailMessages({
       accessToken: input.accessToken,
-      maxResults: input.maxResults,
+      pageSize: input.pageSize,
       query: null,
+      totalLimit: input.maxResults,
     });
 
     return {
@@ -611,6 +653,45 @@ async function listGmailMessagesWithFallback(input: {
       usedFallback: true,
     };
   }
+}
+
+async function listAllGmailMessages(input: {
+  accessToken: string;
+  pageSize: number;
+  query: string | null;
+  totalLimit: number | null;
+}) {
+  const messages = [] as NonNullable<Awaited<ReturnType<typeof listGmailMessages>>["messages"]>;
+  let pageToken: string | null = null;
+
+  do {
+    const remaining =
+      typeof input.totalLimit === "number"
+        ? Math.max(0, input.totalLimit - messages.length)
+        : null;
+
+    if (remaining === 0) {
+      break;
+    }
+
+    const payload = await listGmailMessages({
+      accessToken: input.accessToken,
+      maxResults:
+        remaining === null
+          ? input.pageSize
+          : Math.max(1, Math.min(input.pageSize, remaining)),
+      pageToken,
+      query: input.query,
+    });
+
+    messages.push(...(payload.messages ?? []));
+    pageToken = payload.nextPageToken ?? null;
+  } while (pageToken);
+
+  return {
+    messages,
+    resultSizeEstimate: messages.length,
+  };
 }
 
 async function ensureActiveAccessToken(inbox: InboxRecord) {
@@ -663,6 +744,7 @@ function buildSyncState(input: {
   return {
     mode: resolveSyncMode(input),
     query: buildSyncQuery(input),
+    referenceEpoch: resolveSyncReferenceEpoch(input),
   };
 }
 
@@ -684,18 +766,7 @@ function buildSyncQuery(input: {
     queryParts.push(env.googleGmailSyncQuery.trim());
   }
 
-  const syncCursorEpoch = input.syncCursor ? Number(input.syncCursor) : null;
-  const lastSyncedEpoch = input.lastSyncedAt
-    ? new Date(input.lastSyncedAt).getTime()
-    : null;
-  const referenceEpoch = Math.max(
-    0,
-    syncCursorEpoch && Number.isFinite(syncCursorEpoch)
-      ? syncCursorEpoch
-      : lastSyncedEpoch && Number.isFinite(lastSyncedEpoch)
-        ? lastSyncedEpoch
-        : 0,
-  );
+  const referenceEpoch = resolveSyncReferenceEpoch(input);
 
   if (referenceEpoch > 0) {
     const afterDate = formatGmailQueryDate(referenceEpoch - 86_400_000);
@@ -703,6 +774,43 @@ function buildSyncQuery(input: {
   }
 
   return queryParts.join(" ").trim() || null;
+}
+
+function resolveSyncReferenceEpoch(input: {
+  lastSyncedAt: string | null;
+  syncCursor: string | null;
+}) {
+  const syncCursorEpoch = input.syncCursor ? Number(input.syncCursor) : null;
+  const lastSyncedEpoch = input.lastSyncedAt
+    ? new Date(input.lastSyncedAt).getTime()
+    : null;
+
+  return Math.max(
+    0,
+    syncCursorEpoch && Number.isFinite(syncCursorEpoch)
+      ? syncCursorEpoch
+      : lastSyncedEpoch && Number.isFinite(lastSyncedEpoch)
+        ? lastSyncedEpoch
+        : 0,
+  );
+}
+
+function isMessageInsideSyncWindow(
+  receivedAt: string,
+  syncState: ReturnType<typeof buildSyncState>,
+) {
+  if (syncState.mode === "initial" || syncState.referenceEpoch <= 0) {
+    return true;
+  }
+
+  const receivedEpoch = new Date(receivedAt).getTime();
+
+  if (!Number.isFinite(receivedEpoch)) {
+    return true;
+  }
+
+  // Gmail search only filters by day. Keep a small safety overlap, then dedupe locally.
+  return receivedEpoch >= syncState.referenceEpoch - 60_000;
 }
 
 function formatGmailQueryDate(epochMs: number) {
