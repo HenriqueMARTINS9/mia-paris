@@ -11,6 +11,9 @@ import { getRequestsOverviewPageData } from "@/features/requests/queries";
 import type {
   DashboardAssistantActionItem,
   DashboardPageData,
+  DashboardTodayEmailItem,
+  DashboardTodayRequestItem,
+  DashboardTodayTaskItem,
 } from "@/features/dashboard/types";
 import { supabaseRestSelectList } from "@/lib/supabase/rest";
 import { createSupabaseServerClient, hasSupabaseEnv } from "@/lib/supabase/server";
@@ -50,6 +53,10 @@ const getDashboardPageDataInternal = async (): Promise<DashboardPageData> => {
     latestSyncs: [],
     recentAssistantActions: [],
     syncError: null,
+    todayEmails: [],
+    todayRequests: [],
+    todaySummary: null,
+    todayTasks: [],
     unassignedRequests: [],
     urgentDeadlines: [],
   };
@@ -77,6 +84,8 @@ const getDashboardPageDataInternal = async (): Promise<DashboardPageData> => {
       };
     }
 
+    const startOfToday = startOfDayIso();
+    const todaySummaryDate = startOfToday.slice(0, 10);
     const [
       requestsData,
       deadlinesData,
@@ -87,6 +96,9 @@ const getDashboardPageDataInternal = async (): Promise<DashboardPageData> => {
       pipelineLogsResult,
       requestsCreatedTodayResult,
       overdueTasksResult,
+      todayEmailsResult,
+      todaySummaryResult,
+      todayTasksResult,
     ] = await Promise.all([
       getRequestsOverviewPageData(),
       getDeadlinesPageData(),
@@ -108,11 +120,36 @@ const getDashboardPageDataInternal = async (): Promise<DashboardPageData> => {
       supabase
         .from("v_requests_overview")
         .select("id", { count: "exact", head: true })
-        .gte("created_at", startOfDayIso()),
+        .gte("created_at", startOfToday),
       supabase
         .from("v_tasks_open")
         .select("id", { count: "exact", head: true })
         .lt("due_at", new Date().toISOString()),
+      supabase
+        .from("emails")
+        .select(
+          "id,from_name,from_email,subject,preview_text,assistant_bucket,detected_client_name,received_at,created_at",
+        )
+        .gte("received_at", startOfToday)
+        .order("received_at", { ascending: false, nullsFirst: false })
+        .limit(8),
+      supabase
+        .from("daily_summaries")
+        .select(
+          "id,summary_date,summary_time,title,overview,highlights,risks,next_actions,client_summaries,generated_at,created_at",
+        )
+        .eq("summary_date", todaySummaryDate)
+        .order("generated_at", { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("tasks")
+        .select(
+          "id,title,task_type,status,priority,request_id,assigned_user_id,due_at,created_at,updated_at",
+        )
+        .or(`created_at.gte.${startOfToday},updated_at.gte.${startOfToday}`)
+        .order("updated_at", { ascending: false, nullsFirst: false })
+        .limit(8),
     ]);
 
     const pipelineLogs = (pipelineLogsResult.data ?? []) as ActivityLogRecord[];
@@ -163,6 +200,35 @@ const getDashboardPageDataInternal = async (): Promise<DashboardPageData> => {
       .filter((log) => (readString(log, ["action_source", "source"]) ?? "").toLowerCase() === "assistant")
       .map(mapAssistantLogToItem)
       .slice(0, 6);
+    const todayRequests = requestsData.requests
+      .filter(
+        (request) =>
+          isDateOnOrAfter(request.createdAt, startOfToday) ||
+          isDateOnOrAfter(request.updatedAt, startOfToday),
+      )
+      .sort(
+        (left, right) =>
+          new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+      )
+      .slice(0, 8)
+      .map((request): DashboardTodayRequestItem => ({
+        changeType: isDateOnOrAfter(request.createdAt, startOfToday)
+          ? "created"
+          : "updated",
+        clientName: request.clientName,
+        createdAt: request.createdAt,
+        id: request.id,
+        priority: request.priority,
+        status: request.status,
+        title: request.title,
+        type: request.requestTypeLabel,
+        updatedAt: request.updatedAt,
+      }));
+    const requestTitleById = new Map(
+      requestsData.requests.map((request) => [request.id, request.title] as const),
+    );
+    const todayTasks = ((todayTasksResult.data ?? []) as Array<Record<string, unknown>>)
+      .map((task) => mapTodayTask(task, requestTitleById, startOfToday));
 
     return {
       blockedProductions,
@@ -176,6 +242,15 @@ const getDashboardPageDataInternal = async (): Promise<DashboardPageData> => {
           emailSnapshot.error,
           assistantLogsResult.error?.message ?? null,
           gmailSyncSummaryResult.error,
+          todayEmailsResult.error?.message
+            ? `Emails du jour: ${todayEmailsResult.error.message}`
+            : null,
+          todaySummaryResult.error?.message
+            ? `Synthèse du jour: ${todaySummaryResult.error.message}`
+            : null,
+          todayTasksResult.error?.message
+            ? `Tâches du jour: ${todayTasksResult.error.message}`
+            : null,
         ]
           .filter(Boolean)
           .join(" · ") || null,
@@ -198,6 +273,14 @@ const getDashboardPageDataInternal = async (): Promise<DashboardPageData> => {
       latestSyncs: gmailSyncSummaryResult.runs,
       recentAssistantActions,
       syncError: gmailSyncSummaryResult.error,
+      todayEmails: ((todayEmailsResult.data ?? []) as Array<Record<string, unknown>>).map(
+        mapTodayEmail,
+      ),
+      todayRequests,
+      todaySummary: todaySummaryResult.data
+        ? mapTodaySummary(todaySummaryResult.data as Record<string, unknown>)
+        : null,
+      todayTasks,
       unassignedRequests,
       urgentDeadlines,
     };
@@ -213,6 +296,120 @@ const getDashboardPageDataInternal = async (): Promise<DashboardPageData> => {
 };
 
 export const getDashboardPageData = cache(getDashboardPageDataInternal);
+
+function mapTodayEmail(record: Record<string, unknown>): DashboardTodayEmailItem {
+  const fromName = readString(record, ["from_name", "fromName"]);
+  const fromEmail = readString(record, ["from_email", "fromEmail"]);
+
+  return {
+    bucket: normalizeEmailBucket(
+      readString(record, ["assistant_bucket", "assistantBucket"]),
+    ),
+    clientName: readString(record, ["detected_client_name", "client_name", "clientName"]),
+    from: fromName || fromEmail || "Expéditeur inconnu",
+    id: readString(record, ["id"]) ?? crypto.randomUUID(),
+    previewText: readString(record, ["preview_text", "previewText"]) ?? "",
+    receivedAt:
+      readString(record, ["received_at", "receivedAt", "created_at", "createdAt"]) ??
+      new Date().toISOString(),
+    subject: readString(record, ["subject"]) ?? "Sans objet",
+  };
+}
+
+function mapTodaySummary(record: Record<string, unknown>) {
+  return {
+    clientSummaries: normalizeClientSummaries(record.client_summaries),
+    highlights: normalizeStringArray(record.highlights),
+    id: readString(record, ["id"]) ?? "today-summary",
+    nextActions: normalizeStringArray(record.next_actions),
+    overview: readString(record, ["overview"]) ?? "Synthèse du jour non renseignée.",
+    risks: normalizeStringArray(record.risks),
+    summaryDate:
+      readString(record, ["summary_date", "summaryDate"]) ??
+      new Date().toISOString().slice(0, 10),
+    summaryTime:
+      readString(record, ["summary_time", "summaryTime"]) ??
+      normalizeSummaryTime(readString(record, ["generated_at", "created_at"])),
+    title: readString(record, ["title"]) ?? "Synthèse du jour",
+  };
+}
+
+function mapTodayTask(
+  record: Record<string, unknown>,
+  requestTitleById: Map<string, string>,
+  startOfToday: string,
+): DashboardTodayTaskItem {
+  const requestId = readString(record, ["request_id", "requestId"]);
+  const createdAt = readString(record, ["created_at", "createdAt"]);
+  const updatedAt = readString(record, ["updated_at", "updatedAt"]);
+
+  return {
+    changeType: isDateOnOrAfter(createdAt, startOfToday) ? "created" : "updated",
+    createdAt,
+    dueAt: readString(record, ["due_at", "dueAt"]),
+    id: readString(record, ["id"]) ?? crypto.randomUUID(),
+    priority: readString(record, ["priority"]),
+    requestId,
+    requestTitle: requestId ? requestTitleById.get(requestId) ?? null : null,
+    status: readString(record, ["status"]),
+    title: readString(record, ["title"]) ?? "Tâche sans titre",
+    updatedAt,
+  };
+}
+
+function normalizeEmailBucket(value: string | null): DashboardTodayEmailItem["bucket"] {
+  if (value === "important" || value === "promotional" || value === "to_review") {
+    return value;
+  }
+
+  return null;
+}
+
+function normalizeClientSummaries(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+    .map((item) => ({
+      clientName:
+        readString(item, ["clientName", "client_name"]) ?? "Client non identifié",
+      summary: readString(item, ["summary"]) ?? "Résumé client non renseigné.",
+    }))
+    .slice(0, 4);
+}
+
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 5);
+}
+
+function normalizeSummaryTime(value: string | null) {
+  return new Intl.DateTimeFormat("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Paris",
+  }).format(value ? new Date(value) : new Date());
+}
+
+function isDateOnOrAfter(value: string | null, lowerBoundIso: string) {
+  if (!value) {
+    return false;
+  }
+
+  const time = new Date(value).getTime();
+  const lowerBoundTime = new Date(lowerBoundIso).getTime();
+
+  return Number.isFinite(time) && Number.isFinite(lowerBoundTime) && time >= lowerBoundTime;
+}
 
 function startOfDayIso() {
   const startOfDay = new Date();

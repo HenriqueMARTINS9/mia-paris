@@ -1,6 +1,7 @@
 import { ErrorState } from "@/components/crm/error-state";
 import { PageHeader } from "@/components/crm/page-header";
 import { DashboardFocusCards } from "@/features/dashboard/components/dashboard-focus-cards";
+import { DashboardTodayActivity } from "@/features/dashboard/components/dashboard-today-activity";
 import { InboxTriagePanel } from "@/features/dashboard/components/inbox-triage-panel";
 import { PriorityRequestsPanel } from "@/features/dashboard/components/priority-requests-panel";
 import { RecentAssistantActionsCard } from "@/features/dashboard/components/recent-assistant-actions-card";
@@ -41,6 +42,13 @@ export function DashboardPage({
       />
 
       <DashboardFocusCards kpis={data.kpis} />
+
+      <DashboardTodayActivity
+        emails={data.todayEmails}
+        requests={data.todayRequests}
+        summary={data.todaySummary}
+        tasks={data.todayTasks}
+      />
 
       <div className="grid gap-6 xl:grid-cols-2">
         <PriorityRequestsPanel

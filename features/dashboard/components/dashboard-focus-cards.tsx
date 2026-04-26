@@ -1,10 +1,8 @@
 import Link from "next/link";
 import {
   AlertTriangle,
-  Factory,
   FolderKanban,
   Inbox,
-  ShieldAlert,
 } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";

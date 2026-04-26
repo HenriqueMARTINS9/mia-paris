@@ -68,8 +68,10 @@ export interface RequestOverviewListItem {
   lastInboundAt: string;
   urgencyScore: number;
   aiConfidence: number | null;
+  createdAt: string;
   rawStatus: string;
   rawPriority: string;
+  updatedAt: string;
   tags: string[];
   notes: string;
   nextActions: string[];
