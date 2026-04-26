@@ -4,6 +4,7 @@ import {
   Bot,
   ClipboardList,
   Euro,
+  FileText,
   Inbox,
   LayoutGrid,
   ListTodo,
@@ -48,6 +49,13 @@ export const navigationSections: NavigationSection[] = [
         shortLabel: "Dash",
         description: "Vue de contrôle simple pour ce qui mérite une vérification",
         icon: LayoutGrid,
+      },
+      {
+        href: "/syntheses",
+        label: "Synthèses",
+        shortLabel: "Syn",
+        description: "Résumé quotidien écrit par Claw, client par client",
+        icon: FileText,
       },
       {
         href: "/emails",

@@ -5,6 +5,7 @@ import {
   addNoteToProduction,
   addNoteToRequest,
   assignClientToEmail,
+  attachEmailToRequest,
   createClient,
   createDeadline,
   createRequest,
@@ -20,6 +21,7 @@ import {
   setEmailInboxBucket,
   searchClientHistory,
   searchModelHistory,
+  writeDailySummary,
 } from "@/features/assistant-actions/commands";
 import { assistantActionCatalog } from "@/features/assistant-actions/catalog";
 import type {
@@ -28,6 +30,7 @@ import type {
   AssistantAddProductionNoteInput,
   AssistantAddRequestNoteInput,
   AssistantAssignClientToEmailInput,
+  AssistantAttachEmailToRequestInput,
   AssistantCreateClientInput,
   AssistantCreateDeadlineInput,
   AssistantCreateRequestInput,
@@ -36,6 +39,7 @@ import type {
   AssistantRunEmailOpsCycleInput,
   AssistantRunGmailSyncInput,
   AssistantSetEmailInboxBucketInput,
+  AssistantWriteDailySummaryInput,
 } from "@/features/assistant-actions/types";
 import type { ServerPermissionOverride } from "@/features/auth/server-authorization";
 import { getCurrentUserContext } from "@/features/auth/queries";
@@ -60,6 +64,7 @@ export type OpenClawSafeWriteActionName =
   | "addNoteToProduction"
   | "addNoteToRequest"
   | "assignClientToEmail"
+  | "attachEmailToRequest"
   | "createClient"
   | "createDeadline"
   | "createRequest"
@@ -67,7 +72,8 @@ export type OpenClawSafeWriteActionName =
   | "prepareReplyDraft"
   | "runEmailOpsCycle"
   | "runGmailSync"
-  | "setEmailInboxBucket";
+  | "setEmailInboxBucket"
+  | "writeDailySummary";
 
 export type OpenClawExposedActionName =
   | OpenClawReadActionName
@@ -122,8 +128,10 @@ export const openClawSafeWriteActionNames: OpenClawSafeWriteActionName[] = [
   "runEmailOpsCycle",
   "runGmailSync",
   "setEmailInboxBucket",
+  "writeDailySummary",
   "createClient",
   "assignClientToEmail",
+  "attachEmailToRequest",
   "createDeadline",
   "createRequest",
   "createTask",
@@ -155,6 +163,10 @@ const openClawActionSamples: Record<
     clientId: "client-uuid",
     emailId: "email-uuid",
   },
+  attachEmailToRequest: {
+    emailId: "email-uuid",
+    requestId: "request-uuid",
+  },
   createClient: {
     code: "ETAM",
     name: "Etam",
@@ -167,6 +179,7 @@ const openClawActionSamples: Record<
   },
   createRequest: {
     dueAt: "2026-04-22",
+    emailIds: ["email-uuid"],
     priority: "high",
     requestType: "price_request",
     status: "qualification",
@@ -185,6 +198,25 @@ const openClawActionSamples: Record<
     confidence: 0.92,
     emailId: "email-uuid",
     reason: "Demande client explicite sur prix et délai.",
+  },
+  writeDailySummary: {
+    clientSummaries: [
+      {
+        clientName: "Etam",
+        decisions: ["Attente validation prix avant lancement."],
+        highlights: ["Demande de prix reçue et demande CRM créée."],
+        nextActions: ["Relancer l’acheteuse demain matin si pas de retour."],
+        risks: ["Délai court sur le retour prix."],
+        summary: "Etam a demandé une mise à jour target price avec échéance courte.",
+      },
+    ],
+    highlights: ["Claw a trié les emails et créé les demandes claires."],
+    nextActions: ["Vérifier les emails à revoir."],
+    overview: "Journée concentrée sur les demandes prix et les validations client.",
+    risks: ["Plusieurs délais courts à surveiller."],
+    summaryDate: "2026-04-26",
+    summaryTime: "17:30",
+    title: "Synthèse du 26 avril",
   },
   getBlockedProductions: null,
   getHighRiskProductions: null,
@@ -463,6 +495,18 @@ async function dispatchOpenClawAction(
           })
         : parsed.result;
     }
+    case "attachEmailToRequest": {
+      const parsed = parseAttachEmailToRequestInput(input);
+      return parsed.ok
+        ? attachEmailToRequest({
+            ...parsed.value,
+            source: "assistant",
+          }, {
+            authorizationOverride: options?.authorizationOverride,
+            mutationContext: options?.mutationContext ?? null,
+          })
+        : parsed.result;
+    }
     case "createDeadline": {
       const parsed = parseCreateDeadlineInput(input);
       return parsed.ok
@@ -527,6 +571,18 @@ async function dispatchOpenClawAction(
       const parsed = parseSetEmailInboxBucketInput(input);
       return parsed.ok
         ? setEmailInboxBucket({
+            ...parsed.value,
+            source: "assistant",
+          }, {
+            authorizationOverride: options?.authorizationOverride,
+            mutationContext: options?.mutationContext ?? null,
+        })
+        : parsed.result;
+    }
+    case "writeDailySummary": {
+      const parsed = parseWriteDailySummaryInput(input);
+      return parsed.ok
+        ? writeDailySummary({
             ...parsed.value,
             source: "assistant",
           }, {
@@ -691,6 +747,22 @@ function parseAssignClientToEmailInput(input: unknown) {
   };
 }
 
+function parseAttachEmailToRequestInput(input: unknown) {
+  if (!isRecord(input) || typeof input.emailId !== "string" || typeof input.requestId !== "string") {
+    return invalidPayloadResult(
+      "Les champs emailId et requestId sont requis pour attachEmailToRequest.",
+    );
+  }
+
+  return {
+    ok: true as const,
+    value: {
+      emailId: input.emailId,
+      requestId: input.requestId,
+    } satisfies AssistantAttachEmailToRequestInput,
+  };
+}
+
 function parseCreateRequestInput(input: unknown) {
   if (!isRecord(input)) {
     return invalidPayloadResult("Payload invalide pour createRequest.");
@@ -734,6 +806,7 @@ function parseCreateRequestInput(input: unknown) {
       clientId: typeof input.clientId === "string" ? input.clientId : null,
       contactId: typeof input.contactId === "string" ? input.contactId : null,
       dueAt: typeof input.dueAt === "string" ? input.dueAt : null,
+      emailIds: normalizeStringArray(input.emailIds),
       modelId: typeof input.modelId === "string" ? input.modelId : null,
       priority: input.priority as AssistantCreateRequestInput["priority"],
       productDepartmentId:
@@ -935,6 +1008,63 @@ function parseSetEmailInboxBucketInput(input: unknown) {
   };
 }
 
+function parseWriteDailySummaryInput(input: unknown) {
+  if (!isRecord(input)) {
+    return invalidPayloadResult("Payload invalide pour writeDailySummary.");
+  }
+
+  if (typeof input.overview !== "string" || input.overview.trim().length < 12) {
+    return invalidPayloadResult(
+      "Le champ overview est requis pour writeDailySummary.",
+    );
+  }
+
+  if (!Array.isArray(input.clientSummaries) || input.clientSummaries.length === 0) {
+    return invalidPayloadResult(
+      "Le champ clientSummaries doit contenir au moins une section client.",
+    );
+  }
+
+  const clientSummaries = input.clientSummaries
+    .filter(isRecord)
+    .map((client) => ({
+      clientName: typeof client.clientName === "string" ? client.clientName : "",
+      decisions: normalizeStringArray(client.decisions),
+      emailIds: normalizeStringArray(client.emailIds),
+      highlights: normalizeStringArray(client.highlights),
+      nextActions: normalizeStringArray(client.nextActions),
+      requestIds: normalizeStringArray(client.requestIds),
+      risks: normalizeStringArray(client.risks),
+      summary: typeof client.summary === "string" ? client.summary : "",
+      taskIds: normalizeStringArray(client.taskIds),
+    }))
+    .filter(
+      (client) =>
+        client.clientName.trim().length >= 2 && client.summary.trim().length >= 6,
+    );
+
+  if (clientSummaries.length === 0) {
+    return invalidPayloadResult(
+      "Chaque section client doit contenir clientName et summary.",
+    );
+  }
+
+  return {
+    ok: true as const,
+    value: {
+      clientSummaries,
+      generatedAt: typeof input.generatedAt === "string" ? input.generatedAt : null,
+      highlights: normalizeStringArray(input.highlights),
+      nextActions: normalizeStringArray(input.nextActions),
+      overview: input.overview,
+      risks: normalizeStringArray(input.risks),
+      summaryDate: typeof input.summaryDate === "string" ? input.summaryDate : null,
+      summaryTime: typeof input.summaryTime === "string" ? input.summaryTime : null,
+      title: typeof input.title === "string" ? input.title : null,
+    } satisfies AssistantWriteDailySummaryInput,
+  };
+}
+
 function invalidPayloadResult(message: string) {
   return {
     ok: false as const,
@@ -976,10 +1106,16 @@ function sanitizeAuditInput(action: OpenClawExposedActionName, input: unknown) {
         clientId: typeof input.clientId === "string" ? input.clientId : null,
         emailId: typeof input.emailId === "string" ? input.emailId : null,
       };
+    case "attachEmailToRequest":
+      return {
+        emailId: typeof input.emailId === "string" ? input.emailId : null,
+        requestId: typeof input.requestId === "string" ? input.requestId : null,
+      };
     case "createRequest":
       return {
         clientId: typeof input.clientId === "string" ? input.clientId : null,
         dueAt: typeof input.dueAt === "string" ? input.dueAt : null,
+        emailCount: Array.isArray(input.emailIds) ? input.emailIds.length : 0,
         priority: typeof input.priority === "string" ? input.priority : null,
         requestType:
           typeof input.requestType === "string" ? input.requestType : null,
@@ -1034,6 +1170,19 @@ function sanitizeAuditInput(action: OpenClawExposedActionName, input: unknown) {
         reasonPreview:
           typeof input.reason === "string" ? input.reason.slice(0, 180) : null,
       };
+    case "writeDailySummary":
+      return {
+        clientCount: Array.isArray(input.clientSummaries)
+          ? input.clientSummaries.length
+          : 0,
+        overviewPreview:
+          typeof input.overview === "string" ? input.overview.slice(0, 220) : null,
+        summaryDate:
+          typeof input.summaryDate === "string" ? input.summaryDate : null,
+        summaryTime:
+          typeof input.summaryTime === "string" ? input.summaryTime : null,
+        title: typeof input.title === "string" ? input.title.slice(0, 120) : null,
+      };
     default:
       return input;
   }
@@ -1052,6 +1201,7 @@ function getAuditEntityId(action: OpenClawExposedActionName, input: unknown) {
     case "createClient":
       return typeof input.name === "string" ? input.name : null;
     case "assignClientToEmail":
+    case "attachEmailToRequest":
       return typeof input.emailId === "string" ? input.emailId : null;
     case "createRequest":
       return typeof input.title === "string" ? input.title : null;
@@ -1068,6 +1218,12 @@ function getAuditEntityId(action: OpenClawExposedActionName, input: unknown) {
       return typeof input.productionId === "string" ? input.productionId : null;
     case "setEmailInboxBucket":
       return typeof input.emailId === "string" ? input.emailId : null;
+    case "writeDailySummary":
+      return typeof input.summaryDate === "string"
+        ? input.summaryDate
+        : typeof input.title === "string"
+          ? input.title
+          : null;
     case "prepareReplyDraft":
       return isRecord(input.context) &&
         typeof input.context.sourceId === "string" &&
@@ -1097,6 +1253,7 @@ function getAuditEntityType(action: OpenClawExposedActionName) {
     case "createClient":
       return "client";
     case "assignClientToEmail":
+    case "attachEmailToRequest":
       return "email";
     case "prepareReplyDraft":
       return "reply_draft";
@@ -1105,6 +1262,8 @@ function getAuditEntityType(action: OpenClawExposedActionName) {
       return "gmail_sync";
     case "setEmailInboxBucket":
       return "email";
+    case "writeDailySummary":
+      return "daily_summary";
     case "searchModelHistory":
       return "model";
     case "getTodayUrgencies":
@@ -1133,6 +1292,10 @@ function getAuditRequestId(action: OpenClawExposedActionName, input: unknown) {
     return null;
   }
 
+  if (action === "attachEmailToRequest" && typeof input.requestId === "string") {
+    return input.requestId;
+  }
+
   if (
     (action === "createTask" || action === "addNoteToRequest") &&
     typeof input.requestId === "string"
@@ -1152,6 +1315,10 @@ function getAuditRequestId(action: OpenClawExposedActionName, input: unknown) {
     return null;
   }
 
+  if (action === "writeDailySummary") {
+    return null;
+  }
+
   if (
     action === "prepareReplyDraft" &&
     isRecord(input.context) &&
@@ -1165,4 +1332,16 @@ function getAuditRequestId(action: OpenClawExposedActionName, input: unknown) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 24);
 }

@@ -319,8 +319,10 @@ Actions SAFE WRITE exposees:
 - `runEmailOpsCycle`
 - `runGmailSync`
 - `setEmailInboxBucket`
+- `writeDailySummary`
 - `createClient`
 - `assignClientToEmail`
+- `attachEmailToRequest`
 - `createDeadline`
 - `createRequest`
 - `createTask`

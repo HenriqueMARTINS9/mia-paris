@@ -19,6 +19,7 @@ import type {
   AssistantAddProductionNoteInput,
   AssistantAddRequestNoteInput,
   AssistantAssignClientToEmailInput,
+  AssistantAttachEmailToRequestInput,
   AssistantCreateClientInput,
   AssistantCreateDeadlineInput,
   AssistantCreateRequestInput,
@@ -32,10 +33,12 @@ import type {
   AssistantRunGmailSyncInput,
   AssistantSetEmailInboxBucketInput,
   AssistantUnprocessedEmailList,
+  AssistantWriteDailySummaryInput,
   AssistantUrgencyList,
   AssistantWorkspaceData,
 } from "@/features/assistant-actions/types";
 import { createClientAction } from "@/features/clients/actions/create-client";
+import { writeDailySummaryAction } from "@/features/daily-summaries/actions/write-daily-summary";
 import {
   createAssistantActionFailure,
   createAssistantActionSuccess,
@@ -48,6 +51,7 @@ import { runAssistantEmailOpsCycle } from "@/features/emails/lib/assistant-email
 import { syncLatestGmailMessagesForActor } from "@/features/emails/lib/gmail-sync";
 import {
   assignClientToEmailAction,
+  attachEmailToRequestAction,
   setEmailInboxBucketAction,
 } from "@/features/emails/actions/update-email";
 import { getEmailsPageData } from "@/features/emails/queries";
@@ -199,6 +203,62 @@ export async function setEmailInboxBucket(
   return createAssistantActionSuccess(result, result.message);
 }
 
+export async function writeDailySummary(
+  input: AssistantWriteDailySummaryInput,
+  options?: AssistantCommandExecutionOptions,
+): Promise<AssistantActionResult<Awaited<ReturnType<typeof writeDailySummaryAction>>>> {
+  const authorization = await authorizeServerPermissions(
+    ["assistant.write.safe"],
+    options?.authorizationOverride,
+  );
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const result = await writeDailySummaryAction(
+    {
+      ...input,
+      source: input.source ?? "assistant",
+    },
+    {
+      actor: options?.mutationContext?.actor ?? null,
+      authorizationOverride:
+        options?.mutationContext?.authorizationOverride ??
+        options?.authorizationOverride ??
+        null,
+      rest: options?.mutationContext?.rest ?? null,
+    },
+  );
+
+  if (!result.ok) {
+    return createAssistantActionFailure("error", result.message);
+  }
+
+  await recordAuditEvent({
+    action: "assistant_write_daily_summary",
+    actorId: authorization.actorId,
+    actorType: authorization.actorType,
+    description: result.message,
+    entityId: result.summaryId ?? result.summaryDate,
+    entityType: "daily_summary",
+    payload: {
+      clientCount: result.clientCount,
+      generatedAt: result.generatedAt,
+      source: normalizeAssistantSource(input.source),
+      summaryDate: result.summaryDate,
+      summaryTime: result.summaryTime,
+      title: input.title ?? null,
+    },
+    requestId: null,
+    scope: "assistant_actions.write_daily_summary",
+    source: normalizeAssistantSource(input.source),
+    status: "success",
+  });
+
+  return createAssistantActionSuccess(result, result.message);
+}
+
 export async function createClient(
   input: AssistantCreateClientInput,
   options?: AssistantCommandExecutionOptions,
@@ -328,6 +388,60 @@ export async function assignClientToEmail(
     },
     requestId: null,
     scope: "assistant_actions.assign_client_to_email",
+    source: normalizeAssistantSource(input.source),
+    status: "success",
+  });
+
+  return createAssistantActionSuccess(result, result.message);
+}
+
+export async function attachEmailToRequest(
+  input: AssistantAttachEmailToRequestInput,
+  options?: AssistantCommandExecutionOptions,
+): Promise<AssistantActionResult<Awaited<ReturnType<typeof attachEmailToRequestAction>>>> {
+  const authorization = await authorizeServerPermissions(
+    ["assistant.write.safe", "emails.qualify"],
+    options?.authorizationOverride,
+  );
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const result = await attachEmailToRequestAction(
+    {
+      emailId: input.emailId,
+      requestId: input.requestId,
+      source: input.source ?? "assistant",
+    },
+    {
+      actor: options?.mutationContext?.actor ?? null,
+      authorizationOverride:
+        options?.mutationContext?.authorizationOverride ??
+        options?.authorizationOverride ??
+        null,
+      rest: options?.mutationContext?.rest ?? null,
+    },
+  );
+
+  if (!result.ok) {
+    return createAssistantActionFailure("error", result.message);
+  }
+
+  await recordAuditEvent({
+    action: "assistant_attach_email_to_request",
+    actorId: authorization.actorId,
+    actorType: authorization.actorType,
+    description: result.message,
+    entityId: input.emailId,
+    entityType: "email",
+    payload: {
+      emailId: input.emailId,
+      requestId: input.requestId,
+      source: normalizeAssistantSource(input.source),
+    },
+    requestId: input.requestId,
+    scope: "assistant_actions.attach_email_to_request",
     source: normalizeAssistantSource(input.source),
     status: "success",
   });
@@ -670,6 +784,37 @@ export async function createRequest(
     return createAssistantActionFailure("error", result.message);
   }
 
+  let attachedEmailCount = 0;
+  let failedEmailAttachCount = 0;
+
+  if (result.requestId && Array.isArray(input.emailIds)) {
+    const uniqueEmailIds = [...new Set(input.emailIds.filter(Boolean))].slice(0, 20);
+
+    for (const emailId of uniqueEmailIds) {
+      const attachResult = await attachEmailToRequestAction(
+        {
+          emailId,
+          requestId: result.requestId,
+          source: input.source ?? "assistant",
+        },
+        {
+          actor: options?.mutationContext?.actor ?? null,
+          authorizationOverride:
+            options?.mutationContext?.authorizationOverride ??
+            options?.authorizationOverride ??
+            null,
+          rest: options?.mutationContext?.rest ?? null,
+        },
+      );
+
+      if (attachResult.ok) {
+        attachedEmailCount += 1;
+      } else {
+        failedEmailAttachCount += 1;
+      }
+    }
+  }
+
   await recordAuditEvent({
     action: "assistant_create_request",
     actorId: authorization.actorId,
@@ -682,6 +827,8 @@ export async function createRequest(
       clientId: input.clientId ?? null,
       contactId: input.contactId ?? null,
       dueAt: input.dueAt ?? null,
+      emailIds: input.emailIds ?? null,
+      failedEmailAttachCount,
       modelId: input.modelId ?? null,
       priority: input.priority,
       productDepartmentId: input.productDepartmentId ?? null,
@@ -691,6 +838,7 @@ export async function createRequest(
       status: input.status ?? "qualification",
       summaryPreview: input.summary?.slice(0, 220) ?? null,
       title: titleValidation.value,
+      attachedEmailCount,
     },
     requestId: result.requestId ?? null,
     scope: "assistant_actions.create_request",
@@ -698,7 +846,14 @@ export async function createRequest(
     status: "success",
   });
 
-  return createAssistantActionSuccess(result, result.message);
+  return createAssistantActionSuccess(
+    {
+      ...result,
+      attachedEmailCount,
+      failedEmailAttachCount,
+    },
+    result.message,
+  );
 }
 
 export async function createDeadline(

@@ -283,6 +283,106 @@ Routine recommandée MyClaw:
 }
 ```
 
+Après le dernier cycle de la journée, écrire le compte-rendu dans le CRM avec `writeDailySummary`.
+
+### `writeDailySummary`
+
+But métier:
+
+- écrire le résumé quotidien visible dans la page `Synthèses`
+- découper ce qui s’est passé par client
+- conserver les décisions, risques et prochaines actions
+- donner au client une vue courte de ce que Claw a absorbé dans la journée
+
+Champs obligatoires:
+
+- `overview`
+- `clientSummaries`
+- `clientSummaries[].clientName`
+- `clientSummaries[].summary`
+
+Champs optionnels:
+
+- `summaryDate`
+- `summaryTime`
+- `generatedAt`
+- `title`
+- `highlights`
+- `risks`
+- `nextActions`
+- `clientSummaries[].highlights`
+- `clientSummaries[].decisions`
+- `clientSummaries[].risks`
+- `clientSummaries[].nextActions`
+- `clientSummaries[].emailIds`
+- `clientSummaries[].requestIds`
+- `clientSummaries[].taskIds`
+
+Payload valide:
+
+```json
+{
+  "summaryDate": "2026-04-26",
+  "summaryTime": "17:30",
+  "title": "Synthèse du 26 avril",
+  "overview": "Journée concentrée sur les demandes prix et les validations client.",
+  "highlights": [
+    "Claw a trié les emails et créé les demandes claires."
+  ],
+  "risks": [
+    "Plusieurs délais courts à surveiller."
+  ],
+  "nextActions": [
+    "Vérifier les emails à revoir."
+  ],
+  "clientSummaries": [
+    {
+      "clientName": "Etam",
+      "summary": "Etam a demandé une mise à jour target price avec échéance courte.",
+      "highlights": [
+        "Demande de prix reçue et demande CRM créée."
+      ],
+      "decisions": [
+        "Attente validation prix avant lancement."
+      ],
+      "risks": [
+        "Délai court sur le retour prix."
+      ],
+      "nextActions": [
+        "Relancer l’acheteuse demain matin si pas de retour."
+      ],
+      "emailIds": ["email-uuid"],
+      "requestIds": ["request-uuid"],
+      "taskIds": ["task-uuid"]
+    }
+  ]
+}
+```
+
+Réponse compacte:
+
+```json
+{
+  "format": "compact",
+  "recommendedAction": "Ouvrir la page Synthèses pour relire le compte-rendu client par client.",
+  "summary": "Synthèse quotidienne enregistrée.",
+  "synthesis": {
+    "clientCount": 1,
+    "generatedAt": "2026-04-26T15:30:00.000Z",
+    "summaryDate": "2026-04-26",
+    "summaryId": "summary-uuid",
+    "summaryTime": "17:30"
+  }
+}
+```
+
+Règles métier:
+
+- `writeDailySummary` doit être appelé après les cycles email, idéalement en fin de journée
+- le résumé doit rester court, exploitable et découpé par client
+- ne pas utiliser cette action pour stocker du bruit technique
+- si un client n’est pas identifié, utiliser `Client non identifié` uniquement si l’information est vraiment utile à relire
+
 ### `runGmailSync`
 
 Champs optionnels:
@@ -386,6 +486,7 @@ Champs optionnels:
 - `dueAt`
 - `summary`
 - `requestedAction`
+- `emailIds`
 
 Valeurs valides:
 
@@ -408,7 +509,8 @@ Payload valide:
   "assignedUserId": "user-uuid",
   "dueAt": "2026-04-22",
   "summary": "Le client demande une mise à jour prix avec délai court.",
-  "requestedAction": "Envoyer le chiffrage révisé"
+  "requestedAction": "Envoyer le chiffrage révisé",
+  "emailIds": ["email-uuid"]
 }
 ```
 
@@ -421,12 +523,50 @@ Réponse compacte:
   "summary": "Demande créée avec succès.",
   "request": {
     "dueAt": "2026-04-22",
+    "attachedEmailCount": 1,
+    "failedEmailAttachCount": 0,
     "priority": "high",
     "requestId": "request-uuid",
     "requestType": "price_request",
     "status": "qualification",
     "title": "Mise à jour target price Etam"
   }
+}
+```
+
+Règle métier:
+
+- si Claw crée une demande depuis un ou plusieurs emails, il doit passer `emailIds`
+- si la demande existe déjà, utiliser `attachEmailToRequest`
+- ne pas créer une deuxième demande si le mail correspond clairement à une demande existante
+
+### `attachEmailToRequest`
+
+Champs obligatoires:
+
+- `emailId`
+- `requestId`
+
+Payload valide:
+
+```json
+{
+  "emailId": "email-uuid",
+  "requestId": "request-uuid"
+}
+```
+
+Réponse compacte:
+
+```json
+{
+  "attachment": {
+    "emailId": "email-uuid",
+    "requestId": "request-uuid"
+  },
+  "format": "compact",
+  "recommendedAction": "Ouvrir ensuite la demande pour vérifier le contexte consolidé.",
+  "summary": "Email rattaché à la demande existante et marqué traité."
 }
 ```
 
@@ -688,6 +828,7 @@ Payload valide:
 - Utiliser `responseMode: "detailed"` uniquement si le contexte le demande vraiment.
 - Ne jamais inventer une valeur enum.
 - Pour la gestion email quotidienne, préférer `runEmailOpsCycle` à un simple `runGmailSync`.
+- Après le dernier cycle de la journée, utiliser `writeDailySummary` pour alimenter la page `Synthèses`.
 - Ne jamais remplacer une vraie action CRM safe par une simple note mémoire si l’utilisateur demande explicitement la mutation.
 - Utiliser les actions READ sans confirmation.
 - Utiliser les SAFE WRITE uniquement après intention claire.

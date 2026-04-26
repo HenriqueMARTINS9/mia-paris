@@ -32,6 +32,13 @@ Fichiers recommandés à charger dans MyClaw pour donner au bridge OpenClaw le b
 - `features/emails/lib/inbox-triage.ts`
 - `features/emails/queries.ts`
 
+## Synthèses quotidiennes
+
+- `features/daily-summaries/types.ts`
+- `features/daily-summaries/actions/write-daily-summary.ts`
+- `features/daily-summaries/queries.ts`
+- `features/daily-summaries/components/daily-summaries-page.tsx`
+
 ## Sécurité et acteur technique
 
 - `features/openclaw/server-context.ts`
@@ -64,8 +71,10 @@ Avec ça, le bot a déjà:
 - le comportement Gmail
 - la logique de tri inbox
 - la routine email capable de classer les clients et de créer des demandes CRM quand le mail est suffisamment clair
+- la synthèse quotidienne `writeDailySummary`, affichée dans la page `Synthèses`
 - l’ensemble des writes assistant-ready exposés, y compris la création explicite de deadlines
 - les setters utiles pour créer un client CRM puis l’assigner explicitement à un email
+- le rattachement des emails à une demande via `emailIds` dans `createRequest` ou via `attachEmailToRequest`
 
 ## Routine recommandée MyClaw
 
@@ -76,6 +85,7 @@ Routine simple conseillée:
 1. `08:30` -> `runEmailOpsCycle` avec `{ "createRequests": true, "limit": 15, "syncLimit": 50 }`
 2. `13:00` -> `runEmailOpsCycle` avec `{ "createRequests": true, "limit": 15, "syncLimit": 50 }`
 3. `17:30` -> `runEmailOpsCycle` avec `{ "createRequests": true, "limit": 15, "syncLimit": 50 }`
+4. `17:45` -> `writeDailySummary` avec un résumé court, daté, découpé par client
 
 Comportement attendu:
 
@@ -85,6 +95,8 @@ Comportement attendu:
 - enrichissement des données CRM détectables
 - classification du client quand le signal est suffisamment net
 - création d’une demande si l’email important est clair et prêt à être structuré
+- rattachement des autres emails au même dossier si le sujet, le client et le contexte correspondent
 - création des tâches et deadlines automatiques via le flux standard `email -> request`
+- écriture d’une synthèse de journée exploitable dans le CRM
 - priorité aux emails `important`
 - relecture humaine des emails `to_review`

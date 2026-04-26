@@ -1,6 +1,10 @@
 import type { AppPermission } from "@/features/auth/permissions";
 import type { DeadlineListItem, DeadlinePriority } from "@/features/deadlines/types";
 import type {
+  WriteDailySummaryInput,
+  WriteDailySummaryResult,
+} from "@/features/daily-summaries/types";
+import type {
   EmailInboxBucket,
   EmailListItem,
   EmailQualificationOption,
@@ -34,6 +38,7 @@ export type AssistantActionName =
   | "addNoteToProduction"
   | "addNoteToRequest"
   | "assignClientToEmail"
+  | "attachEmailToRequest"
   | "createClient"
   | "createDeadline"
   | "createRequest"
@@ -48,7 +53,8 @@ export type AssistantActionName =
   | "runGmailSync"
   | "setEmailInboxBucket"
   | "searchClientHistory"
-  | "searchModelHistory";
+  | "searchModelHistory"
+  | "writeDailySummary";
 
 export interface AssistantActionDefinition {
   command: AssistantActionName;
@@ -93,6 +99,7 @@ export interface AssistantCreateRequestInput {
   clientId?: string | null;
   contactId?: string | null;
   dueAt?: string | null;
+  emailIds?: string[] | null;
   modelId?: string | null;
   priority: RequestPriority;
   productDepartmentId?: string | null;
@@ -121,6 +128,12 @@ export interface AssistantCreateClientInput {
 export interface AssistantAssignClientToEmailInput {
   clientId: string;
   emailId: string;
+  source?: AssistantActionSource;
+}
+
+export interface AssistantAttachEmailToRequestInput {
+  emailId: string;
+  requestId: string;
   source?: AssistantActionSource;
 }
 
@@ -161,6 +174,8 @@ export interface AssistantSetEmailInboxBucketInput {
   reason?: string | null;
   source?: AssistantActionSource;
 }
+
+export type AssistantWriteDailySummaryInput = WriteDailySummaryInput;
 
 export interface AssistantPrepareReplyDraftResult {
   draft: ReplyDraft | null;
@@ -219,6 +234,8 @@ export type AssistantProductionList = ProductionListItem[];
 
 export type AssistantCreateTaskResult = RequestMutationResult;
 export type AssistantCreateRequestResult = RequestMutationResult & {
+  attachedEmailCount?: number;
+  failedEmailAttachCount?: number;
   requestId?: string | null;
 };
 export type AssistantCreateDeadlineResult = RequestMutationResult;
@@ -232,3 +249,4 @@ export type AssistantAddNoteToRequestResult = RequestMutationResult;
 export type AssistantAddNoteToProductionResult = ProductionMutationResult;
 export type AssistantRunGmailSyncResult = GmailSyncResult;
 export type AssistantRunEmailOpsCycleData = AssistantRunEmailOpsCycleResult;
+export type AssistantWriteDailySummaryResult = WriteDailySummaryResult;

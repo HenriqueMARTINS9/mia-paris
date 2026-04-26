@@ -2,6 +2,7 @@ import { mapRequestOverviewRowToListItem } from "@/features/requests/mappers";
 import type {
   RelatedDeadlineItem,
   RelatedDocumentItem,
+  RelatedEmailItem,
   RelatedTaskItem,
   RelatedValidationItem,
   RequestActivityItem,
@@ -142,6 +143,23 @@ export function mapRelatedDocumentRow(
     ),
     updatedAt: pickString(row, "updated_at", "created_at"),
     url: pickString(row, "url", "file_url", "public_url", "storage_path"),
+  };
+}
+
+export function mapRelatedEmailRow(
+  row: SupabaseRecord,
+  index: number,
+): RelatedEmailItem {
+  const fromName = pickString(row, "from_name", "sender_name", "sender");
+  const fromEmail = pickString(row, "from_email", "sender_email", "email");
+
+  return {
+    from: [fromName, fromEmail].filter(Boolean).join(" · ") || "Expéditeur inconnu",
+    id: pickString(row, "id") ?? `email-${index}`,
+    preview: pickString(row, "preview_text", "snippet", "summary", "ai_summary"),
+    receivedAt: pickString(row, "received_at", "created_at", "updated_at"),
+    status: humanizeValue(pickString(row, "processing_status", "status") ?? "new"),
+    subject: pickString(row, "subject", "title", "label") ?? "Email sans objet",
   };
 }
 

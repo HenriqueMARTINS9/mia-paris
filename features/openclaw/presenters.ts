@@ -49,12 +49,14 @@ export function presentOpenClawData(input: {
     case "runGmailSync":
     case "createClient":
     case "assignClientToEmail":
+    case "attachEmailToRequest":
     case "createDeadline":
     case "createRequest":
     case "createTask":
     case "addNoteToRequest":
     case "addNoteToProduction":
     case "setEmailInboxBucket":
+    case "writeDailySummary":
       return presentSafeWriteResult({
         action: input.action,
         data: input.data,
@@ -291,6 +293,8 @@ function presentSafeWriteResult(input: {
         "Ouvrir ensuite la demande pour compléter les tâches, deadlines ou pièces jointes.",
       request: {
         dueAt: readString(payload, "dueAt"),
+        attachedEmailCount: readNumber(result, "attachedEmailCount"),
+        failedEmailAttachCount: readNumber(result, "failedEmailAttachCount"),
         priority: readString(payload, "priority"),
         requestId: readString(result, "requestId"),
         requestType: readString(payload, "requestType"),
@@ -341,6 +345,19 @@ function presentSafeWriteResult(input: {
       format: "compact" as const,
       recommendedAction:
         "Compléter ensuite la qualification CRM ou créer une demande si le mail est clair.",
+      summary: resultMessage,
+    };
+  }
+
+  if (input.action === "attachEmailToRequest") {
+    return {
+      attachment: {
+        emailId: readString(payload, "emailId"),
+        requestId: readString(payload, "requestId"),
+      },
+      format: "compact" as const,
+      recommendedAction:
+        "Ouvrir ensuite la demande pour vérifier le contexte consolidé.",
       summary: resultMessage,
     };
   }
@@ -408,6 +425,24 @@ function presentSafeWriteResult(input: {
         bucket: readString(payload, "bucket"),
         emailId: readString(payload, "emailId"),
         reasonPreview: readString(payload, "reason")?.slice(0, 220) ?? null,
+      },
+    };
+  }
+
+  if (input.action === "writeDailySummary") {
+    const result = isRecord(input.data) ? input.data : {};
+
+    return {
+      format: "compact" as const,
+      recommendedAction:
+        "Ouvrir la page Synthèses pour relire le compte-rendu client par client.",
+      summary: resultMessage,
+      synthesis: {
+        clientCount: readNumber(result, "clientCount"),
+        generatedAt: readString(result, "generatedAt"),
+        summaryDate: readString(result, "summaryDate"),
+        summaryId: readString(result, "summaryId"),
+        summaryTime: readString(result, "summaryTime"),
       },
     };
   }

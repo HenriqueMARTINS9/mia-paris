@@ -64,6 +64,15 @@ export interface RelatedDocumentItem {
   url: string | null;
 }
 
+export interface RelatedEmailItem {
+  from: string;
+  id: string;
+  preview: string | null;
+  receivedAt: string | null;
+  status: string;
+  subject: string;
+}
+
 export interface RequestActivityItem {
   category: RequestActivityCategory;
   date: string;
@@ -78,6 +87,7 @@ export interface RequestDetailPageData {
   deadlines: RelatedDeadlineItem[];
   documents: RelatedDocumentItem[];
   error: string | null;
+  emails: RelatedEmailItem[];
   history: RequestActivityItem[];
   historyContext: RequestHistoryPanelData | null;
   request: RequestDetailItem | null;

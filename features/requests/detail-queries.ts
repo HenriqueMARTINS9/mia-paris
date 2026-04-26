@@ -6,6 +6,7 @@ import {
   buildRequestActivityHistory,
   mapRelatedDeadlineRow,
   mapRelatedDocumentRow,
+  mapRelatedEmailRow,
   mapRelatedTaskRow,
   mapRelatedValidationRow,
   mapRequestDetailItem,
@@ -117,6 +118,7 @@ export async function getRequestDetailPageData(
       mapRelatedValidationRow,
     );
     const documents = (documentsResult.data ?? []).map(mapRelatedDocumentRow);
+    const emails = (emailsResult.data ?? []).map(mapRelatedEmailRow);
     const history = buildRequestActivityHistory({
       deadlines,
       documents,
@@ -132,6 +134,7 @@ export async function getRequestDetailPageData(
       assigneesError: assigneesResult.error,
       deadlines,
       documents,
+      emails,
       error: null,
       history,
       historyContext,
@@ -164,6 +167,7 @@ function createEmptyDetailPageData(error: string | null): RequestDetailPageData 
     assigneesError: null,
     deadlines: [],
     documents: [],
+    emails: [],
     error,
     history: [],
     historyContext: null,

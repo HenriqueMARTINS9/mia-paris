@@ -4,6 +4,7 @@ export {
   addNoteToProduction,
   addNoteToRequest,
   assignClientToEmail,
+  attachEmailToRequest,
   createClient,
   createDeadline as createAssistantDeadline,
   createRequest as createAssistantRequest,
@@ -14,10 +15,12 @@ export {
   getTodayUrgencies,
   getUnprocessedEmails,
   prepareReplyDraft,
+  runEmailOpsCycle,
   runGmailSync,
   setEmailInboxBucket,
   searchClientHistory,
   searchModelHistory,
+  writeDailySummary,
 } from "@/features/assistant-actions/commands";
 export { assistantActionCatalog as assistantReadyActions } from "@/features/assistant-actions/catalog";
 

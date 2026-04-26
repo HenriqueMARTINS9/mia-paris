@@ -34,6 +34,7 @@ interface UpdateEmailStatusInput {
 interface AttachEmailToRequestInput {
   emailId: string;
   requestId: string;
+  source?: "assistant" | "system" | "ui";
 }
 
 interface SetEmailInboxBucketInput {
@@ -425,8 +426,11 @@ export async function setEmailInboxBucketAction(
 
 export async function attachEmailToRequestAction(
   input: AttachEmailToRequestInput,
+  context?: AssistantMutationExecutionContext,
 ): Promise<EmailMutationResult> {
-  const authorization = await authorizeServerAction("emails.qualify");
+  const authorization = context?.authorizationOverride
+    ? await authorizeServerPermissions(["emails.qualify"], context.authorizationOverride)
+    : await authorizeServerAction("emails.qualify");
 
   if (!authorization.ok) {
     return {
@@ -484,20 +488,20 @@ export async function attachEmailToRequestAction(
     field: "request_link",
     payloads,
     successMessage: "Email rattaché à la demande existante et marqué traité.",
-  });
+  }, context);
 
   if (result.ok) {
     await createActivityLogEntry({
       action: "email_attached_to_existing_request",
-      actorId: authorization.actorId,
+      actorId: context?.actor?.actorUserId ?? authorization.actorId,
       description: `Email ${input.emailId} rattaché à la demande ${input.requestId}.`,
       entityId: input.emailId,
       entityType: "email",
       payload: classificationPayload,
       requestId: input.requestId,
-      source: "ui",
+      source: input.source ?? context?.actor?.source ?? "ui",
       status: "success",
-    });
+    }, context);
     revalidatePath(`/requests/${input.requestId}`);
     revalidatePath("/demandes");
 
@@ -509,15 +513,15 @@ export async function attachEmailToRequestAction(
 
   await createActivityLogEntry({
     action: "email_attach_to_request_failed",
-    actorId: authorization.actorId,
+    actorId: context?.actor?.actorUserId ?? authorization.actorId,
     description: result.message,
     entityId: input.emailId,
     entityType: "email",
     payload: classificationPayload,
     requestId: input.requestId,
-    source: "ui",
+    source: input.source ?? context?.actor?.source ?? "ui",
     status: "failure",
-  });
+  }, context);
 
   return result;
 }
@@ -533,7 +537,7 @@ async function createActivityLogEntry(input: {
   scope?: string;
   source?: "assistant" | "system" | "ui";
   status?: "failure" | "success";
-}) {
+}, context?: AssistantMutationExecutionContext) {
   const payload: Record<string, unknown> = {
     action: input.action,
     action_source: input.source ?? "system",
@@ -553,9 +557,14 @@ async function createActivityLogEntry(input: {
     status: input.status ?? "success",
   };
 
-  const result = await insertWithMissingColumnFallback("activity_logs", payload, {
-    select: "id",
-  });
+  const result = await insertWithMissingColumnFallback(
+    "activity_logs",
+    payload,
+    {
+      select: "id",
+    },
+    context?.rest ?? undefined,
+  );
 
   if (result.error && !isMissingSupabaseResourceError(result.rawError)) {
     console.warn("[emails] activity log insert failed", result.error);
@@ -710,6 +719,7 @@ async function insertWithMissingColumnFallback(
   resource: string,
   payload: Record<string, unknown>,
   params?: Record<string, string>,
+  restContext?: SupabaseRestExecutionContext,
 ) {
   const currentPayload = { ...payload };
 
@@ -718,6 +728,7 @@ async function insertWithMissingColumnFallback(
       resource,
       cleanPayload(currentPayload),
       params,
+      restContext,
     );
 
     if (!result.error) {
