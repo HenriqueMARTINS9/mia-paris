@@ -248,6 +248,28 @@ function presentReplyDraft(data: unknown) {
 
 function presentEmailOpsCycle(data: unknown) {
   const result = isEmailOpsCycleResult(data) ? data : null;
+  const topImportantItems =
+    result?.items
+      .filter((item) => item.bucket === "important")
+      .slice(0, DEFAULT_COMPACT_LIMIT)
+      .map((item) => ({
+        client: item.clientName,
+        dueAt: item.dueAt,
+        from: item.from,
+        priority: item.priority,
+        recommendedAction: item.recommendedAction,
+        requestType: item.requestType,
+        subject: item.subject,
+      })) ?? [];
+  const errorItems =
+    result?.items
+      .filter((item) => item.status === "error")
+      .slice(0, 3)
+      .map((item) => ({
+        emailId: item.emailId,
+        reason: item.reason,
+        subject: item.subject,
+      })) ?? [];
   const items =
     result?.items.slice(0, DEFAULT_COMPACT_LIMIT).map((item) => ({
       bucket: item.bucket,
@@ -280,18 +302,24 @@ function presentEmailOpsCycle(data: unknown) {
       taskUpdatedCount: result?.taskUpdatedCount ?? 0,
       toReviewCount: result?.toReviewCount ?? 0,
     },
+    errorItems,
     format: "compact" as const,
     items,
     recommendedAction:
-      result && result.toReviewCount > 0
-        ? "Ouvrir ensuite l’onglet À vérifier pour arbitrer les emails incertains."
-        : result && result.requestCreatedCount > 0
-          ? "Contrôler ensuite les nouvelles demandes créées et leurs tâches auto."
-          : "Traiter ensuite les emails classés Important dans le CRM.",
+      result && result.errorCount > 0
+        ? "Vérifier les erreurs remontées, puis relancer le cycle email."
+        : result && result.toReviewCount > 0
+          ? "Ouvrir ensuite l’onglet À vérifier pour arbitrer les emails incertains."
+          : result && result.requestCreatedCount > 0
+            ? "Contrôler ensuite les nouvelles demandes créées et leurs tâches auto."
+            : "Traiter ensuite les emails classés Important dans le CRM.",
     summary:
       result?.sync.ok === false
         ? "Cycle assistant exécuté, mais la sync Gmail doit être vérifiée."
+        : result && result.errorCount > 0
+          ? "Cycle assistant exécuté avec erreurs sur certains emails."
         : "Cycle assistant emails terminé.",
+    topImportantItems,
     truncated: (result?.items.length ?? 0) > items.length,
   };
 }

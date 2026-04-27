@@ -84,10 +84,61 @@ Pour la gestion quotidienne des emails, préférer `runEmailOpsCycle` plutôt qu
 
 Routine pilotage complet conseillée:
 
-1. `08:30` -> `runEmailOpsCycle` avec `{ "attachToExistingRequests": true, "createRequests": true, "updateRequests": true, "updateTasks": true, "writeSummary": true, "limit": 15, "syncLimit": 50 }`
-2. `13:00` -> `runEmailOpsCycle` avec `{ "attachToExistingRequests": true, "createRequests": true, "updateRequests": true, "updateTasks": true, "writeSummary": true, "limit": 15, "syncLimit": 50 }`
-3. `17:30` -> `runEmailOpsCycle` avec `{ "attachToExistingRequests": true, "createRequests": true, "updateRequests": true, "updateTasks": true, "writeSummary": true, "limit": 15, "syncLimit": 50 }`
-4. `17:45` -> si besoin seulement, `writeDailySummary` pour une synthèse plus éditorialisée ou consolidée
+- fréquence: toutes les 24h
+- prochain réveil configuré: `lun. 27/04/2026 20:02:57`
+- à chaque réveil: lancer le prompt cron `Routine CRM email MIA PARIS`
+- ne pas relancer manuellement plusieurs cycles dans la même journée sauf demande explicite d’Aarone
+- si besoin seulement, `writeDailySummary` peut être appelé séparément pour réécrire une synthèse plus éditorialisée ou consolidée
+
+Prompt cron `Routine CRM email MIA PARIS`:
+
+```text
+Run the CRM email operations cycle for MIA PARIS.
+
+Use the OpenClaw CRM bridge and execute runEmailOpsCycle with:
+{
+  "attachToExistingRequests": true,
+  "createRequests": true,
+  "updateRequests": true,
+  "updateTasks": true,
+  "writeSummary": true,
+  "limit": 200,
+  "syncLimit": 200
+}
+
+Goals:
+- sync Gmail incrementally and import every available page since the last synced email
+- read emails one by one
+- classify emails into important / promotional / to_review
+- ignore promotional/system noise in the final summary
+- enrich CRM-detectable fields when possible: detected client, detected department, detected type, priority, deadline, requested action, business summary, recommended action, assisted reply draft
+- assign or create the CRM client when the signal is clear
+- attach emails to an existing request when they belong to the same client/request context
+- create a request when an important email is clear enough and not already linked
+- update existing requests when the email changes priority, status, deadline, assignee or useful details
+- create or update tasks when the email implies follow-up, costing, validation, production, logistics, deadline check or internal review
+- write or update the daily summary in the CRM with a short client-by-client recap
+
+Safety rules:
+- do not invent enum values
+- do not create duplicates if an existing client, request or task clearly matches
+- put uncertain emails in to_review
+- never hide important business emails as promotional
+- if a write fails, continue the cycle and mention the error count in the summary
+
+Return a compact WhatsApp-friendly summary with:
+- sync status
+- number of processed emails
+- important count
+- promotional count
+- to_review count
+- CRM enrichment count
+- created/attached/updated requests count
+- created/updated tasks count
+- daily summary status
+- top important items if any
+- recommended next action
+```
 
 Comportement attendu:
 

@@ -270,8 +270,8 @@ Valeurs valides:
 
 - `attachToExistingRequests`: `true` ou `false`
 - `createRequests`: `true` ou `false`
-- `limit`: entier entre `1` et `40`
-- `syncLimit`: entier entre `1` et `100`
+- `limit`: entier entre `1` et `200`
+- `syncLimit`: entier entre `1` et `200`
 - `updateRequests`: `true` ou `false`
 - `updateTasks`: `true` ou `false`
 - `writeSummary`: `true` ou `false`
@@ -282,8 +282,8 @@ Payload valide:
 {
   "attachToExistingRequests": true,
   "createRequests": true,
-  "limit": 15,
-  "syncLimit": 50,
+  "limit": 200,
+  "syncLimit": 200,
   "updateRequests": true,
   "updateTasks": true,
   "writeSummary": true
@@ -344,22 +344,24 @@ Règles métier:
 
 Routine recommandée MyClaw:
 
-- lancer `runEmailOpsCycle` 3 fois par jour
-- suggestion simple:
-  - `08:30`
-  - `13:00`
-  - `17:30`
+- lancer `runEmailOpsCycle` toutes les 24h
+- prochain réveil configuré: `lun. 27/04/2026 20:02:57`
+- ne pas relancer plusieurs cycles dans la même journée sauf demande explicite d’Aarone
 - payload recommandé:
 
 ```json
 {
+  "attachToExistingRequests": true,
   "createRequests": true,
-  "limit": 15,
-  "syncLimit": 50
+  "limit": 200,
+  "syncLimit": 200,
+  "updateRequests": true,
+  "updateTasks": true,
+  "writeSummary": true
 }
 ```
 
-Après le dernier cycle de la journée, écrire le compte-rendu dans le CRM avec `writeDailySummary`.
+Le payload recommandé inclut `writeSummary: true`, donc la synthèse CRM du jour est écrite pendant le cycle. `writeDailySummary` reste disponible séparément si Aarone demande une version plus éditorialisée ou corrigée.
 
 ### `writeDailySummary`
 

@@ -57,8 +57,8 @@ import type {
 
 const DEFAULT_EMAIL_OPS_LIMIT = 15;
 const DEFAULT_SYNC_LIMIT = 50;
-const MAX_EMAIL_OPS_LIMIT = 40;
-const MAX_SYNC_LIMIT = 100;
+const MAX_EMAIL_OPS_LIMIT = 200;
+const MAX_SYNC_LIMIT = 200;
 
 interface EmailOpsReferenceData {
   attachmentCountByEmailId: Map<string, number>;
@@ -910,7 +910,7 @@ async function writeEmailOpsDailySummary(
 
 async function loadEmailOpsCandidates(limit: number) {
   const admin = createSupabaseAdminClient();
-  const scanLimit = Math.min(Math.max(limit * 4, 40), 120);
+  const scanLimit = Math.min(Math.max(limit * 4, 40), MAX_EMAIL_OPS_LIMIT * 4);
   const { data, error } = await admin
     .from("emails")
     .select("*")
@@ -1105,6 +1105,20 @@ async function patchEmailClassification(
       };
     }
 
+    if (isEmailStatusEnumError(result.rawError)) {
+      const nextPayload = stripEmailStatusPatchFields(currentPayload);
+
+      if (Object.keys(nextPayload).length < Object.keys(currentPayload).length) {
+        Object.assign(currentPayload, nextPayload);
+
+        for (const column of ["processing_status", "status", "triage_status"]) {
+          delete currentPayload[column];
+        }
+
+        continue;
+      }
+    }
+
     if (!isMissingSupabaseColumnError(result.rawError)) {
       return {
         ok: false,
@@ -1123,6 +1137,44 @@ async function patchEmailClassification(
 
     delete currentPayload[missingColumn];
   }
+}
+
+function stripEmailStatusPatchFields(payload: Record<string, unknown>) {
+  const nextPayload = { ...payload };
+
+  delete nextPayload.processing_status;
+  delete nextPayload.status;
+  delete nextPayload.triage_status;
+
+  return nextPayload;
+}
+
+function isEmailStatusEnumError(error: {
+  code?: string;
+  details?: string;
+  error?: string;
+  hint?: string;
+  message?: string;
+} | null) {
+  if (!error) {
+    return false;
+  }
+
+  const message = [
+    error.message,
+    error.details,
+    error.error,
+    error.hint,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    error.code === "22P02" ||
+    message.includes("invalid input value for enum") ||
+    message.includes("email_processing_status")
+  );
 }
 
 function buildEmailPatchPayload(

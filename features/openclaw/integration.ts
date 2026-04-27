@@ -277,8 +277,8 @@ const openClawActionSamples: Record<
   runEmailOpsCycle: {
     attachToExistingRequests: true,
     createRequests: true,
-    limit: 15,
-    syncLimit: 50,
+    limit: 200,
+    syncLimit: 200,
     updateRequests: true,
     updateTasks: true,
     writeSummary: true,
@@ -1186,10 +1186,10 @@ function parseRunEmailOpsCycleInput(input: unknown) {
     (typeof input.limit !== "number" ||
       !Number.isFinite(input.limit) ||
       input.limit < 1 ||
-      input.limit > 40)
+      input.limit > 200)
   ) {
     return invalidPayloadResult(
-      "limit invalide pour runEmailOpsCycle. Utilise un nombre entre 1 et 40.",
+      "limit invalide pour runEmailOpsCycle. Utilise un nombre entre 1 et 200.",
     );
   }
 
@@ -1198,10 +1198,10 @@ function parseRunEmailOpsCycleInput(input: unknown) {
     (typeof input.syncLimit !== "number" ||
       !Number.isFinite(input.syncLimit) ||
       input.syncLimit < 1 ||
-      input.syncLimit > 100)
+      input.syncLimit > 200)
   ) {
     return invalidPayloadResult(
-      "syncLimit invalide pour runEmailOpsCycle. Utilise un nombre entre 1 et 100.",
+      "syncLimit invalide pour runEmailOpsCycle. Utilise un nombre entre 1 et 200.",
     );
   }
 
