@@ -9,6 +9,7 @@ import {
 import type { EmailListItem } from "@/features/emails/types";
 import type {
   AssistantEmailActivityInput,
+  AssistantEmailActivityItem,
   AssistantEmailActivityReport,
 } from "@/features/assistant-actions/types";
 import {
@@ -198,7 +199,7 @@ export async function getAssistantServiceEmailActivity(
     rowsByThreadId.set(threadId, [...(rowsByThreadId.get(threadId) ?? []), row]);
   }
 
-  const items = receivedRows.map((email) => {
+  const items: AssistantEmailActivityItem[] = receivedRows.map((email) => {
     const receivedAt = email.received_at ?? email.created_at ?? range.from;
     const receivedTime = new Date(receivedAt).getTime();
     const threadId = email.external_thread_id ?? email.thread_id ?? null;
