@@ -44,6 +44,7 @@ export type AssistantActionName =
   | "createDeadline"
   | "createRequest"
   | "createTask"
+  | "getEmailActivity"
   | "getBlockedProductions"
   | "getHighRiskProductions"
   | "getRequestsWithoutAssignee"
@@ -85,6 +86,38 @@ export interface AssistantHistorySearchResult {
   }>;
   signals: string[];
   summary: string;
+}
+
+export interface AssistantEmailActivityInput {
+  from: string;
+  limit?: number | null;
+  to: string;
+}
+
+export interface AssistantEmailActivityItem {
+  emailId: string;
+  fromEmail: string | null;
+  fromName: string | null;
+  receivedAt: string;
+  replyAt: string | null;
+  replyDelayMinutes: number | null;
+  replyMessageId: string | null;
+  replyStatus: "answered" | "not_found";
+  subject: string;
+  threadId: string | null;
+}
+
+export interface AssistantEmailActivityReport {
+  generatedAt: string;
+  items: AssistantEmailActivityItem[];
+  range: {
+    from: string;
+    to: string;
+  };
+  totalAnswered: number;
+  totalReceived: number;
+  totalUnanswered: number;
+  truncated: boolean;
 }
 
 export interface AssistantCreateTaskInput {
@@ -259,6 +292,7 @@ export interface AssistantWorkspaceData {
 
 export type AssistantUrgencyList = DeadlineListItem[];
 export type AssistantUnprocessedEmailList = EmailListItem[];
+export type AssistantEmailActivityData = AssistantEmailActivityReport;
 export type AssistantRequestBacklogList = RequestOverviewListItem[];
 export type AssistantProductionList = ProductionListItem[];
 

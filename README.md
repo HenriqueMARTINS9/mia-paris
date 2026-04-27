@@ -308,6 +308,7 @@ Livre:
 Actions READ exposees:
 - `getTodayUrgencies`
 - `getUnprocessedEmails`
+- `getEmailActivity`
 - `getRequestsWithoutAssignee`
 - `getBlockedProductions`
 - `getHighRiskProductions`

@@ -11,6 +11,7 @@ import {
   createRequest,
   createTask,
   getBlockedProductions,
+  getEmailActivity,
   getHighRiskProductions,
   getRequestsWithoutAssignee,
   getTodayUrgencies,
@@ -37,6 +38,7 @@ import type {
   AssistantCreateDeadlineInput,
   AssistantCreateRequestInput,
   AssistantCreateTaskInput,
+  AssistantEmailActivityInput,
   AssistantPrepareReplyDraftInput,
   AssistantRunEmailOpsCycleInput,
   AssistantRunGmailSyncInput,
@@ -58,6 +60,7 @@ import { recordAuditEvent } from "@/lib/action-runtime";
 
 export type OpenClawReadActionName =
   | "getBlockedProductions"
+  | "getEmailActivity"
   | "getHighRiskProductions"
   | "getRequestsWithoutAssignee"
   | "getTodayUrgencies"
@@ -123,6 +126,7 @@ export interface OpenClawExecutionOptions {
 export const openClawReadActionNames: OpenClawReadActionName[] = [
   "getTodayUrgencies",
   "getUnprocessedEmails",
+  "getEmailActivity",
   "getRequestsWithoutAssignee",
   "getBlockedProductions",
   "getHighRiskProductions",
@@ -246,6 +250,12 @@ const openClawActionSamples: Record<
   getRequestsWithoutAssignee: null,
   getTodayUrgencies: null,
   getUnprocessedEmails: null,
+  getEmailActivity: {
+    from: "2026-04-20",
+    limit: 500,
+    responseMode: "detailed",
+    to: "2026-04-26",
+  },
   prepareReplyDraft: {
     context: {
       clientName: "Etam",
@@ -434,6 +444,14 @@ async function dispatchOpenClawAction(
       return getUnprocessedEmails({
         authorizationOverride: options?.authorizationOverride,
       });
+    case "getEmailActivity": {
+      const parsed = parseEmailActivityInput(input);
+      return parsed.ok
+        ? getEmailActivity(parsed.value, {
+            authorizationOverride: options?.authorizationOverride,
+          })
+        : parsed.result;
+    }
     case "getRequestsWithoutAssignee":
       return getRequestsWithoutAssignee({
         authorizationOverride: options?.authorizationOverride,
@@ -680,6 +698,39 @@ function parseModelHistoryInput(input: unknown) {
   return {
     ok: true as const,
     modelName: input.modelName.trim(),
+  };
+}
+
+function parseEmailActivityInput(input: unknown) {
+  if (!isRecord(input)) {
+    return invalidPayloadResult("Payload invalide pour getEmailActivity.");
+  }
+
+  if (typeof input.from !== "string" || typeof input.to !== "string") {
+    return invalidPayloadResult(
+      "Les champs from et to sont requis pour getEmailActivity.",
+    );
+  }
+
+  if (
+    "limit" in input &&
+    (typeof input.limit !== "number" ||
+      !Number.isFinite(input.limit) ||
+      input.limit < 1 ||
+      input.limit > 1500)
+  ) {
+    return invalidPayloadResult(
+      "limit invalide pour getEmailActivity. Utilise un nombre entre 1 et 1500.",
+    );
+  }
+
+  return {
+    ok: true as const,
+    value: {
+      from: input.from,
+      limit: typeof input.limit === "number" ? Math.floor(input.limit) : null,
+      to: input.to,
+    } satisfies AssistantEmailActivityInput,
   };
 }
 
@@ -1274,6 +1325,12 @@ function sanitizeAuditInput(action: OpenClawExposedActionName, input: unknown) {
   }
 
   switch (action) {
+    case "getEmailActivity":
+      return {
+        from: typeof input.from === "string" ? input.from : null,
+        limit: typeof input.limit === "number" ? input.limit : null,
+        to: typeof input.to === "string" ? input.to : null,
+      };
     case "addNoteToRequest":
       return {
         notePreview:
@@ -1422,6 +1479,10 @@ function getAuditEntityId(action: OpenClawExposedActionName, input: unknown) {
       return typeof input.clientName === "string" ? input.clientName : null;
     case "searchModelHistory":
       return typeof input.modelName === "string" ? input.modelName : null;
+    case "getEmailActivity":
+      return typeof input.from === "string" && typeof input.to === "string"
+        ? `${input.from}:${input.to}`
+        : null;
     case "createClient":
       return typeof input.name === "string" ? input.name : null;
     case "assignClientToEmail":
@@ -1498,6 +1559,7 @@ function getAuditEntityType(action: OpenClawExposedActionName) {
     case "getTodayUrgencies":
       return "deadline";
     case "getUnprocessedEmails":
+    case "getEmailActivity":
       return "email";
     case "getRequestsWithoutAssignee":
       return "request";

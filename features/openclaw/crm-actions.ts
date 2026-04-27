@@ -10,6 +10,7 @@ export {
   createRequest as createAssistantRequest,
   createTask as createAssistantTask,
   getBlockedProductions,
+  getEmailActivity,
   getHighRiskProductions,
   getRequestsWithoutAssignee,
   getTodayUrgencies,

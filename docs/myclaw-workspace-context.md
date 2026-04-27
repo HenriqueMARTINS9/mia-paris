@@ -70,6 +70,7 @@ Avec ça, le bot a déjà:
 - les garde-fous
 - le comportement Gmail
 - la logique de tri inbox
+- le listing factuel d'activité email via `getEmailActivity(from, to)` avec reçus + première réponse sortante trouvée
 - la routine email capable de classer les clients et de créer des demandes CRM quand le mail est suffisamment clair
 - la synthèse quotidienne `writeDailySummary`, affichée dans la page `Synthèses`
 - l’ensemble des writes assistant-ready exposés, y compris la création explicite de deadlines
@@ -103,3 +104,7 @@ Comportement attendu:
 - écriture d’une synthèse de journée exploitable dans le CRM
 - priorité aux emails `important`
 - relecture humaine des emails `to_review`
+
+Pour un compte-rendu factuel demandé par Aarone, utiliser `getEmailActivity` avec `responseMode: "detailed"`.
+Exemple semaine dernière: `{ "from": "2026-04-20", "to": "2026-04-26", "limit": 500, "responseMode": "detailed" }`.
+Si `replyAt` est absent, dire “réponse non trouvée dans le CRM/Gmail synchronisé”, ne pas inventer.

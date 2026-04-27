@@ -24,6 +24,18 @@ export const assistantActionCatalog: AssistantActionDefinition[] = [
     safeForOpenClaw: true,
   },
   {
+    command: "getEmailActivity",
+    description:
+      "Produit un listing factuel des emails reçus sur une période et de la première réponse sortante associée.",
+    example: "Liste les mails reçus la semaine dernière avec mes heures de réponse",
+    exposure: "safe",
+    key: "emails-activity",
+    kind: "read",
+    label: "Activité email",
+    permission: "assistant.read",
+    safeForOpenClaw: true,
+  },
+  {
     command: "getRequestsWithoutAssignee",
     description: "Retourne les demandes encore sans pilote assigné.",
     example: "Quelles demandes sont sans owner ?",

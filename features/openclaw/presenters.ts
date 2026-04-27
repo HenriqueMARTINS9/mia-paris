@@ -2,6 +2,7 @@ import "server-only";
 
 import type {
   AssistantHistorySearchResult,
+  AssistantEmailActivityReport,
   AssistantPrepareReplyDraftResult,
   AssistantRunEmailOpsCycleResult,
 } from "@/features/assistant-actions/types";
@@ -33,6 +34,8 @@ export function presentOpenClawData(input: {
       return presentUrgencies(input.data);
     case "getUnprocessedEmails":
       return presentUnprocessedEmails(input.data);
+    case "getEmailActivity":
+      return presentEmailActivity(input.data);
     case "getRequestsWithoutAssignee":
       return presentRequestsWithoutAssignee(input.data);
     case "getBlockedProductions":
@@ -124,6 +127,32 @@ function presentUnprocessedEmails(data: unknown) {
         : "Aucun email métier non traité à remonter.",
     totalCount: emails.length,
     truncated: source.length > items.length,
+  };
+}
+
+function presentEmailActivity(data: unknown) {
+  const report = isEmailActivityReport(data) ? data : null;
+  const items = report?.items.slice(0, 20).map((item) => ({
+    from: item.fromName || item.fromEmail,
+    receivedAt: item.receivedAt,
+    replyAt: item.replyAt,
+    replyDelayMinutes: item.replyDelayMinutes,
+    status: item.replyStatus === "answered" ? "répondu" : "réponse non trouvée",
+    subject: item.subject,
+  })) ?? [];
+
+  return {
+    format: "compact" as const,
+    items,
+    range: report?.range ?? null,
+    recommendedAction:
+      report && report.truncated
+        ? "Relancer en responseMode detailed avec un limit plus élevé si le compte-rendu doit être exhaustif."
+        : "Utiliser responseMode detailed pour produire un tableau complet à partager.",
+    totalAnswered: report?.totalAnswered ?? 0,
+    totalReceived: report?.totalReceived ?? 0,
+    totalUnanswered: report?.totalUnanswered ?? 0,
+    truncated: report?.truncated ?? false,
   };
 }
 
@@ -559,6 +588,10 @@ function isReplyDraftResult(value: unknown): value is AssistantPrepareReplyDraft
 
 function isEmailOpsCycleResult(value: unknown): value is AssistantRunEmailOpsCycleResult {
   return isRecord(value) && Array.isArray(value.items) && isRecord(value.sync);
+}
+
+function isEmailActivityReport(value: unknown): value is AssistantEmailActivityReport {
+  return isRecord(value) && Array.isArray(value.items) && isRecord(value.range);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

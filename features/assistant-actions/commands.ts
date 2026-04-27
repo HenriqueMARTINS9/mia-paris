@@ -10,6 +10,7 @@ import {
 import { assistantActionCatalog } from "@/features/assistant-actions/catalog";
 import {
   getAssistantServiceDeadlines,
+  getAssistantServiceEmailActivity,
   getAssistantServiceEmails,
   getAssistantServiceProductions,
   getAssistantServiceRequestOverviews,
@@ -24,6 +25,8 @@ import type {
   AssistantCreateDeadlineInput,
   AssistantCreateRequestInput,
   AssistantCreateTaskInput,
+  AssistantEmailActivityData,
+  AssistantEmailActivityInput,
   AssistantHistorySearchResult,
   AssistantPrepareReplyDraftInput,
   AssistantPrepareReplyDraftResult,
@@ -160,6 +163,27 @@ export async function getUnprocessedEmails(
   return createAssistantActionSuccess(
     emails,
     `${emails.length} email(s) non traité(s) ou à revoir.`,
+  );
+}
+
+export async function getEmailActivity(
+  input: AssistantEmailActivityInput,
+  options?: AssistantCommandExecutionOptions,
+): Promise<AssistantActionResult<AssistantEmailActivityData>> {
+  const authorization = await authorizeServerPermissions(
+    ["assistant.read"],
+    options?.authorizationOverride,
+  );
+
+  if (!authorization.ok) {
+    return createAssistantActionFailure("forbidden", authorization.message);
+  }
+
+  const activity = await getAssistantServiceEmailActivity(input);
+
+  return createAssistantActionSuccess(
+    activity,
+    `${activity.totalReceived} email(s) reçu(s), ${activity.totalAnswered} réponse(s) trouvée(s).`,
   );
 }
 

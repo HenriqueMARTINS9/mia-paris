@@ -136,6 +136,63 @@ Notes métier:
 - les emails classés `promotional` sont exclus de cette vue
 - les emails ambigus doivent être classés en `to_review`
 
+### `getEmailActivity`
+
+But métier:
+
+- produire un listing factuel des emails reçus sur une période
+- indiquer la date/heure de réception
+- indiquer la première date/heure de réponse sortante trouvée dans le même thread
+- rester factuel, sans inventer de réponse si aucun message sortant n’est retrouvé
+
+Payload valide:
+
+```json
+{
+  "from": "2026-04-20",
+  "to": "2026-04-26",
+  "limit": 500,
+  "responseMode": "detailed"
+}
+```
+
+Champs:
+
+- `from`: date début au format `YYYY-MM-DD` ou ISO
+- `to`: date fin au format `YYYY-MM-DD` ou ISO
+- `limit`: optionnel, entre `1` et `1500`, défaut `500`
+
+Réponse détaillée:
+
+```json
+{
+  "range": {
+    "from": "2026-04-20T00:00:00.000Z",
+    "to": "2026-04-26T23:59:59.999Z"
+  },
+  "totalReceived": 42,
+  "totalAnswered": 31,
+  "totalUnanswered": 11,
+  "items": [
+    {
+      "subject": "Validation proto robe",
+      "fromName": "Camille",
+      "fromEmail": "buyer@etam.com",
+      "receivedAt": "2026-04-20T08:32:00.000Z",
+      "replyAt": "2026-04-20T09:14:00.000Z",
+      "replyDelayMinutes": 42,
+      "replyStatus": "answered"
+    }
+  ]
+}
+```
+
+Règles:
+
+- pour un compte-rendu à partager, utiliser `responseMode: "detailed"`
+- si `replyAt` est `null`, écrire “réponse non trouvée dans le CRM/Gmail synchronisé”, pas “non répondu” de façon définitive
+- la qualité dépend des emails sortants synchronisés dans Gmail
+
 ### `getRequestsWithoutAssignee`
 
 Payload valide:

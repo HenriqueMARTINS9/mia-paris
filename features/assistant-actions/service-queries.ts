@@ -7,6 +7,10 @@ import {
   mapEmailRecordToListItem,
 } from "@/features/emails/mappers";
 import type { EmailListItem } from "@/features/emails/types";
+import type {
+  AssistantEmailActivityInput,
+  AssistantEmailActivityReport,
+} from "@/features/assistant-actions/types";
 import {
   getProductionRelatedIds,
   mapProductionRecordToListItem,
@@ -28,6 +32,9 @@ import type {
   ProductionRecord,
   RequestOverview,
 } from "@/types/crm";
+
+const DEFAULT_EMAIL_ACTIVITY_LIMIT = 500;
+const MAX_EMAIL_ACTIVITY_LIMIT = 1500;
 
 export async function getAssistantServiceRequestOverviews(): Promise<
   RequestOverviewListItem[]
@@ -135,6 +142,110 @@ export async function getAssistantServiceEmails(): Promise<EmailListItem[]> {
     .sort(sortEmails);
 }
 
+export async function getAssistantServiceEmailActivity(
+  input: AssistantEmailActivityInput,
+): Promise<AssistantEmailActivityReport> {
+  const admin = createSupabaseAdminClient();
+  const range = normalizeEmailActivityRange(input.from, input.to);
+  const limit = clampEmailActivityLimit(input.limit);
+  const inboxResult = await admin
+    .from("inboxes")
+    .select("email_address")
+    .eq("provider", "google")
+    .eq("is_active", true)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const inboxEmail = readString(
+    (inboxResult.data ?? {}) as Record<string, unknown>,
+    ["email_address"],
+  );
+  const receivedResult = await admin
+    .from("emails")
+    .select(
+      "id,thread_id,external_thread_id,external_message_id,from_name,from_email,to_emails,subject,preview_text,direction,received_at,created_at",
+    )
+    .gte("received_at", range.from)
+    .lte("received_at", range.to)
+    .order("received_at", { ascending: true, nullsFirst: false })
+    .limit(limit + 1);
+
+  if (receivedResult.error) {
+    throw new Error(
+      `Impossible de charger l'activité email assistant: ${receivedResult.error.message}`,
+    );
+  }
+
+  const receivedRows = ((receivedResult.data ?? []) as EmailRecord[])
+    .filter((email) => !isOutgoingEmail(email, inboxEmail))
+    .slice(0, limit);
+  const threadIds = uniqueStrings(
+    receivedRows.map((email) => email.external_thread_id ?? email.thread_id ?? null),
+  );
+  const threadRows =
+    threadIds.length > 0
+      ? await getEmailActivityThreadRows(threadIds, range.from, inboxEmail)
+      : [];
+  const rowsByThreadId = new Map<string, EmailRecord[]>();
+
+  for (const row of threadRows) {
+    const threadId = row.external_thread_id ?? row.thread_id;
+
+    if (!threadId) {
+      continue;
+    }
+
+    rowsByThreadId.set(threadId, [...(rowsByThreadId.get(threadId) ?? []), row]);
+  }
+
+  const items = receivedRows.map((email) => {
+    const receivedAt = email.received_at ?? email.created_at ?? range.from;
+    const receivedTime = new Date(receivedAt).getTime();
+    const threadId = email.external_thread_id ?? email.thread_id ?? null;
+    const reply = threadId
+      ? (rowsByThreadId.get(threadId) ?? []).find((candidate) => {
+          const candidateAt = candidate.received_at ?? candidate.created_at;
+          const candidateTime = candidateAt ? new Date(candidateAt).getTime() : NaN;
+
+          return (
+            isOutgoingEmail(candidate, inboxEmail) &&
+            Number.isFinite(candidateTime) &&
+            candidateTime > receivedTime
+          );
+        }) ?? null
+      : null;
+    const replyAt = reply?.received_at ?? reply?.created_at ?? null;
+    const replyTime = replyAt ? new Date(replyAt).getTime() : NaN;
+
+    return {
+      emailId: email.id,
+      fromEmail: email.from_email ?? null,
+      fromName: email.from_name ?? null,
+      receivedAt,
+      replyAt,
+      replyDelayMinutes:
+        replyAt && Number.isFinite(replyTime) && Number.isFinite(receivedTime)
+          ? Math.max(0, Math.round((replyTime - receivedTime) / 60_000))
+          : null,
+      replyMessageId: reply?.id ?? null,
+      replyStatus: replyAt ? "answered" : "not_found",
+      subject: email.subject ?? "Sans objet",
+      threadId,
+    };
+  });
+  const totalAnswered = items.filter((item) => item.replyStatus === "answered").length;
+
+  return {
+    generatedAt: new Date().toISOString(),
+    items,
+    range,
+    totalAnswered,
+    totalReceived: items.length,
+    totalUnanswered: items.length - totalAnswered,
+    truncated: ((receivedResult.data ?? []) as EmailRecord[]).length > limit,
+  };
+}
+
 export async function getAssistantServiceProductions(): Promise<
   ProductionListItem[]
 > {
@@ -222,6 +333,87 @@ async function getRowsByForeignKey<T>(
   }
 
   return ((data ?? []) as T[]) ?? [];
+}
+
+async function getEmailActivityThreadRows(
+  threadIds: string[],
+  fromIso: string,
+  inboxEmail: string | null,
+) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("emails")
+    .select(
+      "id,thread_id,external_thread_id,external_message_id,from_name,from_email,to_emails,subject,direction,received_at,created_at",
+    )
+    .in("external_thread_id", threadIds)
+    .gte("received_at", fromIso)
+    .order("received_at", { ascending: true, nullsFirst: false });
+
+  if (error) {
+    throw new Error(
+      `Impossible de charger les réponses email assistant: ${error.message}`,
+    );
+  }
+
+  return ((data ?? []) as EmailRecord[]).filter(
+    (email) => email.external_thread_id || email.thread_id || isOutgoingEmail(email, inboxEmail),
+  );
+}
+
+function normalizeEmailActivityRange(from: string, to: string) {
+  const fromDate = parseBoundaryDate(from, "start");
+  const toDate = parseBoundaryDate(to, "end");
+
+  if (!fromDate || !toDate || fromDate.getTime() > toDate.getTime()) {
+    throw new Error(
+      "Plage invalide pour getEmailActivity. Utilise from/to au format YYYY-MM-DD ou ISO.",
+    );
+  }
+
+  return {
+    from: fromDate.toISOString(),
+    to: toDate.toISOString(),
+  };
+}
+
+function parseBoundaryDate(value: string, boundary: "start" | "end") {
+  if (!value || typeof value !== "string") {
+    return null;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const suffix = boundary === "start" ? "T00:00:00.000Z" : "T23:59:59.999Z";
+    const parsed = new Date(`${value}${suffix}`);
+
+    return Number.isFinite(parsed.getTime()) ? parsed : null;
+  }
+
+  const parsed = new Date(value);
+
+  return Number.isFinite(parsed.getTime()) ? parsed : null;
+}
+
+function clampEmailActivityLimit(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_EMAIL_ACTIVITY_LIMIT;
+  }
+
+  return Math.max(1, Math.min(MAX_EMAIL_ACTIVITY_LIMIT, Math.floor(value)));
+}
+
+function isOutgoingEmail(email: EmailRecord, inboxEmail: string | null) {
+  const direction = (email.direction ?? "").toLowerCase();
+
+  if (direction === "outgoing") {
+    return true;
+  }
+
+  return Boolean(
+    inboxEmail &&
+      email.from_email &&
+      email.from_email.trim().toLowerCase() === inboxEmail.trim().toLowerCase(),
+  );
 }
 
 function isMissingResourceError(error: { code?: string; message: string }) {
