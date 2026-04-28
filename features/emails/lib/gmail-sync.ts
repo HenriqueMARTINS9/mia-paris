@@ -41,6 +41,7 @@ export async function syncLatestGmailMessagesForActor(
   return syncLatestSharedGmailMessages(limit, {
     actorUserId: options?.actorUserId ?? null,
     requireAuthenticatedUser: false,
+    syncMode: options?.syncMode ?? null,
   });
 }
 

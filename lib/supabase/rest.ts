@@ -166,9 +166,10 @@ export function extractMissingSupabaseColumnName(
   ]
     .filter(Boolean)
     .join(" ");
-  const match = haystack.match(/column ["']?([a-zA-Z0-9_]+)["']?/i);
+  const beforeColumnMatch = haystack.match(/["']([a-zA-Z0-9_]+)["']\s+column/i);
+  const afterColumnMatch = haystack.match(/column ["']?([a-zA-Z0-9_]+)["']?/i);
 
-  return match?.[1] ?? null;
+  return beforeColumnMatch?.[1] ?? afterColumnMatch?.[1] ?? null;
 }
 
 async function executeSupabaseRestRequest<T>({

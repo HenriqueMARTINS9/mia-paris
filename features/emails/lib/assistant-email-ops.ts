@@ -1226,7 +1226,6 @@ function buildEmailPatchPayload(
     detected_priority: draft.priority,
     detected_type: draft.requestType,
     model_id: draft.modelId,
-    model_name: draft.modelName,
     product_department_id: draft.productDepartmentId,
     requested_action: draft.requestedAction,
     requires_human_validation: draft.requiresHumanValidation,
