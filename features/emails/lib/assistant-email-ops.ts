@@ -1218,9 +1218,6 @@ function buildEmailPatchPayload(
     triage.bucket === "to_review"
       ? {
           is_processed: false,
-          processing_status: "review",
-          status: "review",
-          triage_status: "review",
         }
       : {};
 
