@@ -11,6 +11,14 @@ export async function POST(request: Request) {
     "Cache-Control": "no-store",
   });
 
+  if (response.headers) {
+    const extraHeaders = new Headers(response.headers);
+
+    extraHeaders.forEach((value, key) => {
+      headers.set(key, value);
+    });
+  }
+
   if (response.status === 401) {
     headers.set("WWW-Authenticate", 'Bearer realm="openclaw"');
   }

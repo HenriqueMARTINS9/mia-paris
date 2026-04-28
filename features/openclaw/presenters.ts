@@ -295,6 +295,7 @@ function presentEmailOpsCycle(data: unknown) {
       requestAttachedCount: result?.requestAttachedCount ?? 0,
       requestCreatedCount: result?.requestCreatedCount ?? 0,
       requestUpdatedCount: result?.requestUpdatedCount ?? 0,
+      skippedCount: result?.skippedCount ?? 0,
       summaryWrittenCount: result?.summaryWrittenCount ?? 0,
       syncImportedMessages: result?.sync.importedMessages ?? 0,
       syncOk: result?.sync.ok ?? false,

@@ -20,6 +20,13 @@ import { logOperationalError, recordAuditEvent } from "@/lib/action-runtime";
 import { getOpenClawEnv, hasOpenClawCrmToken } from "@/lib/openclaw/env";
 
 const OPENCLAW_DEFAULT_RESPONSE_MODE: OpenClawResponseMode = "compact";
+const OPENCLAW_HEAVY_ACTION_LOCK_TTL_MS = 8 * 60 * 1000;
+const OPENCLAW_HEAVY_ACTION_RETRY_AFTER_SECONDS = 90;
+
+const openClawHeavyActionSet = new Set<OpenClawExposedActionName>([
+  "runEmailOpsCycle",
+  "runGmailSync",
+]);
 
 const openClawExternalReadActionSet = new Set<OpenClawReadActionName>(
   openClawReadActionNames,
@@ -70,7 +77,15 @@ export interface OpenClawHttpResponse<TData = unknown> {
   ok: boolean;
 }
 
-export async function handleOpenClawHttpRequest(request: Request) {
+export interface OpenClawHttpHandlerResponse<TData = unknown> {
+  body: OpenClawHttpResponse<TData>;
+  headers?: HeadersInit;
+  status: number;
+}
+
+export async function handleOpenClawHttpRequest(
+  request: Request,
+): Promise<OpenClawHttpHandlerResponse> {
   if (!hasOpenClawCrmToken) {
     await recordOpenClawHttpFailure({
       action: null,
@@ -149,6 +164,35 @@ export async function handleOpenClawHttpRequest(request: Request) {
   }
 
   const payloadOptions = extractPayloadOptions(bodyValidation.value.payload);
+  const heavyActionSlot = tryAcquireOpenClawHeavyActionSlot(
+    bodyValidation.value.action,
+  );
+
+  if (!heavyActionSlot.ok) {
+    const busyMessage = [
+      `Action OpenClaw ${bodyValidation.value.action} refusée temporairement.`,
+      `${heavyActionSlot.runningAction} est déjà en cours.`,
+      `Relance dans environ ${OPENCLAW_HEAVY_ACTION_RETRY_AFTER_SECONDS} secondes avec un petit lot.`,
+    ].join(" ");
+
+    await recordOpenClawHttpFailure({
+      action: bodyValidation.value.action,
+      code: "error",
+      message: busyMessage,
+    });
+
+    return {
+      headers: {
+        "Retry-After": String(OPENCLAW_HEAVY_ACTION_RETRY_AFTER_SECONDS),
+      },
+      status: 429,
+      body: createErrorResponse({
+        action: bodyValidation.value.action,
+        code: "error",
+        message: busyMessage,
+      }),
+    };
+  }
 
   try {
     const openClawExecutionContext = getOpenClawAssistantExecutionContext();
@@ -215,6 +259,8 @@ export async function handleOpenClawHttpRequest(request: Request) {
             : "Erreur interne OpenClaw.",
       }),
     };
+  } finally {
+    heavyActionSlot.release?.();
   }
 }
 
@@ -426,6 +472,60 @@ function isHttpActionExposed(
   action: OpenClawHttpActionName,
 ): action is OpenClawExposedActionName {
   return openClawExternalActionSet.has(action as OpenClawExposedActionName);
+}
+
+function tryAcquireOpenClawHeavyActionSlot(action: OpenClawHttpActionName):
+  | {
+      ok: true;
+      release?: () => void;
+    }
+  | {
+      ok: false;
+      runningAction: OpenClawExposedActionName;
+    } {
+  if (!openClawHeavyActionSet.has(action as OpenClawExposedActionName)) {
+    return {
+      ok: true,
+    };
+  }
+
+  const state = getOpenClawRuntimeState();
+  const now = Date.now();
+  const currentLock = state.__miaOpenClawHeavyActionLock;
+
+  if (currentLock && currentLock.expiresAt > now) {
+    return {
+      ok: false,
+      runningAction: currentLock.action,
+    };
+  }
+
+  const token = `${action}:${now}:${Math.random().toString(36).slice(2)}`;
+  const lockedAction = action as OpenClawExposedActionName;
+  state.__miaOpenClawHeavyActionLock = {
+    action: lockedAction,
+    expiresAt: now + OPENCLAW_HEAVY_ACTION_LOCK_TTL_MS,
+    token,
+  };
+
+  return {
+    ok: true,
+    release() {
+      if (state.__miaOpenClawHeavyActionLock?.token === token) {
+        state.__miaOpenClawHeavyActionLock = null;
+      }
+    },
+  };
+}
+
+function getOpenClawRuntimeState() {
+  return globalThis as typeof globalThis & {
+    __miaOpenClawHeavyActionLock?: {
+      action: OpenClawExposedActionName;
+      expiresAt: number;
+      token: string;
+    } | null;
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

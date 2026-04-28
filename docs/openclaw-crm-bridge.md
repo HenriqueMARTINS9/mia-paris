@@ -272,8 +272,8 @@ Valeurs valides:
 
 - `attachToExistingRequests`: `true` ou `false`
 - `createRequests`: `true` ou `false`
-- `limit`: entier entre `1` et `50`
-- `syncLimit`: entier entre `1` et `1500`
+- `limit`: entier entre `1` et `20`
+- `syncLimit`: entier entre `1` et `75`
 - `syncMode`: `incremental` ou `backfill`
 - `skipSync`: `true` ou `false`
 - `updateRequests`: `true` ou `false`
@@ -286,9 +286,9 @@ Payload valide:
 {
   "attachToExistingRequests": true,
   "createRequests": true,
-  "limit": 40,
+  "limit": 10,
   "skipSync": false,
-  "syncLimit": 50,
+  "syncLimit": 25,
   "syncMode": "incremental",
   "updateRequests": true,
   "updateTasks": true,
@@ -344,9 +344,11 @@ Règles métier:
 - `promotional`: pub, newsletter, bruit marketing
 - `to_review`: cas ambigu à vérifier humainement
 - les emails déjà qualifiés proprement sont ignorés au run suivant
-- les emails incertains passent en statut `review` côté CRM quand le schéma le permet
+- les emails incertains passent en `assistant_bucket = to_review` sans écrire de faux statut enum dans `processing_status`
 - `createRequests: true` ne crée une demande que si l’email est `important`, qu’un client est identifié, que le type de demande est clair et que la qualification ne réclame pas une validation humaine préalable
 - quand une demande est créée via cette routine, elle réutilise le flux métier standard `email -> request`, donc les tâches et deadlines automatiques suivent les mêmes règles que dans l’UI
+- `runEmailOpsCycle` et `runGmailSync` sont protégés par un verrou anti-concurrence: si un job lourd est déjà en cours, la route répond `429` avec `Retry-After`
+- ne pas lancer de gros backfill pendant qu’Aarone navigue dans le CRM; préférer les petits lots ou un créneau calme
 
 Routine recommandée MyClaw:
 
@@ -359,9 +361,9 @@ Routine recommandée MyClaw:
 {
   "attachToExistingRequests": true,
   "createRequests": true,
-  "limit": 40,
+  "limit": 10,
   "skipSync": false,
-  "syncLimit": 50,
+  "syncLimit": 25,
   "syncMode": "incremental",
   "updateRequests": true,
   "updateTasks": true,
@@ -374,7 +376,7 @@ Le payload recommandé inclut `writeSummary: true`, donc la synthèse CRM du jou
 Routine exceptionnelle de rattrapage historique Gmail:
 
 1. Importer l’historique avec `runGmailSync` en `backfill`.
-2. Classer ensuite par lots de 40 avec `runEmailOpsCycle`.
+2. Classer ensuite par lots de 10 avec `runEmailOpsCycle`.
 3. Répéter le lot de classification jusqu’à épuisement des emails non traités.
 
 Payload d’import historique:
@@ -392,7 +394,7 @@ Payload de classification par lot:
 {
   "attachToExistingRequests": true,
   "createRequests": true,
-  "limit": 40,
+  "limit": 10,
   "skipSync": true,
   "syncLimit": 1,
   "syncMode": "incremental",

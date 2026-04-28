@@ -102,9 +102,9 @@ Use the OpenClaw CRM bridge and execute runEmailOpsCycle with:
   "updateRequests": true,
   "updateTasks": true,
   "writeSummary": true,
-  "limit": 40,
+  "limit": 10,
   "skipSync": false,
-  "syncLimit": 50,
+  "syncLimit": 25,
   "syncMode": "incremental"
 }
 
@@ -126,6 +126,8 @@ Safety rules:
 - do not create duplicates if an existing client, request or task clearly matches
 - put uncertain emails in to_review
 - never hide important business emails as promotional
+- keep batches small so the CRM remains usable while Aarone navigates
+- if the CRM returns 429 / Retry-After, wait before relaunching instead of retrying immediately
 - if a write fails, continue the cycle and mention the error count in the summary
 
 Return a compact WhatsApp-friendly summary with:
@@ -158,7 +160,7 @@ Si Aarone demande de reprendre tous les mails déjà présents dans Gmail, ne pa
 }
 ```
 
-Étape 2: traiter les emails importés par lots de 40 maximum pour éviter le timeout Vercel, en répétant l’action jusqu’à ce que `processedCount`, `skippedCount` et `errorCount` indiquent qu’il ne reste plus rien d’utile à traiter.
+Étape 2: traiter les emails importés par lots de 10 maximum pour éviter le timeout Vercel et préserver la navigation CRM, en répétant l’action jusqu’à ce que `processedCount`, `skippedCount` et `errorCount` indiquent qu’il ne reste plus rien d’utile à traiter.
 
 ```json
 {
@@ -169,7 +171,7 @@ Si Aarone demande de reprendre tous les mails déjà présents dans Gmail, ne pa
     "updateRequests": true,
     "updateTasks": true,
     "writeSummary": true,
-    "limit": 40,
+    "limit": 10,
     "skipSync": true,
     "syncLimit": 1,
     "syncMode": "incremental"

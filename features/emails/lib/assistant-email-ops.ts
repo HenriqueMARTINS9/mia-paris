@@ -56,10 +56,11 @@ import type {
   TaskRecord,
 } from "@/types/crm";
 
-const DEFAULT_EMAIL_OPS_LIMIT = 15;
-const DEFAULT_SYNC_LIMIT = 50;
-const MAX_EMAIL_OPS_LIMIT = 50;
-const MAX_SYNC_LIMIT = 1500;
+const DEFAULT_EMAIL_OPS_LIMIT = 10;
+const DEFAULT_SYNC_LIMIT = 25;
+const MAX_EMAIL_OPS_LIMIT = 20;
+const MAX_SYNC_LIMIT = 75;
+const EMAIL_OPS_SOFT_TIME_BUDGET_MS = 35_000;
 
 interface EmailOpsReferenceData {
   attachmentCountByEmailId: Map<string, number>;
@@ -135,8 +136,23 @@ export async function runAssistantEmailOpsCycle(
     toReviewCount: 0,
   };
 
+  const cycleStartedAt = Date.now();
+
   // Process sequentially to keep assistant decisions predictable email by email.
-  for (const email of candidates) {
+  for (let index = 0; index < candidates.length; index += 1) {
+    const email = candidates[index];
+
+    if (!email) {
+      continue;
+    }
+
+    if (hasEmailOpsCycleExceededBudget(cycleStartedAt)) {
+      const deferredEmails = candidates.slice(index);
+      result.skippedCount += deferredEmails.length;
+      result.items.push(...deferredEmails.map(createDeferredEmailOpsItem));
+      break;
+    }
+
     const emailResult = await classifySingleEmail(email, references, {
       actor: options?.actor ?? null,
       authorizationOverride: options?.authorizationOverride ?? null,
@@ -244,6 +260,31 @@ function createSkippedEmailOpsSyncResult(
     queryUsed: null,
     syncMode: syncMode ?? "incremental",
     syncedAt: new Date().toISOString(),
+  };
+}
+
+function hasEmailOpsCycleExceededBudget(startedAt: number) {
+  return Date.now() - startedAt >= EMAIL_OPS_SOFT_TIME_BUDGET_MS;
+}
+
+function createDeferredEmailOpsItem(email: EmailRecord): AssistantEmailOpsCycleItem {
+  return {
+    bucket: null,
+    clientName: readString(email, ["detected_client_name"]) ?? null,
+    dueAt: readString(email, ["detected_deadline"]) ?? null,
+    emailId: email.id,
+    from:
+      readString(email, ["from_name"]) ??
+      readString(email, ["from_email"]) ??
+      "Expéditeur inconnu",
+    priority: readPriorityFromSources(readStoredClassification(email), email),
+    reason:
+      "Cycle arrêté avant ce mail pour préserver la stabilité du CRM pendant l’utilisation.",
+    recommendedAction:
+      "Relancer un petit lot OpenClaw plus tard, idéalement quand personne ne navigue dans le CRM.",
+    requestType: readString(email, ["detected_type"]) ?? null,
+    status: "skipped",
+    subject: readString(email, ["subject"]) ?? "Sans objet",
   };
 }
 
@@ -1471,6 +1512,12 @@ function buildEmailOpsMessage(result: AssistantRunEmailOpsCycleResult) {
 
   if (result.summaryWrittenCount > 0) {
     segments.push("Synthèse CRM écrite.");
+  }
+
+  if (result.skippedCount > 0) {
+    segments.push(
+      `${result.skippedCount} email(s) ignoré(s) ou reporté(s) pour préserver la charge.`,
+    );
   }
 
   if (!result.sync.ok) {
