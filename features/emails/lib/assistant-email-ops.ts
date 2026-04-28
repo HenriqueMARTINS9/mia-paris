@@ -1529,6 +1529,14 @@ function needsAssistantHandling(
         ["body", "subject"],
       ),
   );
+  const hasLinkedRequest = Boolean(
+    readString(email, ["request_id", "linked_request_id", "crm_request_id"]) ??
+      readString(classification, [
+        "linkedRequestId",
+        "linked_request_id",
+        "request_id",
+      ]),
+  );
 
   if (!currentBucket) {
     return true;
@@ -1543,6 +1551,10 @@ function needsAssistantHandling(
   }
 
   if (currentBucket === "important" && !hasAssistantReply) {
+    return true;
+  }
+
+  if (currentBucket === "important" && !hasLinkedRequest) {
     return true;
   }
 

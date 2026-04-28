@@ -111,13 +111,19 @@ export async function createRequestFromEmailAction(
     };
   }
 
-  const emailResult = await loadEmailForQualification(input.emailId);
+  const emailResult = await loadEmailForQualification(
+    input.emailId,
+    context?.rest ?? undefined,
+  );
 
   if (!("email" in emailResult)) {
     return emailResult;
   }
 
-  const existingRequestResult = await findExistingRequestForEmail(emailResult.email);
+  const existingRequestResult = await findExistingRequestForEmail(
+    emailResult.email,
+    context?.rest ?? undefined,
+  );
 
   if ("ok" in existingRequestResult && existingRequestResult.ok) {
     return existingRequestResult;
@@ -275,6 +281,7 @@ function normalizeQualificationDraft(
 
 async function loadEmailForQualification(
   emailId: string,
+  restContext?: SupabaseRestExecutionContext | null,
 ): Promise<
   | {
       ok: true;
@@ -285,7 +292,7 @@ async function loadEmailForQualification(
   const result = await supabaseRestSelectMaybeSingle<EmailRecord>("emails", {
     id: `eq.${emailId}`,
     select: "*",
-  });
+  }, restContext ?? undefined);
 
   if (result.error) {
     return {
@@ -311,6 +318,7 @@ async function loadEmailForQualification(
 
 async function findExistingRequestForEmail(
   email: EmailRecord,
+  restContext?: SupabaseRestExecutionContext | null,
 ): Promise<
   | {
       ok: true;
@@ -347,6 +355,7 @@ async function findExistingRequestForEmail(
       source_email_id: `eq.${email.id}`,
       select: "id",
     },
+    restContext ?? undefined,
   );
 
   if (existingRequestResult.error || !existingRequestResult.data?.id) {
