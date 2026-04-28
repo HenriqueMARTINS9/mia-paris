@@ -103,7 +103,8 @@ Use the OpenClaw CRM bridge and execute runEmailOpsCycle with:
   "updateTasks": true,
   "writeSummary": true,
   "limit": 200,
-  "syncLimit": 200
+  "syncLimit": 200,
+  "syncMode": "incremental"
 }
 
 Goals:
@@ -139,6 +140,42 @@ Return a compact WhatsApp-friendly summary with:
 - top important items if any
 - recommended next action
 ```
+
+## Rattrapage historique Gmail
+
+Si Aarone demande de reprendre tous les mails déjà présents dans Gmail, ne pas essayer de classer 1200 mails en une seule requête.
+
+Étape 1: importer l’historique Gmail en backfill.
+
+```json
+{
+  "action": "runGmailSync",
+  "payload": {
+    "limit": 1200,
+    "syncMode": "backfill"
+  }
+}
+```
+
+Étape 2: traiter les emails importés par lots de 200 maximum, en répétant l’action jusqu’à ce que `processedCount`, `skippedCount` et `errorCount` indiquent qu’il ne reste plus rien d’utile à traiter.
+
+```json
+{
+  "action": "runEmailOpsCycle",
+  "payload": {
+    "attachToExistingRequests": true,
+    "createRequests": true,
+    "updateRequests": true,
+    "updateTasks": true,
+    "writeSummary": true,
+    "limit": 200,
+    "syncLimit": 1,
+    "syncMode": "incremental"
+  }
+}
+```
+
+Règle synthèse: les emails `promotional` doivent être classés dans l’onglet pub/bruit, mais ne doivent pas apparaître dans les synthèses client ni dans la synthèse globale, sauf comme simple compteur technique si nécessaire.
 
 Comportement attendu:
 

@@ -23,6 +23,7 @@ import type { EmailRecord, InboxRecord } from "@/types/crm";
 interface GmailSyncActorOptions {
   actorUserId?: string | null;
   requireAuthenticatedUser?: boolean;
+  syncMode?: GmailSyncMode | null;
 }
 
 export async function syncLatestGmailMessagesForCurrentUser(
@@ -114,6 +115,7 @@ async function syncLatestSharedGmailMessages(
   }
 
   const syncState = buildSyncState({
+    forcedMode: options?.syncMode ?? null,
     lastSyncedAt: inbox.last_synced_at ?? null,
     syncCursor: inbox.sync_cursor ?? null,
   });
@@ -123,6 +125,7 @@ async function syncLatestSharedGmailMessages(
     const syncResult = await syncInbox({
       inbox,
       limit,
+      syncMode: options?.syncMode ?? null,
     });
 
     console.info("[gmail-sync]", {
@@ -338,12 +341,14 @@ async function getSharedActiveGoogleInbox(admin: ReturnType<typeof createSupabas
 async function syncInbox(input: {
   inbox: InboxRecord;
   limit: number;
+  syncMode?: GmailSyncMode | null;
 }): Promise<GmailSyncResult> {
   const admin = createSupabaseAdminClient();
   const accessToken = await ensureActiveAccessToken(input.inbox);
   const env = getGoogleGmailEnv();
   const initialSyncLimit = Math.max(1, input.limit || env.googleGmailInitialSyncLimit);
   const syncState = buildSyncState({
+    forcedMode: input.syncMode ?? null,
     lastSyncedAt: input.inbox.last_synced_at ?? null,
     syncCursor: input.inbox.sync_cursor ?? null,
   });
@@ -353,7 +358,10 @@ async function syncInbox(input: {
     maxResults: initialSyncLimit,
     pageSize: GMAIL_LIST_PAGE_SIZE,
     query: syncState.query,
-    totalLimit: syncState.mode === "initial" ? initialSyncLimit : null,
+    totalLimit:
+      syncState.mode === "initial" || syncState.mode === "backfill"
+        ? initialSyncLimit
+        : null,
   });
   const messageRefs = listState.payload.messages ?? [];
 
@@ -383,16 +391,10 @@ async function syncInbox(input: {
     };
   }
 
-  const gmailMessages = [] as Awaited<ReturnType<typeof getGmailMessage>>[];
-
-  for (const messageRef of messageRefs) {
-    gmailMessages.push(
-      await getGmailMessage({
-        accessToken,
-        messageId: messageRef.id,
-      }),
-    );
-  }
+  const gmailMessages = await fetchGmailMessagesInBatches({
+    accessToken,
+    messageRefs,
+  });
 
   const parsedMessages = gmailMessages
     .map((message) => parseGmailMessage(message, input.inbox.email_address ?? null))
@@ -694,6 +696,32 @@ async function listAllGmailMessages(input: {
   };
 }
 
+async function fetchGmailMessagesInBatches(input: {
+  accessToken: string;
+  messageRefs: NonNullable<
+    Awaited<ReturnType<typeof listGmailMessages>>["messages"]
+  >;
+}) {
+  const concurrency = 8;
+  const messages = [] as Awaited<ReturnType<typeof getGmailMessage>>[];
+
+  for (let index = 0; index < input.messageRefs.length; index += concurrency) {
+    const batch = input.messageRefs.slice(index, index + concurrency);
+    const batchMessages = await Promise.all(
+      batch.map((messageRef) =>
+        getGmailMessage({
+          accessToken: input.accessToken,
+          messageId: messageRef.id,
+        }),
+      ),
+    );
+
+    messages.push(...batchMessages);
+  }
+
+  return messages;
+}
+
 async function ensureActiveAccessToken(inbox: InboxRecord) {
   const accessToken = inbox.access_token ?? null;
   const tokenExpiresAt = inbox.token_expires_at
@@ -738,13 +766,21 @@ async function ensureActiveAccessToken(inbox: InboxRecord) {
 }
 
 function buildSyncState(input: {
+  forcedMode?: GmailSyncMode | null;
   lastSyncedAt: string | null;
   syncCursor: string | null;
 }) {
+  const mode = input.forcedMode === "backfill" ? "backfill" : resolveSyncMode(input);
+  const referenceEpoch =
+    mode === "backfill" ? 0 : resolveSyncReferenceEpoch(input);
+
   return {
-    mode: resolveSyncMode(input),
-    query: buildSyncQuery(input),
-    referenceEpoch: resolveSyncReferenceEpoch(input),
+    mode,
+    query: buildSyncQuery({
+      ...input,
+      referenceEpoch,
+    }),
+    referenceEpoch,
   };
 }
 
@@ -757,6 +793,7 @@ function resolveSyncMode(input: {
 
 function buildSyncQuery(input: {
   lastSyncedAt: string | null;
+  referenceEpoch?: number;
   syncCursor: string | null;
 }) {
   const env = getGoogleGmailEnv();
@@ -766,7 +803,10 @@ function buildSyncQuery(input: {
     queryParts.push(env.googleGmailSyncQuery.trim());
   }
 
-  const referenceEpoch = resolveSyncReferenceEpoch(input);
+  const referenceEpoch =
+    typeof input.referenceEpoch === "number"
+      ? input.referenceEpoch
+      : resolveSyncReferenceEpoch(input);
 
   if (referenceEpoch > 0) {
     const afterDate = formatGmailQueryDate(referenceEpoch - 86_400_000);

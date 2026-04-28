@@ -3,6 +3,7 @@ import "server-only";
 import { cache } from "react";
 
 import type { GmailSyncSummary } from "@/features/dashboard/types";
+import type { GmailSyncMode } from "@/features/emails/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   isMissingSupabaseResourceError,
@@ -94,7 +95,7 @@ export async function recordGmailSyncRun(input: {
   metadata?: Record<string, unknown> | null;
   ok: boolean;
   queryUsed: string | null;
-  syncMode: "incremental" | "initial";
+  syncMode: GmailSyncMode;
   triggeredByUserId: string | null;
 }) {
   if (!hasSupabaseAdminEnv || !input.inboxId) {

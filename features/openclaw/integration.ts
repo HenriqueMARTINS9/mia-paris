@@ -49,6 +49,7 @@ import type {
 } from "@/features/assistant-actions/types";
 import type { ServerPermissionOverride } from "@/features/auth/server-authorization";
 import { getCurrentUserContext } from "@/features/auth/queries";
+import type { GmailSyncMode } from "@/features/emails/types";
 import { requestPriorityOptions, requestStatusMeta } from "@/features/requests/metadata";
 import { replyTemplateOrder } from "@/features/replies/lib/reply-templates";
 import {
@@ -279,12 +280,14 @@ const openClawActionSamples: Record<
     createRequests: true,
     limit: 200,
     syncLimit: 200,
+    syncMode: "incremental",
     updateRequests: true,
     updateTasks: true,
     writeSummary: true,
   },
   runGmailSync: {
-    limit: 50,
+    limit: 1200,
+    syncMode: "backfill",
   },
   searchClientHistory: {
     clientName: "Etam",
@@ -494,15 +497,17 @@ async function dispatchOpenClawAction(
     }
     case "runEmailOpsCycle": {
       const parsed = parseRunEmailOpsCycleInput(input);
-      return parsed.ok
-        ? runEmailOpsCycle({
-            ...parsed.value,
-            source: "assistant",
-          }, {
-            authorizationOverride: options?.authorizationOverride,
-            mutationContext: options?.mutationContext ?? null,
-          })
-        : parsed.result;
+      if (!("value" in parsed)) {
+        return "result" in parsed ? parsed.result : parsed;
+      }
+
+      return runEmailOpsCycle({
+        ...parsed.value,
+        source: "assistant",
+      }, {
+        authorizationOverride: options?.authorizationOverride,
+        mutationContext: options?.mutationContext ?? null,
+      });
     }
     case "createRequest": {
       const parsed = parseCreateRequestInput(input);
@@ -626,15 +631,17 @@ async function dispatchOpenClawAction(
     }
     case "runGmailSync": {
       const parsed = parseRunGmailSyncInput(input);
-      return parsed.ok
-        ? runGmailSync({
-            ...parsed.value,
-            source: "assistant",
-          }, {
-            authorizationOverride: options?.authorizationOverride,
-            mutationContext: options?.mutationContext ?? null,
-          })
-        : parsed.result;
+      if (!("value" in parsed)) {
+        return "result" in parsed ? parsed.result : parsed;
+      }
+
+      return runGmailSync({
+        ...parsed.value,
+        source: "assistant",
+      }, {
+        authorizationOverride: options?.authorizationOverride,
+        mutationContext: options?.mutationContext ?? null,
+      });
     }
     case "setEmailInboxBucket": {
       const parsed = parseSetEmailInboxBucketInput(input);
@@ -1133,6 +1140,7 @@ function parseRunGmailSyncInput(input: unknown) {
       ok: true as const,
       value: {
         limit: null,
+        syncMode: null,
       } satisfies AssistantRunGmailSyncInput,
     };
   }
@@ -1146,17 +1154,24 @@ function parseRunGmailSyncInput(input: unknown) {
     (typeof input.limit !== "number" ||
       !Number.isFinite(input.limit) ||
       input.limit < 1 ||
-      input.limit > 100)
+      input.limit > 1500)
   ) {
     return invalidPayloadResult(
-      "limit invalide pour runGmailSync. Utilise un nombre entre 1 et 100.",
+      "limit invalide pour runGmailSync. Utilise un nombre entre 1 et 1500.",
     );
+  }
+
+  const syncModeResult = parseGmailSyncMode(input.syncMode, "runGmailSync");
+
+  if (!syncModeResult.ok) {
+    return syncModeResult.result;
   }
 
   return {
     ok: true as const,
     value: {
       limit: typeof input.limit === "number" ? Math.floor(input.limit) : null,
+      syncMode: syncModeResult.value,
     } satisfies AssistantRunGmailSyncInput,
   };
 }
@@ -1170,6 +1185,7 @@ function parseRunEmailOpsCycleInput(input: unknown) {
         createRequests: null,
         limit: null,
         syncLimit: null,
+        syncMode: null,
         updateRequests: null,
         updateTasks: null,
         writeSummary: null,
@@ -1198,11 +1214,17 @@ function parseRunEmailOpsCycleInput(input: unknown) {
     (typeof input.syncLimit !== "number" ||
       !Number.isFinite(input.syncLimit) ||
       input.syncLimit < 1 ||
-      input.syncLimit > 200)
+      input.syncLimit > 1500)
   ) {
     return invalidPayloadResult(
-      "syncLimit invalide pour runEmailOpsCycle. Utilise un nombre entre 1 et 200.",
+      "syncLimit invalide pour runEmailOpsCycle. Utilise un nombre entre 1 et 1500.",
     );
+  }
+
+  const syncModeResult = parseGmailSyncMode(input.syncMode, "runEmailOpsCycle");
+
+  if (!syncModeResult.ok) {
+    return syncModeResult.result;
   }
 
   return {
@@ -1217,12 +1239,47 @@ function parseRunEmailOpsCycleInput(input: unknown) {
       limit: typeof input.limit === "number" ? Math.floor(input.limit) : null,
       syncLimit:
         typeof input.syncLimit === "number" ? Math.floor(input.syncLimit) : null,
+      syncMode: syncModeResult.value,
       updateRequests:
         typeof input.updateRequests === "boolean" ? input.updateRequests : null,
       updateTasks: typeof input.updateTasks === "boolean" ? input.updateTasks : null,
       writeSummary:
         typeof input.writeSummary === "boolean" ? input.writeSummary : null,
     } satisfies AssistantRunEmailOpsCycleInput,
+  };
+}
+
+function parseGmailSyncMode(
+  value: unknown,
+  actionName: string,
+):
+  | {
+      ok: true;
+      value: Extract<GmailSyncMode, "backfill" | "incremental"> | null;
+    }
+  | {
+      ok: false;
+      result: ReturnType<typeof invalidPayloadResult>;
+    } {
+  if (value === undefined || value === null) {
+    return {
+      ok: true as const,
+      value: null,
+    };
+  }
+
+  if (value === "incremental" || value === "backfill") {
+    return {
+      ok: true as const,
+      value,
+    };
+  }
+
+  return {
+    ok: false as const,
+    result: invalidPayloadResult(
+      `syncMode invalide pour ${actionName}. Utilise "incremental" ou "backfill".`,
+    ),
   };
 }
 

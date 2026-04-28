@@ -134,7 +134,7 @@ export interface GmailInboxStatus {
   lastSyncedAt: string | null;
 }
 
-export type GmailSyncMode = "initial" | "incremental";
+export type GmailSyncMode = "backfill" | "initial" | "incremental";
 
 export interface EmailStatusCounts {
   new: number;

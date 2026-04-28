@@ -8,6 +8,7 @@ import type {
   EmailInboxBucket,
   EmailListItem,
   EmailQualificationOption,
+  GmailSyncMode,
   GmailSyncResult,
 } from "@/features/emails/types";
 import type { ProductionMutationResult } from "@/features/productions/types";
@@ -213,6 +214,7 @@ export interface AssistantPrepareReplyDraftInput {
 export interface AssistantRunGmailSyncInput {
   limit?: number | null;
   source?: AssistantActionSource;
+  syncMode?: GmailSyncMode | null;
 }
 
 export interface AssistantRunEmailOpsCycleInput {
@@ -221,6 +223,7 @@ export interface AssistantRunEmailOpsCycleInput {
   limit?: number | null;
   source?: AssistantActionSource;
   syncLimit?: number | null;
+  syncMode?: GmailSyncMode | null;
   updateRequests?: boolean | null;
   updateTasks?: boolean | null;
   writeSummary?: boolean | null;

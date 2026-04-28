@@ -503,13 +503,14 @@ export async function runGmailSync(
 
   const requestedLimit =
     typeof input.limit === "number" && Number.isFinite(input.limit)
-      ? Math.max(1, Math.min(100, Math.floor(input.limit)))
+      ? Math.max(1, Math.min(1500, Math.floor(input.limit)))
       : 50;
   const result = await syncLatestGmailMessagesForActor(requestedLimit, {
     actorUserId:
       options?.mutationContext?.actor?.actorUserId ??
       authorization.actorId ??
       null,
+    syncMode: input.syncMode ?? null,
   });
 
   await recordAuditEvent({
@@ -528,6 +529,7 @@ export async function runGmailSync(
       limit: requestedLimit,
       queryUsed: result.queryUsed ?? null,
       source: normalizeAssistantSource(input.source),
+      requestedSyncMode: input.syncMode ?? null,
       syncMode: result.syncMode ?? null,
       syncedAt: result.syncedAt ?? null,
     },
@@ -568,6 +570,7 @@ export async function runEmailOpsCycle(
     limit: input.limit ?? null,
     rest: options?.mutationContext?.rest ?? null,
     syncLimit: input.syncLimit ?? null,
+    syncMode: input.syncMode ?? null,
     updateRequests: input.updateRequests ?? null,
     updateTasks: input.updateTasks ?? null,
     writeSummary: input.writeSummary ?? null,
@@ -614,7 +617,12 @@ export async function runEmailOpsCycle(
   });
 
   if (!cycle.ok) {
-    return createAssistantActionFailure("error", cycle.message);
+    return {
+      code: "error" as const,
+      data: cycle.result,
+      message: cycle.message,
+      ok: false as const,
+    };
   }
 
   revalidatePath("/emails");

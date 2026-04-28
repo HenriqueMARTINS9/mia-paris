@@ -167,20 +167,23 @@ export async function handleOpenClawHttpRequest(request: Request) {
       },
     );
 
+    const presentedData =
+      result.data === null
+        ? null
+        : presentOpenClawData({
+            action: result.action,
+            data: result.data,
+            input: payloadOptions.actionPayload,
+            mode: payloadOptions.responseMode,
+          });
+
     return {
       status: mapOpenClawResultToStatus(result.code, result.ok),
       body: {
         action: result.action,
         auditScope: result.auditScope,
         code: result.code,
-        data: result.ok
-          ? presentOpenClawData({
-              action: result.action,
-              data: result.data,
-              input: payloadOptions.actionPayload,
-              mode: payloadOptions.responseMode,
-            })
-          : null,
+        data: presentedData,
         kind: result.kind,
         message: result.message,
         ok: result.ok,

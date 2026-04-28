@@ -13,6 +13,7 @@ import type {
   EmailAssistantReply,
   EmailInboxBucket,
   EmailQualificationDraft,
+  GmailSyncMode,
 } from "@/features/emails/types";
 import { resolveEmailInboxTriage } from "@/features/emails/lib/inbox-triage";
 import {
@@ -58,7 +59,7 @@ import type {
 const DEFAULT_EMAIL_OPS_LIMIT = 15;
 const DEFAULT_SYNC_LIMIT = 50;
 const MAX_EMAIL_OPS_LIMIT = 200;
-const MAX_SYNC_LIMIT = 200;
+const MAX_SYNC_LIMIT = 1500;
 
 interface EmailOpsReferenceData {
   attachmentCountByEmailId: Map<string, number>;
@@ -78,6 +79,7 @@ export interface RunAssistantEmailOpsCycleOptions {
   limit?: number | null;
   rest?: SupabaseRestExecutionContext | null;
   syncLimit?: number | null;
+  syncMode?: GmailSyncMode | null;
   updateRequests?: boolean | null;
   updateTasks?: boolean | null;
   writeSummary?: boolean | null;
@@ -104,6 +106,7 @@ export async function runAssistantEmailOpsCycle(
   );
   const sync = await syncLatestGmailMessagesForActor(syncLimit, {
     actorUserId: options?.actor?.actorUserId ?? null,
+    syncMode: options?.syncMode ?? null,
   });
   const candidates = await loadEmailOpsCandidates(processLimit);
   const references = await loadEmailOpsReferenceData(
@@ -837,8 +840,11 @@ async function writeEmailOpsDailySummary(
 ) {
   const now = new Date();
   const grouped = new Map<string, AssistantEmailOpsCycleItem[]>();
+  const summaryItems = result.items.filter(
+    (entry) => entry.status === "classified" && entry.bucket !== "promotional",
+  );
 
-  for (const item of result.items.filter((entry) => entry.status === "classified")) {
+  for (const item of summaryItems) {
     const clientName = item.clientName?.trim() || "Inbox sans client";
     grouped.set(clientName, [...(grouped.get(clientName) ?? []), item]);
   }

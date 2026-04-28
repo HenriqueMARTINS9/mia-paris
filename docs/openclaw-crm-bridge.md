@@ -262,6 +262,7 @@ Champs optionnels:
 - `createRequests`
 - `limit`
 - `syncLimit`
+- `syncMode`
 - `updateRequests`
 - `updateTasks`
 - `writeSummary`
@@ -271,7 +272,8 @@ Valeurs valides:
 - `attachToExistingRequests`: `true` ou `false`
 - `createRequests`: `true` ou `false`
 - `limit`: entier entre `1` et `200`
-- `syncLimit`: entier entre `1` et `200`
+- `syncLimit`: entier entre `1` et `1500`
+- `syncMode`: `incremental` ou `backfill`
 - `updateRequests`: `true` ou `false`
 - `updateTasks`: `true` ou `false`
 - `writeSummary`: `true` ou `false`
@@ -284,6 +286,7 @@ Payload valide:
   "createRequests": true,
   "limit": 200,
   "syncLimit": 200,
+  "syncMode": "incremental",
   "updateRequests": true,
   "updateTasks": true,
   "writeSummary": true
@@ -362,6 +365,42 @@ Routine recommandée MyClaw:
 ```
 
 Le payload recommandé inclut `writeSummary: true`, donc la synthèse CRM du jour est écrite pendant le cycle. `writeDailySummary` reste disponible séparément si Aarone demande une version plus éditorialisée ou corrigée.
+
+Routine exceptionnelle de rattrapage historique Gmail:
+
+1. Importer l’historique avec `runGmailSync` en `backfill`.
+2. Classer ensuite par lots de 200 avec `runEmailOpsCycle`.
+3. Répéter le lot de classification jusqu’à épuisement des emails non traités.
+
+Payload d’import historique:
+
+```json
+{
+  "limit": 1200,
+  "syncMode": "backfill"
+}
+```
+
+Payload de classification par lot:
+
+```json
+{
+  "attachToExistingRequests": true,
+  "createRequests": true,
+  "limit": 200,
+  "syncLimit": 1,
+  "syncMode": "incremental",
+  "updateRequests": true,
+  "updateTasks": true,
+  "writeSummary": true
+}
+```
+
+Règle synthèse:
+
+- les emails `promotional` doivent être classés et conservés dans l’onglet pub/bruit
+- ils ne doivent pas être inclus dans les synthèses client ni dans la synthèse globale
+- seuls les emails `important` et `to_review` doivent alimenter le résumé métier
 
 ### `writeDailySummary`
 
@@ -466,22 +505,26 @@ Règles métier:
 Champs optionnels:
 
 - `limit`
+- `syncMode`
 
 Valeurs valides:
 
-- `limit`: entier entre `1` et `100`
+- `limit`: entier entre `1` et `1500`
+- `syncMode`: `incremental` ou `backfill`
 
 Comportement:
 
 - en première synchronisation, `limit` borne le nombre d’emails importés
 - en synchronisation incrémentale, le CRM pagine Gmail et récupère tous les emails disponibles depuis le dernier email synchronisé
+- en `backfill`, le CRM ignore le curseur `last_synced_at` et récupère les derniers emails Gmail jusqu’au `limit` demandé
 - les doublons sont ignorés côté CRM via les identifiants Gmail `message/thread`
 
 Payload valide:
 
 ```json
 {
-  "limit": 50
+  "limit": 1200,
+  "syncMode": "backfill"
 }
 ```
 
