@@ -221,6 +221,7 @@ export interface AssistantRunEmailOpsCycleInput {
   attachToExistingRequests?: boolean | null;
   createRequests?: boolean | null;
   limit?: number | null;
+  skipSync?: boolean | null;
   source?: AssistantActionSource;
   syncLimit?: number | null;
   syncMode?: GmailSyncMode | null;

@@ -58,7 +58,7 @@ import type {
 
 const DEFAULT_EMAIL_OPS_LIMIT = 15;
 const DEFAULT_SYNC_LIMIT = 50;
-const MAX_EMAIL_OPS_LIMIT = 200;
+const MAX_EMAIL_OPS_LIMIT = 50;
 const MAX_SYNC_LIMIT = 1500;
 
 interface EmailOpsReferenceData {
@@ -78,6 +78,7 @@ export interface RunAssistantEmailOpsCycleOptions {
   attachToExistingRequests?: boolean | null;
   limit?: number | null;
   rest?: SupabaseRestExecutionContext | null;
+  skipSync?: boolean | null;
   syncLimit?: number | null;
   syncMode?: GmailSyncMode | null;
   updateRequests?: boolean | null;
@@ -104,10 +105,12 @@ export async function runAssistantEmailOpsCycle(
     1,
     MAX_SYNC_LIMIT,
   );
-  const sync = await syncLatestGmailMessagesForActor(syncLimit, {
-    actorUserId: options?.actor?.actorUserId ?? null,
-    syncMode: options?.syncMode ?? null,
-  });
+  const sync = options?.skipSync
+    ? createSkippedEmailOpsSyncResult(options?.syncMode ?? null)
+    : await syncLatestGmailMessagesForActor(syncLimit, {
+        actorUserId: options?.actor?.actorUserId ?? null,
+        syncMode: options?.syncMode ?? null,
+      });
   const candidates = await loadEmailOpsCandidates(processLimit);
   const references = await loadEmailOpsReferenceData(
     candidates.map((candidate) => candidate.id),
@@ -224,6 +227,23 @@ export async function runAssistantEmailOpsCycle(
     message,
     ok,
     result,
+  };
+}
+
+function createSkippedEmailOpsSyncResult(
+  syncMode: GmailSyncMode | null,
+) {
+  return {
+    connectedInboxEmail: null,
+    errorCount: 0,
+    ignoredMessages: 0,
+    importedMessages: 0,
+    importedThreads: 0,
+    message: "Sync Gmail ignorée pour traiter le backlog déjà importé.",
+    ok: true,
+    queryUsed: null,
+    syncMode: syncMode ?? "incremental",
+    syncedAt: new Date().toISOString(),
   };
 }
 

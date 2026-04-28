@@ -261,6 +261,7 @@ Champs optionnels:
 - `attachToExistingRequests`
 - `createRequests`
 - `limit`
+- `skipSync`
 - `syncLimit`
 - `syncMode`
 - `updateRequests`
@@ -271,9 +272,10 @@ Valeurs valides:
 
 - `attachToExistingRequests`: `true` ou `false`
 - `createRequests`: `true` ou `false`
-- `limit`: entier entre `1` et `200`
+- `limit`: entier entre `1` et `50`
 - `syncLimit`: entier entre `1` et `1500`
 - `syncMode`: `incremental` ou `backfill`
+- `skipSync`: `true` ou `false`
 - `updateRequests`: `true` ou `false`
 - `updateTasks`: `true` ou `false`
 - `writeSummary`: `true` ou `false`
@@ -284,8 +286,9 @@ Payload valide:
 {
   "attachToExistingRequests": true,
   "createRequests": true,
-  "limit": 200,
-  "syncLimit": 200,
+  "limit": 40,
+  "skipSync": false,
+  "syncLimit": 50,
   "syncMode": "incremental",
   "updateRequests": true,
   "updateTasks": true,
@@ -356,8 +359,10 @@ Routine recommandée MyClaw:
 {
   "attachToExistingRequests": true,
   "createRequests": true,
-  "limit": 200,
-  "syncLimit": 200,
+  "limit": 40,
+  "skipSync": false,
+  "syncLimit": 50,
+  "syncMode": "incremental",
   "updateRequests": true,
   "updateTasks": true,
   "writeSummary": true
@@ -369,7 +374,7 @@ Le payload recommandé inclut `writeSummary: true`, donc la synthèse CRM du jou
 Routine exceptionnelle de rattrapage historique Gmail:
 
 1. Importer l’historique avec `runGmailSync` en `backfill`.
-2. Classer ensuite par lots de 200 avec `runEmailOpsCycle`.
+2. Classer ensuite par lots de 40 avec `runEmailOpsCycle`.
 3. Répéter le lot de classification jusqu’à épuisement des emails non traités.
 
 Payload d’import historique:
@@ -387,7 +392,8 @@ Payload de classification par lot:
 {
   "attachToExistingRequests": true,
   "createRequests": true,
-  "limit": 200,
+  "limit": 40,
+  "skipSync": true,
   "syncLimit": 1,
   "syncMode": "incremental",
   "updateRequests": true,

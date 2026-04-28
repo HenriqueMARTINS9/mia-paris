@@ -102,8 +102,9 @@ Use the OpenClaw CRM bridge and execute runEmailOpsCycle with:
   "updateRequests": true,
   "updateTasks": true,
   "writeSummary": true,
-  "limit": 200,
-  "syncLimit": 200,
+  "limit": 40,
+  "skipSync": false,
+  "syncLimit": 50,
   "syncMode": "incremental"
 }
 
@@ -157,7 +158,7 @@ Si Aarone demande de reprendre tous les mails déjà présents dans Gmail, ne pa
 }
 ```
 
-Étape 2: traiter les emails importés par lots de 200 maximum, en répétant l’action jusqu’à ce que `processedCount`, `skippedCount` et `errorCount` indiquent qu’il ne reste plus rien d’utile à traiter.
+Étape 2: traiter les emails importés par lots de 40 maximum pour éviter le timeout Vercel, en répétant l’action jusqu’à ce que `processedCount`, `skippedCount` et `errorCount` indiquent qu’il ne reste plus rien d’utile à traiter.
 
 ```json
 {
@@ -168,7 +169,8 @@ Si Aarone demande de reprendre tous les mails déjà présents dans Gmail, ne pa
     "updateRequests": true,
     "updateTasks": true,
     "writeSummary": true,
-    "limit": 200,
+    "limit": 40,
+    "skipSync": true,
     "syncLimit": 1,
     "syncMode": "incremental"
   }

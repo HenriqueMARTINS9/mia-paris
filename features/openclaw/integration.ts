@@ -278,8 +278,9 @@ const openClawActionSamples: Record<
   runEmailOpsCycle: {
     attachToExistingRequests: true,
     createRequests: true,
-    limit: 200,
-    syncLimit: 200,
+    limit: 40,
+    skipSync: false,
+    syncLimit: 50,
     syncMode: "incremental",
     updateRequests: true,
     updateTasks: true,
@@ -1184,6 +1185,7 @@ function parseRunEmailOpsCycleInput(input: unknown) {
         attachToExistingRequests: null,
         createRequests: null,
         limit: null,
+        skipSync: null,
         syncLimit: null,
         syncMode: null,
         updateRequests: null,
@@ -1202,10 +1204,10 @@ function parseRunEmailOpsCycleInput(input: unknown) {
     (typeof input.limit !== "number" ||
       !Number.isFinite(input.limit) ||
       input.limit < 1 ||
-      input.limit > 200)
+      input.limit > 50)
   ) {
     return invalidPayloadResult(
-      "limit invalide pour runEmailOpsCycle. Utilise un nombre entre 1 et 200.",
+      "limit invalide pour runEmailOpsCycle. Utilise un nombre entre 1 et 50.",
     );
   }
 
@@ -1237,6 +1239,7 @@ function parseRunEmailOpsCycleInput(input: unknown) {
       createRequests:
         typeof input.createRequests === "boolean" ? input.createRequests : null,
       limit: typeof input.limit === "number" ? Math.floor(input.limit) : null,
+      skipSync: typeof input.skipSync === "boolean" ? input.skipSync : null,
       syncLimit:
         typeof input.syncLimit === "number" ? Math.floor(input.syncLimit) : null,
       syncMode: syncModeResult.value,
