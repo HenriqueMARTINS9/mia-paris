@@ -791,11 +791,11 @@ function applyEmailBucketFilter<TResult, T extends EmailFilterableQuery<TResult>
 
 function applyEmailStatusFilter<TResult, T extends EmailFilterableQuery<TResult>>(query: T, status: EmailStatusFilter): T {
   if (status === "new") {
-    return query.eq("is_processed", false).neq("processing_status", "review") as T;
+    return query.eq("is_processed", false) as T;
   }
 
   if (status === "review") {
-    return query.eq("processing_status", "review") as T;
+    return query.eq("assistant_bucket", "to_review") as T;
   }
 
   if (status === "processed") {

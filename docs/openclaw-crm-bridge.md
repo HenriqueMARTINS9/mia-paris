@@ -383,7 +383,7 @@ Payload d’import historique:
 
 ```json
 {
-  "limit": 1200,
+  "limit": 300,
   "syncMode": "backfill"
 }
 ```
@@ -517,21 +517,21 @@ Champs optionnels:
 
 Valeurs valides:
 
-- `limit`: entier entre `1` et `1500`
+- `limit`: entier entre `1` et `300`
 - `syncMode`: `incremental` ou `backfill`
 
 Comportement:
 
 - en première synchronisation, `limit` borne le nombre d’emails importés
 - en synchronisation incrémentale, le CRM pagine Gmail et récupère tous les emails disponibles depuis le dernier email synchronisé
-- en `backfill`, le CRM ignore le curseur `last_synced_at` et récupère les derniers emails Gmail jusqu’au `limit` demandé
+- en `backfill`, le CRM ignore le curseur `last_synced_at` et récupère les derniers emails Gmail jusqu’au `limit` demandé, avec un plafond volontaire à 300 pour préserver Supabase/PostgREST
 - les doublons sont ignorés côté CRM via les identifiants Gmail `message/thread`
 
 Payload valide:
 
 ```json
 {
-  "limit": 1200,
+  "limit": 300,
   "syncMode": "backfill"
 }
 ```

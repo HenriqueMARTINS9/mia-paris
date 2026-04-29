@@ -288,6 +288,52 @@ function createDeferredEmailOpsItem(email: EmailRecord): AssistantEmailOpsCycleI
   };
 }
 
+function getImportantEmailAutomationBlocker(input: {
+  attachToExistingRequests: boolean | null;
+  draft: EmailQualificationDraft;
+  email: EmailRecord;
+  linkedRequestId: string | null;
+  references: EmailOpsReferenceData;
+  triageBucket: EmailInboxBucket;
+}) {
+  if (input.triageBucket !== "important") {
+    return null;
+  }
+
+  if (input.linkedRequestId) {
+    return null;
+  }
+
+  if (
+    input.attachToExistingRequests &&
+    findMatchingRequestForEmail(input.draft, input.email, input.references)
+  ) {
+    return null;
+  }
+
+  if (!input.draft.clientId) {
+    return "Email métier important, mais client CRM non identifié avec assez de certitude. À vérifier avant création de demande.";
+  }
+
+  if (!input.draft.requestType) {
+    return "Email métier important, mais type de demande non détecté avec assez de certitude. À vérifier avant création de demande.";
+  }
+
+  if (input.draft.title.trim().length < 3) {
+    return "Email métier important, mais titre de demande insuffisant. À vérifier avant création de demande.";
+  }
+
+  if (input.draft.requiresHumanValidation) {
+    return "Email métier important, mais Claw demande une validation humaine avant d’écrire dans le CRM.";
+  }
+
+  if (typeof input.draft.aiConfidence === "number" && input.draft.aiConfidence < 0.62) {
+    return "Email métier important, mais confiance de qualification trop faible. À vérifier avant création de demande.";
+  }
+
+  return null;
+}
+
 async function classifySingleEmail(
   email: EmailRecord,
   references: EmailOpsReferenceData,
@@ -431,8 +477,8 @@ async function classifySingleEmail(
         baseDraft.summary,
       title: readString(storedClassification, ["title"]) ?? baseDraft.title,
     });
-    const enrichedDraft = enrichQualificationDraft(seededDraft, email, references);
-    const triage = resolveEmailInboxTriage({
+    let enrichedDraft = enrichQualificationDraft(seededDraft, email, references);
+    let triage = resolveEmailInboxTriage({
       attachmentCount: references.attachmentCountByEmailId.get(email.id) ?? 0,
       classification: storedClassification,
       clientId: enrichedDraft.clientId,
@@ -461,6 +507,27 @@ async function classifySingleEmail(
         "request_id",
       ]) ??
       null;
+    const automationBlocker = getImportantEmailAutomationBlocker({
+      attachToExistingRequests: options.attachToExistingRequests,
+      draft: enrichedDraft,
+      email,
+      linkedRequestId,
+      references,
+      triageBucket: triage.bucket,
+    });
+
+    if (automationBlocker) {
+      enrichedDraft = mergeEmailQualificationDraft(enrichedDraft, {
+        requiresHumanValidation: true,
+      });
+      triage = {
+        bucket: "to_review",
+        confidence: Math.min(triage.confidence ?? 0.82, 0.82),
+        reason: automationBlocker,
+        source: "rules_v1",
+      };
+    }
+
     const assistantReply = buildAssistantReplySuggestion({
       draft: enrichedDraft,
       email,
@@ -982,6 +1049,7 @@ async function loadEmailOpsCandidates(limit: number) {
     .from("emails")
     .select("*")
     .or("is_processed.is.null,is_processed.eq.false")
+    .or("assistant_bucket.is.null,assistant_bucket.eq.important")
     .order("received_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false })
     .limit(scanLimit);
@@ -1255,10 +1323,12 @@ function buildEmailPatchPayload(
   classificationPayload: Record<string, unknown>,
   assistantReply: EmailAssistantReply | null,
 ) {
-  const reviewPayload =
-    triage.bucket === "to_review"
+  const terminalAssistantBucket =
+    triage.bucket === "to_review" || triage.bucket === "promotional";
+  const terminalPayload =
+    terminalAssistantBucket
       ? {
-          is_processed: false,
+          is_processed: true,
         }
       : {};
 
@@ -1289,7 +1359,7 @@ function buildEmailPatchPayload(
     requires_human_validation: draft.requiresHumanValidation,
     triage_source: triage.source,
     triaged_at: new Date().toISOString(),
-    ...reviewPayload,
+    ...terminalPayload,
   };
 }
 
@@ -1618,7 +1688,12 @@ function needsAssistantHandling(
     return true;
   }
 
-  if (currentBucket === "important" && !hasLinkedRequest) {
+  if (
+    currentBucket === "important" &&
+    !hasLinkedRequest &&
+    hasRequestType &&
+    hasClientSignal
+  ) {
     return true;
   }
 

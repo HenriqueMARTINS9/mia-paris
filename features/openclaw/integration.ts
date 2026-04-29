@@ -287,7 +287,7 @@ const openClawActionSamples: Record<
     writeSummary: true,
   },
   runGmailSync: {
-    limit: 1200,
+    limit: 300,
     syncMode: "backfill",
   },
   searchClientHistory: {
@@ -1155,10 +1155,10 @@ function parseRunGmailSyncInput(input: unknown) {
     (typeof input.limit !== "number" ||
       !Number.isFinite(input.limit) ||
       input.limit < 1 ||
-      input.limit > 1500)
+      input.limit > 300)
   ) {
     return invalidPayloadResult(
-      "limit invalide pour runGmailSync. Utilise un nombre entre 1 et 1500.",
+      "limit invalide pour runGmailSync. Utilise un nombre entre 1 et 300.",
     );
   }
 

@@ -146,7 +146,7 @@ Return a compact WhatsApp-friendly summary with:
 
 ## Rattrapage historique Gmail
 
-Si Aarone demande de reprendre tous les mails déjà présents dans Gmail, ne pas essayer de classer 1200 mails en une seule requête.
+Si Aarone demande de reprendre tous les mails déjà présents dans Gmail, ne pas essayer de classer 1200 mails en une seule requête et ne pas demander plus de 300 emails par backfill CRM.
 
 Étape 1: importer l’historique Gmail en backfill.
 
@@ -154,7 +154,7 @@ Si Aarone demande de reprendre tous les mails déjà présents dans Gmail, ne pa
 {
   "action": "runGmailSync",
   "payload": {
-    "limit": 1200,
+    "limit": 300,
     "syncMode": "backfill"
   }
 }

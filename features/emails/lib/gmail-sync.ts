@@ -20,6 +20,8 @@ import type { Database } from "@/lib/supabase/database.types";
 import { hasSupabaseAdminEnv } from "@/lib/supabase/env";
 import type { EmailRecord, InboxRecord } from "@/types/crm";
 
+const GMAIL_STORAGE_BATCH_SIZE = 50;
+
 interface GmailSyncActorOptions {
   actorUserId?: string | null;
   requireAuthenticatedUser?: boolean;
@@ -1126,6 +1128,16 @@ function stripColumnFromRows<T extends Record<string, unknown>>(rows: T[], colum
   });
 }
 
+function chunkArray<T>(items: T[], chunkSize: number) {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+
+  return chunks;
+}
+
 async function upsertEmailThreads(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   inboxId: string,
@@ -1179,8 +1191,11 @@ async function upsertEmailThreads(
       existingByExternal.has(row.external_thread_id),
   );
 
-  if (rowsToInsert.length > 0) {
-    const insertResult = await insertEmailThreadsWithFallback(admin, rowsToInsert);
+  for (const rowsToInsertBatch of chunkArray(rowsToInsert, GMAIL_STORAGE_BATCH_SIZE)) {
+    const insertResult = await insertEmailThreadsWithFallback(
+      admin,
+      rowsToInsertBatch,
+    );
 
     if (insertResult.error) {
       throw new Error(
@@ -1189,35 +1204,29 @@ async function upsertEmailThreads(
     }
   }
 
-  const updateResults = await Promise.all(
-    rowsToUpdate.map(async (row) => {
-      const threadId = existingByExternal.get(row.external_thread_id as string);
+  for (const row of rowsToUpdate) {
+    const threadId = existingByExternal.get(row.external_thread_id as string);
 
-      if (!threadId) {
-        return null;
-      }
+    if (!threadId) {
+      continue;
+    }
 
-      const updatePayload = {
-        ...row,
-      };
-      delete updatePayload.created_at;
-      const result = await updateEmailThreadWithFallback(
-        admin,
-        threadId,
-        updatePayload,
+    const updatePayload = {
+      ...row,
+    };
+    delete updatePayload.created_at;
+    const result = await updateEmailThreadWithFallback(
+      admin,
+      threadId,
+      updatePayload,
+    );
+
+    if (result.error) {
+      throw new Error(
+        `Mise a jour d'un thread Gmail impossible: ${formatSyncStorageError(result.error)}`,
       );
-
-      if (result.error) {
-        throw new Error(
-          `Mise a jour d'un thread Gmail impossible: ${formatSyncStorageError(result.error)}`,
-        );
-      }
-
-      return threadId;
-    }),
-  );
-
-  void updateResults;
+    }
+  }
 
   const finalResult = await admin
     .from("email_threads")
@@ -1296,8 +1305,8 @@ async function upsertEmails(
       existingByExternal.has(row.external_message_id),
   );
 
-  if (rowsToInsert.length > 0) {
-    const insertResult = await insertEmailsWithFallback(admin, rowsToInsert);
+  for (const rowsToInsertBatch of chunkArray(rowsToInsert, GMAIL_STORAGE_BATCH_SIZE)) {
+    const insertResult = await insertEmailsWithFallback(admin, rowsToInsertBatch);
 
     if (insertResult.error) {
       throw new Error(
@@ -1306,27 +1315,21 @@ async function upsertEmails(
     }
   }
 
-  const updateResults = await Promise.all(
-    rowsToUpdate.map(async (row) => {
-      const emailId = existingByExternal.get(row.external_message_id as string);
+  for (const row of rowsToUpdate) {
+    const emailId = existingByExternal.get(row.external_message_id as string);
 
-      if (!emailId) {
-        return null;
-      }
+    if (!emailId) {
+      continue;
+    }
 
-      const result = await updateEmailWithFallback(admin, emailId, row);
+    const result = await updateEmailWithFallback(admin, emailId, row);
 
-      if (result.error) {
-        throw new Error(
-          `Mise a jour d'un email Gmail impossible: ${result.error.message}`,
-        );
-      }
-
-      return emailId;
-    }),
-  );
-
-  void updateResults;
+    if (result.error) {
+      throw new Error(
+        `Mise a jour d'un email Gmail impossible: ${result.error.message}`,
+      );
+    }
+  }
 
   const finalResult = await admin
     .from("emails")
@@ -1457,11 +1460,29 @@ async function upsertEmailAttachmentsWithFallback(
   let currentRows = rows;
 
   while (true) {
-    const result = await admin
-      .from("email_attachments")
-      .upsert(currentRows as never[], {
-        onConflict: "email_id,external_attachment_id",
-      });
+    let result: {
+      error: {
+        code?: string | null;
+        details?: string | null;
+        hint?: string | null;
+        message?: string | null;
+      } | null;
+    } = { error: null };
+
+    for (const currentRowsBatch of chunkArray(
+      currentRows,
+      GMAIL_STORAGE_BATCH_SIZE,
+    )) {
+      result = await admin
+        .from("email_attachments")
+        .upsert(currentRowsBatch as never[], {
+          onConflict: "email_id,external_attachment_id",
+        });
+
+      if (result.error) {
+        break;
+      }
+    }
 
     if (!result.error) {
       return result;

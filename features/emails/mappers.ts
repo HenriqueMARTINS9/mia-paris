@@ -119,9 +119,7 @@ export function mapEmailRecordToListItem({
     threadRecord,
     bodyText,
   });
-  const rawStatus =
-    readString(emailRecord, ["processing_status", "status", "triage_status"]) ??
-    "new";
+  const rawStatus = resolveEmailDisplayStatus(emailRecord);
   const confidence =
     normalizeConfidence(
       readNumber(emailRecord, [
@@ -212,6 +210,27 @@ export function mapEmailRecordToListItem({
       readBoolean(emailRecord, ["is_unread", "unread"]) ??
       mapRawEmailStatusToUiStatus(rawStatus) === "new",
   };
+}
+
+function resolveEmailDisplayStatus(emailRecord: EmailRecord) {
+  const assistantBucket = readString(emailRecord, [
+    "assistant_bucket",
+    "assistantBucket",
+    "bucket",
+  ]);
+
+  if (assistantBucket === "to_review") {
+    return "to_review";
+  }
+
+  if (readBoolean(emailRecord, ["is_processed"]) === true) {
+    return "processed";
+  }
+
+  return (
+    readString(emailRecord, ["processing_status", "status", "triage_status"]) ??
+    "new"
+  );
 }
 
 function readAssistantReply(

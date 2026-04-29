@@ -503,7 +503,7 @@ export async function runGmailSync(
 
   const requestedLimit =
     typeof input.limit === "number" && Number.isFinite(input.limit)
-      ? Math.max(1, Math.min(1500, Math.floor(input.limit)))
+      ? Math.max(1, Math.min(300, Math.floor(input.limit)))
       : 50;
   const result = await syncLatestGmailMessagesForActor(requestedLimit, {
     actorUserId:
